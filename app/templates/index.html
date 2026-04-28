@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="uk">
+<head>
+    <meta charset="utf-8">
+    <title>Training Log</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <style>
+        :root {
+            color-scheme: dark;
+            --bg: #050505;
+            --card: #171717;
+            --card2: #222;
+            --text: #f2f2f2;
+            --muted: #999;
+            --blue: #0a84ff;
+            --green: #0f7a0f;
+            --red: #ff453a;
+            --border: #2e2e2e;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 14px;
+            background: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-size: 16px;
+        }
+
+        .page {
+            max-width: 720px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            margin: 0 0 6px;
+            font-size: 28px;
+        }
+
+        h2 {
+            font-size: 21px;
+            margin: 0;
+            color: var(--blue);
+        }
+
+        a {
+            color: var(--blue);
+            text-decoration: none;
+        }
+
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+
+        .muted {
+            color: var(--muted);
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin: 14px 0;
+        }
+
+        .stat {
+            background: var(--card);
+            padding: 12px;
+            border-radius: 16px;
+            text-align: center;
+        }
+
+        .stat strong {
+            display: block;
+            font-size: 20px;
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 14px;
+            margin: 14px 0;
+        }
+
+        .exercise-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        form {
+            margin: 0;
+        }
+
+        select,
+        input[type="text"] {
+            width: 100%;
+            border: 1px solid var(--border);
+            background: var(--card2);
+            color: var(--text);
+            border-radius: 14px;
+            padding: 12px;
+            font-size: 17px;
+        }
+
+        .row {
+            display: grid;
+            grid-template-columns: 1fr 1fr auto;
+            gap: 8px;
+            align-items: center;
+            margin-top: 10px;
+        }
+
+        .exercise-add {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 8px;
+        }
+
+        button {
+            border: 0;
+            border-radius: 14px;
+            padding: 12px 14px;
+            font-size: 16px;
+            font-weight: 700;
+            color: white;
+            background: var(--blue);
+            cursor: pointer;
+        }
+
+        button.secondary {
+            background: var(--card2);
+            color: var(--text);
+        }
+
+        button.danger {
+            background: transparent;
+            color: var(--red);
+            padding: 6px 8px;
+        }
+
+        button.finish {
+            width: 100%;
+            margin-top: 14px;
+            background: var(--green);
+            font-size: 18px;
+            padding: 16px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 8px;
+        }
+
+        th,
+        td {
+            padding: 9px 4px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            color: var(--muted);
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .empty {
+            padding: 22px;
+            text-align: center;
+            color: var(--muted);
+            background: var(--card);
+            border-radius: 18px;
+            border: 1px dashed var(--border);
+        }
+
+        .inline-delete {
+            display: inline;
+        }
+
+        .small {
+            font-size: 13px;
+        }
+
+        .new-exercise-form {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 8px;
+            margin-top: 8px;
+        }
+    </style>
+</head>
+
+<body>
+<div class="page">
+    <div class="topbar">
+        <div>
+            <h1>Training Log</h1>
+            <div class="muted">Workout #{{ workout.id }} · {{ workout.workout_date }}</div>
+        </div>
+
+        <a href="/history">History</a>
+    </div>
+
+    <div class="stats">
+        <div class="stat">
+            <strong>{{ total_sets }}</strong>
+            <span class="muted">sets</span>
+        </div>
+        <div class="stat">
+            <strong>{{ total_reps }}</strong>
+            <span class="muted">reps</span>
+        </div>
+        <div class="stat">
+            <strong>{{ "%.1f"|format(total_volume) }}</strong>
+            <span class="muted">kg volume</span>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Add exercise</h2>
+
+        <form class="exercise-add" method="post" action="/workouts/{{ workout.id }}/exercise">
+            <select name="exercise_id">
+                {% for exercise in exercises %}
+                    <option value="{{ exercise.id }}">{{ exercise.name }}</option>
+                {% endfor %}
+            </select>
+
+            <button type="submit">Add</button>
+        </form>
+
+        <form class="new-exercise-form" method="post" action="/exercises">
+            <input type="text" name="name" placeholder="New exercise name">
+            <button class="secondary" type="submit">Create</button>
+        </form>
+    </div>
+
+    {% if workout_exercises %}
+        {% for item in workout_exercises %}
+            <div class="card">
+                <div class="exercise-header">
+                    <div>
+                        <h2>{{ item.exercise_name }}</h2>
+                        <div class="muted small">
+                            {{ item.sets|length }} sets ·
+                            {{ item.total_reps }} reps ·
+                            {{ "%.1f"|format(item.total_volume) }} kg
+                        </div>
+                    </div>
+
+                    <form class="inline-delete" method="post" action="/workout-exercises/{{ item.workout_exercise_id }}/delete">
+                        <button class="danger" type="submit">Delete</button>
+                    </form>
+                </div>
+
+                {% if item.sets %}
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Set</th>
+                                <th>Kg</th>
+                                <th>Reps</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        {% for set in item.sets %}
+                            <tr>
+                                <td>{{ set.set_number }}</td>
+                                <td>{{ set.weight }}</td>
+                                <td>{{ set.reps }}</td>
+                                <td>
+                                    <form class="inline-delete" method="post" action="/sets/{{ set.id }}/delete">
+                                        <button class="danger" type="submit">×</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    <p class="muted">No sets yet.</p>
+                {% endif %}
+
+                <form method="post" action="/workout-exercises/{{ item.workout_exercise_id }}/sets">
+                    <div class="row">
+                        <select name="weight">
+                            {% for weight in weight_options %}
+                                <option value="{{ weight }}">{{ weight }} kg</option>
+                            {% endfor %}
+                        </select>
+
+                        <select name="reps">
+                            {% for reps in reps_options %}
+                                <option value="{{ reps }}" {% if reps == 10 %}selected{% endif %}>{{ reps }} reps</option>
+                            {% endfor %}
+                        </select>
+
+                        <button type="submit">+</button>
+                    </div>
+                </form>
+            </div>
+        {% endfor %}
+    {% else %}
+        <div class="empty">
+            Add your first exercise for this workout.
+        </div>
+    {% endif %}
+
+    <form method="post" action="/workouts/{{ workout.id }}/finish">
+        <button class="finish" type="submit">Finish workout</button>
+    </form>
+
+    <form method="post" action="/workouts/new" style="margin-top: 10px;">
+        <button class="secondary" type="submit" style="width: 100%;">Start new workout</button>
+    </form>
+</div>
+</body>
+</html>
