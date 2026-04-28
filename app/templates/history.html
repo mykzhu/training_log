@@ -77,6 +77,14 @@
             display: block;
             font-size: 18px;
         }
+
+        .card a {
+            color: var(--text);
+        }
+
+        .card a:hover {
+            color: var(--blue);
+        }
     </style>
 </head>
 
@@ -93,7 +101,11 @@
 
     {% for item in items %}
         <div class="card">
-            <strong>Workout #{{ item.workout.id }}</strong>
+            <strong>
+                <a href="/workouts/{{ item.workout.id }}">
+                    Workout #{{ item.workout.id }}
+                </a>
+            </strong>
             <div class="muted">
                 {{ item.workout.workout_date }}
                 {% if item.workout.finished_at %}

@@ -4,7 +4,7 @@ from datetime import datetime, date
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Form, Request
+from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
@@ -375,5 +375,38 @@ def history(request: Request):
         {
             "request": request,
             "items": enriched,
+        },
+    )
+
+@app.get("/workouts/{workout_id}")
+def workout_detail(request: Request, workout_id: int):
+    with get_db() as conn:
+        workout = conn.execute(
+            """
+            SELECT *
+            FROM workouts
+            WHERE id = ?
+            """,
+            (workout_id,),
+        ).fetchone()
+
+    if not workout:
+        raise HTTPException(status_code=404, detail="Workout not found")
+
+    workout_exercises = get_workout_details(workout_id)
+
+    total_volume = sum(item["total_volume"] for item in workout_exercises)
+    total_reps = sum(item["total_reps"] for item in workout_exercises)
+    total_sets = sum(len(item["sets"]) for item in workout_exercises)
+
+    return templates.TemplateResponse(
+        "workout.html",
+        {
+            "request": request,
+            "workout": workout,
+            "workout_exercises": workout_exercises,
+            "total_volume": total_volume,
+            "total_reps": total_reps,
+            "total_sets": total_sets,
         },
     )
