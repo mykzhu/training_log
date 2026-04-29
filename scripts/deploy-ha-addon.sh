@@ -1,74 +1,51 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-HA_HOST="${HA_HOST:-homeassistant.local}"
+HA_HOST="${HA_HOST:-192.168.88.88}"
 HA_USER="${HA_USER:-root}"
-HA_PORT="${HA_PORT:-22}"
-REMOTE_ADDONS_DIR="${REMOTE_ADDONS_DIR:-/addons}"
-ADDON_SLUG="${ADDON_SLUG:-training_log}"
-REMOTE_DIR="${REMOTE_ADDONS_DIR}/${ADDON_SLUG}"
+HA_PORT="${HA_PORT:-2222}"
+HA_TARGET="${HA_TARGET:-/addons/training_log}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-SSH_TARGET="${HA_USER}@${HA_HOST}"
-SSH_CMD=(ssh -p "${HA_PORT}" "${SSH_TARGET}")
+SSH_OPTS=(-p "${HA_PORT}")
 
-EXCLUDES=(
-  --exclude .git
-  --exclude .venv
-  --exclude venv
-  --exclude __pycache__
-  --exclude .pytest_cache
-  --exclude .env
-  --exclude data
-  --exclude '*.db'
-  --exclude '*.db-shm'
-  --exclude '*.db-wal'
-)
-
-echo "Deploying Training Log Home Assistant app"
-echo "Source: ${PROJECT_DIR}"
-echo "Target: ${SSH_TARGET}:${REMOTE_DIR}"
-
-"${SSH_CMD[@]}" "mkdir -p '${REMOTE_DIR}'"
-
-if command -v rsync >/dev/null 2>&1; then
-  rsync -av --delete \
-    -e "ssh -p ${HA_PORT}" \
-    "${EXCLUDES[@]}" \
-    "${PROJECT_DIR}/" \
-    "${SSH_TARGET}:${REMOTE_DIR}/"
-else
-  echo "rsync is not installed locally; falling back to tar over ssh"
-  (
-    cd "${PROJECT_DIR}"
-    tar \
-      --exclude='.git' \
-      --exclude='.venv' \
-      --exclude='venv' \
-      --exclude='__pycache__' \
-      --exclude='.pytest_cache' \
-      --exclude='.env' \
-      --exclude='data' \
-      --exclude='*.db' \
-      --exclude='*.db-shm' \
-      --exclude='*.db-wal' \
-      -czf - .
-  ) | "${SSH_CMD[@]}" "rm -rf '${REMOTE_DIR}'/* && mkdir -p '${REMOTE_DIR}' && tar -xzf - -C '${REMOTE_DIR}'"
+if [[ -n "${SSH_KEY:-}" ]]; then
+  if [[ ! -f "${SSH_KEY}" ]]; then
+    echo "ERROR: SSH_KEY must point to a private key file, not a directory."
+    echo "Example: SSH_KEY=~/.ssh/ha_training"
+    echo "Or omit SSH_KEY if you use password login."
+    exit 1
+  fi
+  SSH_OPTS+=(-i "${SSH_KEY}")
 fi
 
-"${SSH_CMD[@]}" "chmod +x '${REMOTE_DIR}/run.sh' '${REMOTE_DIR}/scripts/deploy-ha-addon.sh' 2>/dev/null || true"
+echo "Deploying Training Log Home Assistant app"
+echo "Source: ${PROJECT_ROOT}"
+echo "Target: ${HA_USER}@${HA_HOST}:${HA_TARGET}"
 
-"${SSH_CMD[@]}" "if command -v ha >/dev/null 2>&1; then ha addons reload >/dev/null 2>&1 || ha supervisor reload >/dev/null 2>&1 || true; fi"
+cd "${PROJECT_ROOT}"
 
-cat <<EOF
+tar \
+  --exclude='./.git' \
+  --exclude='./.venv' \
+  --exclude='./venv' \
+  --exclude='./__pycache__' \
+  --exclude='*/__pycache__' \
+  --exclude='./.pytest_cache' \
+  --exclude='./node_modules' \
+  --exclude='./data' \
+  --exclude='./.env' \
+  --exclude='./*.patch' \
+  --exclude='./*.rej' \
+  -czf - . | ssh "${SSH_OPTS[@]}" "${HA_USER}@${HA_HOST}" "
+    set -e
+    rm -rf '${HA_TARGET}'
+    mkdir -p '${HA_TARGET}'
+    tar -xzf - -C '${HA_TARGET}'
+  "
 
-Deploy finished.
-
-Next steps in Home Assistant:
-1. Settings -> Apps -> App store
-2. Open menu -> Check for updates / reload local apps
-3. Open Local apps
-4. Install or rebuild "Training Log"
-5. Start it and open Web UI
+echo "Done."
+echo "Now open Home Assistant:"
+echo "Settings -> Add-ons / Apps -> Add-on Store -> Local add-ons -> Training Log"
