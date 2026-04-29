@@ -115,6 +115,24 @@ def get_or_create_active_workout() -> sqlite3.Row:
             (workout_id,),
         ).fetchone()
 
+def get_previous_set_for_exercise(
+    exercise_id: int,
+    current_workout_id: int,
+) -> sqlite3.Row | None:
+    with get_db() as conn:
+        return conn.execute(
+            """
+            SELECT se.weight, se.reps
+            FROM set_entries se
+            JOIN workout_exercises we ON we.id = se.workout_exercise_id
+            JOIN workouts w ON w.id = we.workout_id
+            WHERE we.exercise_id = ?
+              AND w.id != ?
+            ORDER BY w.workout_date DESC, w.id DESC, se.set_number DESC, se.id DESC
+            LIMIT 1
+            """,
+            (exercise_id, current_workout_id),
+        ).fetchone()
 
 def get_workout_details(workout_id: int) -> list[dict[str, Any]]:
     with get_db() as conn:
@@ -149,6 +167,23 @@ def get_workout_details(workout_id: int) -> list[dict[str, Any]]:
             total_volume = sum(float(s["weight"]) * int(s["reps"]) for s in sets)
             total_reps = sum(int(s["reps"]) for s in sets)
 
+            if sets:
+                last_set = sets[-1]
+                default_weight = float(last_set["weight"])
+                default_reps = int(last_set["reps"])
+            else:
+                previous_set = get_previous_set_for_exercise(
+                    exercise_id=row["exercise_id"],
+                    current_workout_id=workout_id,
+                )
+
+                if previous_set:
+                    default_weight = float(previous_set["weight"])
+                    default_reps = int(previous_set["reps"])
+                else:
+                    default_weight = 0.0
+                    default_reps = 10
+
             result.append(
                 {
                     "workout_exercise_id": row["workout_exercise_id"],
@@ -158,6 +193,8 @@ def get_workout_details(workout_id: int) -> list[dict[str, Any]]:
                     "sets": sets,
                     "total_volume": total_volume,
                     "total_reps": total_reps,
+                    "default_weight": default_weight,
+                    "default_reps": default_reps,
                 }
             )
 
@@ -410,3 +447,76 @@ def workout_detail(request: Request, workout_id: int):
             "total_sets": total_sets,
         },
     )
+
+@app.post("/workout-exercises/{workout_exercise_id}/sets/duplicate")
+def duplicate_set(workout_exercise_id: int):
+    with get_db() as conn:
+        workout_exercise = conn.execute(
+            """
+            SELECT workout_id, exercise_id
+            FROM workout_exercises
+            WHERE id = ?
+            """,
+            (workout_exercise_id,),
+        ).fetchone()
+
+        if not workout_exercise:
+            return RedirectResponse("/", status_code=303)
+
+        source_set = conn.execute(
+            """
+            SELECT weight, reps
+            FROM set_entries
+            WHERE workout_exercise_id = ?
+            ORDER BY set_number DESC, id DESC
+            LIMIT 1
+            """,
+            (workout_exercise_id,),
+        ).fetchone()
+
+        if not source_set:
+            source_set = conn.execute(
+                """
+                SELECT se.weight, se.reps
+                FROM set_entries se
+                JOIN workout_exercises we ON we.id = se.workout_exercise_id
+                JOIN workouts w ON w.id = we.workout_id
+                WHERE we.exercise_id = ?
+                  AND w.id != ?
+                ORDER BY w.workout_date DESC, w.id DESC, se.set_number DESC, se.id DESC
+                LIMIT 1
+                """,
+                (
+                    workout_exercise["exercise_id"],
+                    workout_exercise["workout_id"],
+                ),
+            ).fetchone()
+
+        if not source_set:
+            return RedirectResponse("/", status_code=303)
+
+        next_set_number = conn.execute(
+            """
+            SELECT COALESCE(MAX(set_number), 0) + 1
+            FROM set_entries
+            WHERE workout_exercise_id = ?
+            """,
+            (workout_exercise_id,),
+        ).fetchone()[0]
+
+        conn.execute(
+            """
+            INSERT INTO set_entries
+                (workout_exercise_id, set_number, weight, reps, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                workout_exercise_id,
+                next_set_number,
+                float(source_set["weight"]),
+                int(source_set["reps"]),
+                datetime.now().isoformat(timespec="seconds"),
+            ),
+        )
+
+    return RedirectResponse("/", status_code=303)

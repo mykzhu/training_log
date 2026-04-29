@@ -301,18 +301,28 @@
                     <div class="row">
                         <select name="weight">
                             {% for weight in weight_options %}
-                                <option value="{{ weight }}">{{ weight }} kg</option>
+                                <option value="{{ weight }}" {% if weight == item.default_weight %}selected{% endif %}>
+                                    {{ weight }} kg
+                                </option>
                             {% endfor %}
                         </select>
 
                         <select name="reps">
                             {% for reps in reps_options %}
-                                <option value="{{ reps }}" {% if reps == 10 %}selected{% endif %}>{{ reps }} reps</option>
+                                <option value="{{ reps }}" {% if reps == item.default_reps %}selected{% endif %}>
+                                    {{ reps }} reps
+                                </option>
                             {% endfor %}
                         </select>
 
                         <button type="submit">+</button>
                     </div>
+                </form>
+
+                <form method="post" action="/workout-exercises/{{ item.workout_exercise_id }}/sets/duplicate" style="margin-top: 8px;">
+                    <button class="secondary" type="submit" style="width: 100%;">
+                        + Same
+                    </button>
                 </form>
             </div>
         {% endfor %}
