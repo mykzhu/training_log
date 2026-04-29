@@ -22,6 +22,21 @@ def get_db() -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
+def ensure_column(
+    conn: sqlite3.Connection,
+    table_name: str,
+    column_name: str,
+    column_definition: str,
+) -> None:
+    columns = {
+        row["name"]
+        for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+    }
+
+    if column_name not in columns:
+        conn.execute(
+            f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_definition}"
+        )
 
 def init_db() -> None:
     with get_db() as conn:
@@ -59,6 +74,9 @@ def init_db() -> None:
             );
             """
         )
+
+        ensure_column(conn, "workouts", "session_rpe", "INTEGER")
+        ensure_column(conn, "workouts", "lower_back_pain", "INTEGER")
 
         default_exercises = [
             "Deadlift",
@@ -517,6 +535,25 @@ def duplicate_set(workout_exercise_id: int):
                 int(source_set["reps"]),
                 datetime.now().isoformat(timespec="seconds"),
             ),
+        )
+
+    return RedirectResponse("/", status_code=303)
+
+@app.post("/workouts/{workout_id}/metadata")
+def update_workout_metadata(
+    workout_id: int,
+    session_rpe: int | None = Form(None),
+    lower_back_pain: int | None = Form(None),
+):
+    with get_db() as conn:
+        conn.execute(
+            """
+            UPDATE workouts
+            SET session_rpe = ?,
+                lower_back_pain = ?
+            WHERE id = ?
+            """,
+            (session_rpe, lower_back_pain, workout_id),
         )
 
     return RedirectResponse("/", status_code=303)

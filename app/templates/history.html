@@ -113,6 +113,20 @@
                 {% else %}
                     · active
                 {% endif %}
+
+                RPE:
+                {% if item.workout.session_rpe is not none %}
+                    {{ item.workout.session_rpe }}/10
+                {% else %}
+                    —
+                {% endif %}
+
+                · Back:
+                {% if item.workout.lower_back_pain is not none %}
+                    {{ item.workout.lower_back_pain }}/10
+                {% else %}
+                    —
+                {% endif %}
             </div>
 
             <div class="grid">

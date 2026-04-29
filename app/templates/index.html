@@ -232,6 +232,34 @@
     </div>
 
     <div class="card">
+        <h2>Session status</h2>
+
+        <form method="post" action="/workouts/{{ workout.id }}/metadata">
+            <div class="row">
+                <select name="session_rpe">
+                    <option value="">RPE</option>
+                    {% for value in range(1, 11) %}
+                        <option value="{{ value }}" {% if workout.session_rpe == value %}selected{% endif %}>
+                            RPE {{ value }}
+                        </option>
+                    {% endfor %}
+                </select>
+
+                <select name="lower_back_pain">
+                    <option value="">Back</option>
+                    {% for value in range(0, 11) %}
+                        <option value="{{ value }}" {% if workout.lower_back_pain == value %}selected{% endif %}>
+                            Back {{ value }}/10
+                        </option>
+                    {% endfor %}
+                </select>
+
+                <button type="submit">Save</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="card">
         <h2>Add exercise</h2>
 
         <form class="exercise-add" method="post" action="/workouts/{{ workout.id }}/exercise">

@@ -166,6 +166,28 @@
         </div>
     </div>
 
+    <div class="card">
+        <h2>Session status</h2>
+
+        <div class="muted">
+            Session RPE:
+            {% if workout.session_rpe is not none %}
+                {{ workout.session_rpe }}/10
+            {% else %}
+                —
+            {% endif %}
+        </div>
+
+        <div class="muted">
+            Lower back:
+            {% if workout.lower_back_pain is not none %}
+                {{ workout.lower_back_pain }}/10
+            {% else %}
+                —
+            {% endif %}
+        </div>
+    </div>
+
     {% if workout_exercises %}
         {% for item in workout_exercises %}
             <div class="card">
