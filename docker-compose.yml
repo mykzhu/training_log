@@ -5,5 +5,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./data:/app/data
+      - ./data:/data
+    environment:
+      DB_PATH: /data/training.db
     restart: unless-stopped

@@ -1,0 +1,26 @@
+name: "Training Log"
+version: "0.1.0"
+slug: "training_log"
+description: "Personal workout logger for Home Assistant"
+url: "https://github.com/mykzhu/training_log"
+
+arch:
+  - aarch64
+  - amd64
+
+startup: application
+boot: auto
+init: false
+
+ports:
+  8000/tcp: 8000
+ports_description:
+  8000/tcp: "Training Log web interface"
+webui: "http://[HOST]:[PORT:8000]"
+
+environment:
+  DB_PATH: "/data/training.db"
+  PORT: "8000"
+
+options: {}
+schema: {}
