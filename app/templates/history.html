@@ -107,7 +107,7 @@
                 </a>
             </strong>
             <div class="muted">
-                {{ item.workout.workout_date }}
+                {{ item.workout.created_at | format_datetime }}
                 {% if item.workout.finished_at %}
                     · finished
                 {% else %}

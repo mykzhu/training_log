@@ -139,7 +139,7 @@
         <div>
             <h1>Workout #{{ workout.id }}</h1>
             <div class="muted">
-                {{ workout.workout_date }}
+                {{ workout.created_at | format_datetime }}
                 {% if workout.finished_at %}
                     · finished
                 {% else %}

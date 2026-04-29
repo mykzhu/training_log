@@ -210,7 +210,7 @@
     <div class="topbar">
         <div>
             <h1>Training Log</h1>
-            <div class="muted">Workout #{{ workout.id }} · {{ workout.workout_date }}</div>
+            <div class="muted">Workout #{{ workout.id }} · {{ workout.created_at | format_datetime }}</div>
         </div>
 
         <a href="/history">History</a>
@@ -304,6 +304,7 @@
                                 <th>Kg</th>
                                 <th>Reps</th>
                                 <th></th>
+                                <th></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -312,6 +313,9 @@
                                 <td>{{ set.set_number }}</td>
                                 <td>{{ set.weight }}</td>
                                 <td>{{ set.reps }}</td>
+                                <td>
+                                    <a href="/sets/{{ set.id }}/edit">Edit</a>
+                                </td>
                                 <td>
                                     <form class="inline-delete" method="post" action="/sets/{{ set.id }}/delete">
                                         <button class="danger" type="submit">×</button>

@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="uk">
+<head>
+    <meta charset="utf-8">
+    <title>Edit Set</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <style>
+        :root {
+            color-scheme: dark;
+            --bg: #050505;
+            --card: #171717;
+            --card2: #222;
+            --text: #f2f2f2;
+            --muted: #999;
+            --blue: #0a84ff;
+            --border: #2e2e2e;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 14px;
+            background: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-size: 16px;
+        }
+
+        .page {
+            max-width: 720px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            margin: 0 0 6px;
+            font-size: 28px;
+        }
+
+        h2 {
+            font-size: 21px;
+            margin: 0;
+            color: var(--blue);
+        }
+
+        a {
+            color: var(--blue);
+            text-decoration: none;
+        }
+
+        .muted {
+            color: var(--muted);
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 14px;
+            margin: 14px 0;
+        }
+
+        select {
+            width: 100%;
+            border: 1px solid var(--border);
+            background: var(--card2);
+            color: var(--text);
+            border-radius: 14px;
+            padding: 12px;
+            font-size: 17px;
+        }
+
+        .row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        button {
+            border: 0;
+            border-radius: 14px;
+            padding: 14px;
+            font-size: 17px;
+            font-weight: 700;
+            color: white;
+            background: var(--blue);
+            cursor: pointer;
+            width: 100%;
+            margin-top: 12px;
+        }
+
+        button.secondary {
+            background: var(--card2);
+            color: var(--text);
+        }
+    </style>
+</head>
+
+<body>
+<div class="page">
+    <h1>Edit Set</h1>
+    <div class="muted">
+        {{ set.exercise_name }} · Set {{ set.set_number }}
+    </div>
+
+    <div class="card">
+        <form method="post" action="/sets/{{ set.id }}/update">
+            <div class="row">
+                <select name="weight">
+                    {% for weight in weight_options %}
+                        <option value="{{ weight }}" {% if weight == set.weight %}selected{% endif %}>
+                            {{ weight }} kg
+                        </option>
+                    {% endfor %}
+                </select>
+
+                <select name="reps">
+                    {% for reps in reps_options %}
+                        <option value="{{ reps }}" {% if reps == set.reps %}selected{% endif %}>
+                            {{ reps }} reps
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <button type="submit">Save</button>
+        </form>
+
+        <a href="/">
+            <button class="secondary" type="button">Cancel</button>
+        </a>
+    </div>
+</div>
+</body>
+</html>

@@ -14,6 +14,14 @@ DB_PATH = Path(os.getenv("DB_PATH", "data/training.db"))
 app = FastAPI(title="Training Log")
 templates = Jinja2Templates(directory="app/templates")
 
+def format_datetime(value: str | None) -> str:
+    if not value:
+        return "—"
+
+    return value.replace("T", " ")[:16]
+
+
+templates.env.filters["format_datetime"] = format_datetime
 
 def get_db() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -219,21 +227,47 @@ def get_workout_details(workout_id: int) -> list[dict[str, Any]]:
         return result
 
 
-def get_weight_options() -> list[float]:
-    options: list[float] = []
+def get_weight_options(extra_weights: list[float] | None = None) -> list[float]:
+    options: set[float] = set()
 
-    value = 0.0
-    while value <= 60:
-        options.append(round(value, 2))
-        value += 0.25
+    # 0–70 kg, step 1 kg
+    value = 0
+    while value <= 70:
+        options.add(float(value))
+        value += 1
 
-    value = 61.0
-    while value <= 250:
-        options.append(round(value, 2))
-        value += 1.0
+    # 75–150 kg, step 5 kg
+    value = 75
+    while value <= 150:
+        options.add(float(value))
+        value += 5
 
-    return options
+    if extra_weights:
+        for weight in extra_weights:
+            options.add(round(float(weight), 2))
 
+    return sorted(options)
+
+def renumber_sets(conn: sqlite3.Connection, workout_exercise_id: int) -> None:
+    sets = conn.execute(
+        """
+        SELECT id
+        FROM set_entries
+        WHERE workout_exercise_id = ?
+        ORDER BY set_number ASC, id ASC
+        """,
+        (workout_exercise_id,),
+    ).fetchall()
+
+    for index, set_row in enumerate(sets, start=1):
+        conn.execute(
+            """
+            UPDATE set_entries
+            SET set_number = ?
+            WHERE id = ?
+            """,
+            (index, set_row["id"]),
+        )
 
 @app.get("/")
 def index(request: Request):
@@ -343,7 +377,27 @@ def add_set(
 @app.post("/sets/{set_id}/delete")
 def delete_set(set_id: int):
     with get_db() as conn:
-        conn.execute("DELETE FROM set_entries WHERE id = ?", (set_id,))
+        set_row = conn.execute(
+            """
+            SELECT workout_exercise_id
+            FROM set_entries
+            WHERE id = ?
+            """,
+            (set_id,),
+        ).fetchone()
+
+        if set_row:
+            workout_exercise_id = int(set_row["workout_exercise_id"])
+
+            conn.execute(
+                """
+                DELETE FROM set_entries
+                WHERE id = ?
+                """,
+                (set_id,),
+            )
+
+            renumber_sets(conn, workout_exercise_id)
 
     return RedirectResponse("/", status_code=303)
 
@@ -554,6 +608,62 @@ def update_workout_metadata(
             WHERE id = ?
             """,
             (session_rpe, lower_back_pain, workout_id),
+        )
+
+    return RedirectResponse("/", status_code=303)
+
+@app.get("/sets/{set_id}/edit")
+def edit_set_page(request: Request, set_id: int):
+    with get_db() as conn:
+        set_row = conn.execute(
+            """
+            SELECT
+                se.id,
+                se.workout_exercise_id,
+                se.set_number,
+                se.weight,
+                se.reps,
+                we.workout_id,
+                e.name AS exercise_name
+            FROM set_entries se
+            JOIN workout_exercises we ON we.id = se.workout_exercise_id
+            JOIN exercises e ON e.id = we.exercise_id
+            WHERE se.id = ?
+            """,
+            (set_id,),
+        ).fetchone()
+
+    if not set_row:
+        raise HTTPException(status_code=404, detail="Set not found")
+
+    return templates.TemplateResponse(
+        "edit_set.html",
+        {
+            "request": request,
+            "set": set_row,
+            "weight_options": get_weight_options(
+                extra_weights=[float(set_row["weight"])]
+            ),
+            "reps_options": range(1, 51),
+        },
+    )
+
+
+@app.post("/sets/{set_id}/update")
+def update_set(
+    set_id: int,
+    weight: float = Form(...),
+    reps: int = Form(...),
+):
+    with get_db() as conn:
+        conn.execute(
+            """
+            UPDATE set_entries
+            SET weight = ?,
+                reps = ?
+            WHERE id = ?
+            """,
+            (weight, reps, set_id),
         )
 
     return RedirectResponse("/", status_code=303)
