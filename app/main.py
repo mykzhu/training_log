@@ -1,9 +1,12 @@
 import json
+import logging
 import os
 import sqlite3
+import time
 from datetime import datetime, date
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import RedirectResponse, Response
@@ -11,6 +14,25 @@ from fastapi.templating import Jinja2Templates
 
 
 DB_PATH = Path(os.getenv("DB_PATH", "data/training.db"))
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+
+
+def configure_logging() -> None:
+    logging.basicConfig(
+        level=getattr(logging, LOG_LEVEL, logging.INFO),
+        format=(
+            "%(asctime)s "
+            "%(levelname)s "
+            "[%(name)s] "
+            "%(message)s"
+        ),
+    )
+
+
+configure_logging()
+
+logger = logging.getLogger("training_log")
+access_logger = logging.getLogger("training_log.access")
 
 app = FastAPI(title="Training Log")
 templates = Jinja2Templates(directory="app/templates")
@@ -70,6 +92,52 @@ def redirect_after_change(
 templates.env.filters["format_datetime"] = format_datetime
 templates.env.filters["datetime_local_value"] = datetime_local_value
 
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    request_id = request.headers.get("x-request-id", uuid4().hex[:8])
+    start_time = time.perf_counter()
+
+    client_host = request.client.host if request.client else "-"
+    method = request.method
+    path = request.url.path
+
+    access_logger.info(
+        "request.start request_id=%s method=%s path=%s client=%s",
+        request_id,
+        method,
+        path,
+        client_host,
+    )
+
+    try:
+        response = await call_next(request)
+    except Exception:
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        access_logger.exception(
+            "request.error request_id=%s method=%s path=%s client=%s duration_ms=%.2f",
+            request_id,
+            method,
+            path,
+            client_host,
+            duration_ms,
+        )
+        raise
+
+    duration_ms = (time.perf_counter() - start_time) * 1000
+    access_logger.info(
+        "request.end request_id=%s method=%s path=%s status_code=%s duration_ms=%.2f",
+        request_id,
+        method,
+        path,
+        response.status_code,
+        duration_ms,
+    )
+
+    response.headers["X-Request-ID"] = request_id
+    return response
+
+
 def get_db() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
@@ -79,10 +147,12 @@ def get_db() -> sqlite3.Connection:
 
 
 def get_table_counts(conn: sqlite3.Connection) -> dict[str, int]:
-    return {
+    counts = {
         table_name: conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
         for table_name in BACKUP_TABLES
     }
+    logger.debug("db.table_counts counts=%s", counts)
+    return counts
 
 
 def build_backup_payload() -> dict[str, Any]:
@@ -96,12 +166,18 @@ def build_backup_payload() -> dict[str, Any]:
             ).fetchall()
             tables[table_name] = [dict(row) for row in rows]
 
-    return {
+    payload = {
         "app": "training-log",
         "schema_version": BACKUP_SCHEMA_VERSION,
         "exported_at": datetime.now().isoformat(timespec="seconds"),
         "tables": tables,
     }
+    logger.info(
+        "backup.build schema_version=%s counts=%s",
+        BACKUP_SCHEMA_VERSION,
+        {table_name: len(rows) for table_name, rows in tables.items()},
+    )
+    return payload
 
 
 def validate_backup_payload(payload: Any) -> dict[str, list[dict[str, Any]]]:
@@ -138,10 +214,16 @@ def validate_backup_payload(payload: Any) -> dict[str, list[dict[str, Any]]]:
 
         validated[table_name] = validated_rows
 
+    logger.info(
+        "backup.validate.success schema_version=%s counts=%s",
+        BACKUP_SCHEMA_VERSION,
+        {table_name: len(rows) for table_name, rows in validated.items()},
+    )
     return validated
 
 
 def reset_sqlite_sequences(conn: sqlite3.Connection) -> None:
+    logger.debug("db.sqlite_sequence.reset.start")
     placeholders = ", ".join("?" for _ in BACKUP_TABLES)
     conn.execute(
         f"DELETE FROM sqlite_sequence WHERE name IN ({placeholders})",
@@ -159,9 +241,15 @@ def reset_sqlite_sequences(conn: sqlite3.Connection) -> None:
                 (table_name, max_id),
             )
 
+    logger.debug("db.sqlite_sequence.reset.done")
+
 
 def restore_backup_payload(payload: Any) -> None:
     tables = validate_backup_payload(payload)
+    logger.warning(
+        "backup.restore.start counts=%s",
+        {table_name: len(rows) for table_name, rows in tables.items()},
+    )
 
     with get_db() as conn:
         for table_name in reversed(BACKUP_TABLES):
@@ -180,6 +268,11 @@ def restore_backup_payload(payload: Any) -> None:
 
         reset_sqlite_sequences(conn)
 
+    logger.warning(
+        "backup.restore.done counts=%s",
+        {table_name: len(rows) for table_name, rows in tables.items()},
+    )
+
 def ensure_column(
     conn: sqlite3.Connection,
     table_name: str,
@@ -192,11 +285,19 @@ def ensure_column(
     }
 
     if column_name not in columns:
+        logger.info(
+            "db.migration.add_column table=%s column=%s definition=%s",
+            table_name,
+            column_name,
+            column_definition,
+        )
         conn.execute(
             f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_definition}"
         )
 
 def init_db() -> None:
+    logger.info("db.init.start db_path=%s", DB_PATH)
+
     with get_db() as conn:
         conn.executescript(
             """
@@ -253,10 +354,14 @@ def init_db() -> None:
                 (exercise,),
             )
 
+        logger.info("db.init.done")
+
 
 @app.on_event("startup")
 def on_startup() -> None:
+    logger.info("app.startup db_path=%s log_level=%s", DB_PATH, LOG_LEVEL)
     init_db()
+    logger.info("app.ready")
 
 
 def get_or_create_active_workout() -> sqlite3.Row:
@@ -272,6 +377,7 @@ def get_or_create_active_workout() -> sqlite3.Row:
         ).fetchone()
 
         if workout:
+            logger.debug("workout.active.found workout_id=%s", workout["id"])
             return workout
 
         now = datetime.now().isoformat(timespec="seconds")
@@ -285,6 +391,7 @@ def get_or_create_active_workout() -> sqlite3.Row:
         )
 
         workout_id = cursor.lastrowid
+        logger.info("workout.active.create workout_id=%s created_at=%s", workout_id, now)
 
         return conn.execute(
             "SELECT * FROM workouts WHERE id = ?",
@@ -434,6 +541,19 @@ def index(request: Request):
     total_reps = sum(item["total_reps"] for item in workout_exercises)
     total_sets = sum(len(item["sets"]) for item in workout_exercises)
 
+    existing_weights: list[float] = []
+    for item in workout_exercises:
+        existing_weights.append(float(item["default_weight"]))
+        for set_row in item["sets"]:
+            existing_weights.append(float(set_row["weight"]))
+
+    logger.debug(
+        "page.index workout_id=%s exercises=%s sets=%s",
+        workout["id"],
+        len(workout_exercises),
+        total_sets,
+    )
+
     return templates.TemplateResponse(
         "index.html",
         {
@@ -442,7 +562,7 @@ def index(request: Request):
             "exercises": exercises,
             "workout_exercises": workout_exercises,
             "reps_options": range(1, 51),
-            "weight_options": get_weight_options(),
+            "weight_options": get_weight_options(extra_weights=existing_weights),
             "total_volume": total_volume,
             "total_reps": total_reps,
             "total_sets": total_sets,
@@ -460,6 +580,9 @@ def add_exercise(name: str = Form(...)):
                 "INSERT OR IGNORE INTO exercises (name) VALUES (?)",
                 (clean_name,),
             )
+        logger.info("exercise.ensure name=%s", clean_name)
+    else:
+        logger.warning("exercise.create.skipped reason=empty_name")
 
     return RedirectResponse("/", status_code=303)
 
@@ -480,12 +603,21 @@ def add_exercise_to_workout(
             (workout_id,),
         ).fetchone()[0]
 
-        conn.execute(
+        cursor = conn.execute(
             """
             INSERT INTO workout_exercises (workout_id, exercise_id, position)
             VALUES (?, ?, ?)
             """,
             (workout_id, exercise_id, next_position),
+        )
+
+        logger.info(
+            "workout.exercise.add workout_id=%s workout_exercise_id=%s exercise_id=%s position=%s return_to=%s",
+            workout_id,
+            cursor.lastrowid,
+            exercise_id,
+            next_position,
+            return_to,
         )
 
     return redirect_after_change(return_to, workout_id)
@@ -509,6 +641,11 @@ def add_set(
         ).fetchone()
 
         if not workout_exercise:
+            logger.warning(
+                "set.add.not_found workout_exercise_id=%s return_to=%s",
+                workout_exercise_id,
+                return_to,
+            )
             return RedirectResponse("/", status_code=303)
 
         workout_id = int(workout_exercise["workout_id"])
@@ -522,7 +659,7 @@ def add_set(
             (workout_exercise_id,),
         ).fetchone()[0]
 
-        conn.execute(
+        cursor = conn.execute(
             """
             INSERT INTO set_entries
                 (workout_exercise_id, set_number, weight, reps, created_at)
@@ -535,6 +672,17 @@ def add_set(
                 reps,
                 datetime.now().isoformat(timespec="seconds"),
             ),
+        )
+
+        logger.info(
+            "set.add set_id=%s workout_id=%s workout_exercise_id=%s set_number=%s weight=%s reps=%s return_to=%s",
+            cursor.lastrowid,
+            workout_id,
+            workout_exercise_id,
+            next_set_number,
+            weight,
+            reps,
+            return_to,
         )
 
     return redirect_after_change(return_to, workout_id)
@@ -573,6 +721,15 @@ def delete_set(
             )
 
             renumber_sets(conn, workout_exercise_id)
+            logger.info(
+                "set.delete set_id=%s workout_id=%s workout_exercise_id=%s return_to=%s",
+                set_id,
+                workout_id,
+                workout_exercise_id,
+                return_to,
+            )
+        else:
+            logger.warning("set.delete.not_found set_id=%s return_to=%s", set_id, return_to)
 
     return redirect_after_change(return_to, workout_id)
 
@@ -604,12 +761,26 @@ def delete_workout_exercise(
                 """,
                 (workout_exercise_id,),
             )
+            logger.info(
+                "workout.exercise.delete workout_exercise_id=%s workout_id=%s return_to=%s",
+                workout_exercise_id,
+                workout_id,
+                return_to,
+            )
+        else:
+            logger.warning(
+                "workout.exercise.delete.not_found workout_exercise_id=%s return_to=%s",
+                workout_exercise_id,
+                return_to,
+            )
 
     return redirect_after_change(return_to, workout_id)
 
 
 @app.post("/workouts/{workout_id}/finish")
 def finish_workout(workout_id: int):
+    finished_at = datetime.now().isoformat(timespec="seconds")
+
     with get_db() as conn:
         conn.execute(
             """
@@ -617,9 +788,10 @@ def finish_workout(workout_id: int):
             SET finished_at = ?
             WHERE id = ?
             """,
-            (datetime.now().isoformat(timespec="seconds"), workout_id),
+            (finished_at, workout_id),
         )
 
+    logger.info("workout.finish workout_id=%s finished_at=%s", workout_id, finished_at)
     return RedirectResponse("/history", status_code=303)
 
 
@@ -637,7 +809,7 @@ def new_workout():
             (now,),
         )
 
-        conn.execute(
+        cursor = conn.execute(
             """
             INSERT INTO workouts (workout_date, created_at)
             VALUES (?, ?)
@@ -645,7 +817,9 @@ def new_workout():
             (date.today().isoformat(), now),
         )
 
+    logger.info("workout.new workout_id=%s created_at=%s", cursor.lastrowid, now)
     return RedirectResponse("/", status_code=303)
+
 
 @app.get("/workouts/{workout_id}/edit")
 def edit_workout_page(request: Request, workout_id: int):
@@ -681,6 +855,13 @@ def edit_workout_page(request: Request, workout_id: int):
         for set_row in item["sets"]:
             existing_weights.append(float(set_row["weight"]))
 
+    logger.debug(
+        "page.workout_edit workout_id=%s exercises=%s sets=%s",
+        workout_id,
+        len(workout_exercises),
+        total_sets,
+    )
+
     return templates.TemplateResponse(
         "edit_workout.html",
         {
@@ -713,6 +894,9 @@ def update_workout(
     workout_date = created_at[:10]
 
     with get_db() as conn:
+        parsed_session_rpe = parse_optional_int(session_rpe)
+        parsed_lower_back_pain = parse_optional_int(lower_back_pain)
+
         conn.execute(
             """
             UPDATE workouts
@@ -725,12 +909,20 @@ def update_workout(
             (
                 created_at,
                 workout_date,
-                parse_optional_int(session_rpe),
-                parse_optional_int(lower_back_pain),
+                parsed_session_rpe,
+                parsed_lower_back_pain,
                 workout_id,
             ),
         )
 
+    logger.info(
+        "workout.update workout_id=%s created_at=%s workout_date=%s session_rpe=%s lower_back_pain=%s",
+        workout_id,
+        created_at,
+        workout_date,
+        parsed_session_rpe,
+        parsed_lower_back_pain,
+    )
     return RedirectResponse(f"/workouts/{workout_id}/edit", status_code=303)
 
 
@@ -745,6 +937,7 @@ def delete_workout(workout_id: int):
             (workout_id,),
         )
 
+    logger.warning("workout.delete workout_id=%s", workout_id)
     return RedirectResponse("/history", status_code=303)
 
 
@@ -753,6 +946,7 @@ def backup_page(request: Request):
     with get_db() as conn:
         counts = get_table_counts(conn)
 
+    logger.debug("page.backup counts=%s", counts)
     return templates.TemplateResponse(
         "backup.html",
         {
@@ -768,6 +962,7 @@ def export_backup():
     content = json.dumps(payload, ensure_ascii=False, indent=2)
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
 
+    logger.info("backup.export filename_timestamp=%s size_bytes=%s", timestamp, len(content.encode("utf-8")))
     return Response(
         content=content,
         media_type="application/json",
@@ -782,23 +977,32 @@ def export_backup():
 @app.post("/backup/import")
 async def import_backup(backup_file: UploadFile = File(...)):
     raw_content = await backup_file.read()
+    logger.warning(
+        "backup.import.received filename=%s size_bytes=%s",
+        backup_file.filename,
+        len(raw_content),
+    )
 
     try:
         payload = json.loads(raw_content.decode("utf-8-sig"))
         restore_backup_payload(payload)
     except UnicodeDecodeError as exc:
+        logger.exception("backup.import.error reason=utf8_decode filename=%s", backup_file.filename)
         raise HTTPException(
             status_code=400,
             detail="Backup file must be UTF-8 JSON.",
         ) from exc
     except json.JSONDecodeError as exc:
+        logger.exception("backup.import.error reason=json_decode filename=%s", backup_file.filename)
         raise HTTPException(
             status_code=400,
             detail="Backup file is not valid JSON.",
         ) from exc
     except (ValueError, sqlite3.IntegrityError) as exc:
+        logger.exception("backup.import.error reason=validation_or_integrity filename=%s", backup_file.filename)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    logger.warning("backup.import.success filename=%s", backup_file.filename)
     return RedirectResponse("/history?restored=1", status_code=303)
 
 
@@ -827,6 +1031,8 @@ def history(request: Request):
                 "exercises_count": len(details),
             }
         )
+
+    logger.debug("page.history workouts=%s restored=%s", len(enriched), request.query_params.get("restored") == "1")
 
     return templates.TemplateResponse(
         "history.html",
@@ -858,6 +1064,13 @@ def workout_detail(request: Request, workout_id: int):
     total_reps = sum(item["total_reps"] for item in workout_exercises)
     total_sets = sum(len(item["sets"]) for item in workout_exercises)
 
+    logger.debug(
+        "page.workout_detail workout_id=%s exercises=%s sets=%s",
+        workout_id,
+        len(workout_exercises),
+        total_sets,
+    )
+
     return templates.TemplateResponse(
         "workout.html",
         {
@@ -886,6 +1099,11 @@ def duplicate_set(
         ).fetchone()
 
         if not workout_exercise:
+            logger.warning(
+                "set.duplicate.not_found workout_exercise_id=%s return_to=%s",
+                workout_exercise_id,
+                return_to,
+            )
             return RedirectResponse("/", status_code=303)
 
         workout_id = int(workout_exercise["workout_id"])
@@ -920,6 +1138,12 @@ def duplicate_set(
             ).fetchone()
 
         if not source_set:
+            logger.warning(
+                "set.duplicate.no_source workout_id=%s workout_exercise_id=%s return_to=%s",
+                workout_id,
+                workout_exercise_id,
+                return_to,
+            )
             return redirect_after_change(return_to, workout_id)
 
         next_set_number = conn.execute(
@@ -931,7 +1155,7 @@ def duplicate_set(
             (workout_exercise_id,),
         ).fetchone()[0]
 
-        conn.execute(
+        cursor = conn.execute(
             """
             INSERT INTO set_entries
                 (workout_exercise_id, set_number, weight, reps, created_at)
@@ -946,7 +1170,45 @@ def duplicate_set(
             ),
         )
 
+        logger.info(
+            "set.duplicate set_id=%s workout_id=%s workout_exercise_id=%s set_number=%s weight=%s reps=%s return_to=%s",
+            cursor.lastrowid,
+            workout_id,
+            workout_exercise_id,
+            next_set_number,
+            float(source_set["weight"]),
+            int(source_set["reps"]),
+            return_to,
+        )
+
     return redirect_after_change(return_to, workout_id)
+
+
+@app.post("/workouts/{workout_id}/metadata")
+def update_workout_metadata(
+    workout_id: int,
+    session_rpe: int | None = Form(None),
+    lower_back_pain: int | None = Form(None),
+):
+    with get_db() as conn:
+        conn.execute(
+            """
+            UPDATE workouts
+            SET session_rpe = ?,
+                lower_back_pain = ?
+            WHERE id = ?
+            """,
+            (session_rpe, lower_back_pain, workout_id),
+        )
+
+    logger.info(
+        "workout.metadata.update workout_id=%s session_rpe=%s lower_back_pain=%s",
+        workout_id,
+        session_rpe,
+        lower_back_pain,
+    )
+    return RedirectResponse("/", status_code=303)
+
 
 @app.get("/sets/{set_id}/edit")
 def edit_set_page(request: Request, set_id: int):
@@ -971,6 +1233,8 @@ def edit_set_page(request: Request, set_id: int):
 
     if not set_row:
         raise HTTPException(status_code=404, detail="Set not found")
+
+    logger.debug("page.set_edit set_id=%s workout_id=%s", set_id, set_row["workout_id"])
 
     return templates.TemplateResponse(
         "edit_set.html",
@@ -1004,6 +1268,7 @@ def update_set(
         ).fetchone()
 
         if not set_row:
+            logger.warning("set.update.not_found set_id=%s return_to=%s", set_id, return_to)
             return RedirectResponse("/", status_code=303)
 
         workout_id = int(set_row["workout_id"])
@@ -1018,4 +1283,12 @@ def update_set(
             (weight, reps, set_id),
         )
 
+    logger.info(
+        "set.update set_id=%s workout_id=%s weight=%s reps=%s return_to=%s",
+        set_id,
+        workout_id,
+        weight,
+        reps,
+        return_to,
+    )
     return redirect_after_change(return_to, workout_id)
