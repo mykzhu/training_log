@@ -10,10 +10,16 @@
             color-scheme: dark;
             --bg: #050505;
             --card: #171717;
+            --card2: #222;
             --text: #f2f2f2;
             --muted: #999;
             --blue: #0a84ff;
+            --red: #ff453a;
             --border: #2e2e2e;
+        }
+
+        * {
+            box-sizing: border-box;
         }
 
         body {
@@ -55,6 +61,22 @@
             margin: 12px 0;
         }
 
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .card-title a {
+            color: var(--text);
+        }
+
+        .card-title a:hover {
+            color: var(--blue);
+        }
+
         .muted {
             color: var(--muted);
         }
@@ -63,11 +85,11 @@
             display: grid;
             grid-template-columns: repeat(4, 1fr);
             gap: 8px;
-            margin-top: 10px;
+            margin-top: 12px;
         }
 
         .stat {
-            background: #222;
+            background: var(--card2);
             padding: 10px;
             border-radius: 14px;
             text-align: center;
@@ -78,42 +100,59 @@
             font-size: 18px;
         }
 
-        .card a {
-            color: var(--text);
-        }
-
-        .card a:hover {
-            color: var(--blue);
-        }
-
         .actions {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
             gap: 8px;
-            margin-top: 12px;
+            flex-shrink: 0;
         }
 
         .button-link,
-        button {
-            display: block;
-            width: 100%;
+        .actions button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: auto;
+            min-width: 76px;
             border: 0;
-            border-radius: 14px;
-            padding: 12px 14px;
-            font-size: 16px;
+            border-radius: 12px;
+            padding: 8px 12px;
+            font-size: 14px;
             font-weight: 700;
             text-align: center;
             color: white;
             background: var(--blue);
             cursor: pointer;
+            line-height: 1.2;
         }
 
-        button.danger {
-            background: #ff453a;
+        .card a.button-link,
+        .card a.button-link:hover {
+            color: white;
         }
 
-        form {
+        .actions button.danger {
+            background: var(--red);
+        }
+
+        .actions form {
             margin: 0;
+        }
+
+        @media (max-width: 420px) {
+            .grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .card-header {
+                align-items: flex-start;
+            }
+
+            .actions {
+                width: 100%;
+                justify-content: flex-start;
+            }
         }
     </style>
 </head>
@@ -131,11 +170,28 @@
 
     {% for item in items %}
         <div class="card">
-            <strong>
-                <a href="/workouts/{{ item.workout.id }}">
-                    Workout #{{ item.workout.id }}
-                </a>
-            </strong>
+            <div class="card-header">
+                <strong class="card-title">
+                    <a href="/workouts/{{ item.workout.id }}">
+                        Workout #{{ item.workout.id }}
+                    </a>
+                </strong>
+
+                <div class="actions">
+                    <a class="button-link" href="/workouts/{{ item.workout.id }}/edit">
+                        Edit
+                    </a>
+
+                    <form
+                        method="post"
+                        action="/workouts/{{ item.workout.id }}/delete"
+                        onsubmit="return confirm('Delete workout #{{ item.workout.id }} and all its sets?');"
+                    >
+                        <button class="danger" type="submit">Delete</button>
+                    </form>
+                </div>
+            </div>
+
             <div class="muted">
                 {{ item.workout.created_at | format_datetime }}
                 {% if item.workout.finished_at %}
@@ -144,7 +200,7 @@
                     · active
                 {% endif %}
 
-                RPE:
+                · RPE:
                 {% if item.workout.session_rpe is not none %}
                     {{ item.workout.session_rpe }}/10
                 {% else %}
@@ -157,18 +213,6 @@
                 {% else %}
                     —
                 {% endif %}
-            </div>
-
-            <div class="actions">
-                <a class="button-link" href="/workouts/{{ item.workout.id }}/edit">Edit</a>
-
-                <form
-                    method="post"
-                    action="/workouts/{{ item.workout.id }}/delete"
-                    onsubmit="return confirm('Delete workout #{{ item.workout.id }} and all its sets?');"
-                >
-                    <button class="danger" type="submit">Delete</button>
-                </form>
             </div>
 
             <div class="grid">

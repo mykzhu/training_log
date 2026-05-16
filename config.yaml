@@ -1,5 +1,5 @@
 name: "Training Log"
-version: "0.1.0"
+version: "0.1.1"
 slug: "training_log"
 description: "Personal workout logger for Home Assistant"
 url: "https://github.com/mykzhu/training_log"
@@ -12,11 +12,20 @@ startup: application
 boot: auto
 init: false
 
+ingress: true
+ingress_port: 8000
+ingress_entry: /
+panel_title: "Training Log"
+panel_icon: "mdi:dumbbell"
+panel_admin: false
+
 ports:
   8000/tcp: 8000
+
 ports_description:
   8000/tcp: "Training Log web interface"
-webui: "http://[HOST]:[PORT:8000]"
+
+webui: "http://[HOST]:[PORT:8000]/"
 
 environment:
   DB_PATH: "/data/training.db"
