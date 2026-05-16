@@ -85,6 +85,36 @@
         .card a:hover {
             color: var(--blue);
         }
+
+        .actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .button-link,
+        button {
+            display: block;
+            width: 100%;
+            border: 0;
+            border-radius: 14px;
+            padding: 12px 14px;
+            font-size: 16px;
+            font-weight: 700;
+            text-align: center;
+            color: white;
+            background: var(--blue);
+            cursor: pointer;
+        }
+
+        button.danger {
+            background: #ff453a;
+        }
+
+        form {
+            margin: 0;
+        }
     </style>
 </head>
 
@@ -127,6 +157,18 @@
                 {% else %}
                     —
                 {% endif %}
+            </div>
+
+            <div class="actions">
+                <a class="button-link" href="/workouts/{{ item.workout.id }}/edit">Edit</a>
+
+                <form
+                    method="post"
+                    action="/workouts/{{ item.workout.id }}/delete"
+                    onsubmit="return confirm('Delete workout #{{ item.workout.id }} and all its sets?');"
+                >
+                    <button class="danger" type="submit">Delete</button>
+                </form>
             </div>
 
             <div class="grid">

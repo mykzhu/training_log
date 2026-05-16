@@ -130,6 +130,31 @@
         .small {
             font-size: 13px;
         }
+
+        button {
+            border: 0;
+            border-radius: 14px;
+            padding: 14px;
+            font-size: 17px;
+            font-weight: 700;
+            color: white;
+            background: var(--blue);
+            cursor: pointer;
+            width: 100%;
+        }
+
+        button.secondary {
+            background: var(--card2);
+            color: var(--text);
+        }
+
+        button.danger {
+            background: #ff453a;
+        }
+
+        form {
+            margin: 0;
+        }
     </style>
 </head>
 
@@ -164,6 +189,21 @@
             <strong>{{ "%.1f"|format(total_volume) }}</strong>
             <span class="muted">kg volume</span>
         </div>
+    </div>
+
+    <div class="card">
+        <a href="/workouts/{{ workout.id }}/edit">
+            <button class="secondary" type="button">Edit workout</button>
+        </a>
+
+        <form
+            method="post"
+            action="/workouts/{{ workout.id }}/delete"
+            onsubmit="return confirm('Delete workout #{{ workout.id }} and all its sets?');"
+            style="margin-top: 8px;"
+        >
+            <button class="danger" type="submit">Delete workout</button>
+        </form>
     </div>
 
     <div class="card">

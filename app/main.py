@@ -21,7 +21,30 @@ def format_datetime(value: str | None) -> str:
     return value.replace("T", " ")[:16]
 
 
+def datetime_local_value(value: str | None) -> str:
+    if not value:
+        return ""
+
+    return value[:16]
+
+
+def parse_optional_int(value: str | None) -> int | None:
+    if value is None or value == "":
+        return None
+
+    return int(value)
+
+def redirect_after_change(
+    return_to: str | None = None,
+    workout_id: int | None = None,
+):
+    if return_to == "edit_workout" and workout_id is not None:
+        return RedirectResponse(f"/workouts/{workout_id}/edit", status_code=303)
+
+    return RedirectResponse("/", status_code=303)
+
 templates.env.filters["format_datetime"] = format_datetime
+templates.env.filters["datetime_local_value"] = datetime_local_value
 
 def get_db() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -318,6 +341,7 @@ def add_exercise(name: str = Form(...)):
 def add_exercise_to_workout(
     workout_id: int,
     exercise_id: int = Form(...),
+    return_to: str | None = Form(None),
 ):
     with get_db() as conn:
         next_position = conn.execute(
@@ -337,7 +361,7 @@ def add_exercise_to_workout(
             (workout_id, exercise_id, next_position),
         )
 
-    return RedirectResponse("/", status_code=303)
+    return redirect_after_change(return_to, workout_id)
 
 
 @app.post("/workout-exercises/{workout_exercise_id}/sets")
@@ -345,8 +369,23 @@ def add_set(
     workout_exercise_id: int,
     weight: float = Form(...),
     reps: int = Form(...),
+    return_to: str | None = Form(None),
 ):
     with get_db() as conn:
+        workout_exercise = conn.execute(
+            """
+            SELECT workout_id
+            FROM workout_exercises
+            WHERE id = ?
+            """,
+            (workout_exercise_id,),
+        ).fetchone()
+
+        if not workout_exercise:
+            return RedirectResponse("/", status_code=303)
+
+        workout_id = int(workout_exercise["workout_id"])
+
         next_set_number = conn.execute(
             """
             SELECT COALESCE(MAX(set_number), 0) + 1
@@ -371,23 +410,32 @@ def add_set(
             ),
         )
 
-    return RedirectResponse("/", status_code=303)
+    return redirect_after_change(return_to, workout_id)
 
 
 @app.post("/sets/{set_id}/delete")
-def delete_set(set_id: int):
+def delete_set(
+    set_id: int,
+    return_to: str | None = Form(None),
+):
+    workout_id: int | None = None
+
     with get_db() as conn:
         set_row = conn.execute(
             """
-            SELECT workout_exercise_id
-            FROM set_entries
-            WHERE id = ?
+            SELECT
+                se.workout_exercise_id,
+                we.workout_id
+            FROM set_entries se
+            JOIN workout_exercises we ON we.id = se.workout_exercise_id
+            WHERE se.id = ?
             """,
             (set_id,),
         ).fetchone()
 
         if set_row:
             workout_exercise_id = int(set_row["workout_exercise_id"])
+            workout_id = int(set_row["workout_id"])
 
             conn.execute(
                 """
@@ -399,18 +447,38 @@ def delete_set(set_id: int):
 
             renumber_sets(conn, workout_exercise_id)
 
-    return RedirectResponse("/", status_code=303)
+    return redirect_after_change(return_to, workout_id)
 
 
 @app.post("/workout-exercises/{workout_exercise_id}/delete")
-def delete_workout_exercise(workout_exercise_id: int):
-    with get_db() as conn:
-        conn.execute(
-            "DELETE FROM workout_exercises WHERE id = ?",
-            (workout_exercise_id,),
-        )
+def delete_workout_exercise(
+    workout_exercise_id: int,
+    return_to: str | None = Form(None),
+):
+    workout_id: int | None = None
 
-    return RedirectResponse("/", status_code=303)
+    with get_db() as conn:
+        workout_exercise = conn.execute(
+            """
+            SELECT workout_id
+            FROM workout_exercises
+            WHERE id = ?
+            """,
+            (workout_exercise_id,),
+        ).fetchone()
+
+        if workout_exercise:
+            workout_id = int(workout_exercise["workout_id"])
+
+            conn.execute(
+                """
+                DELETE FROM workout_exercises
+                WHERE id = ?
+                """,
+                (workout_exercise_id,),
+            )
+
+    return redirect_after_change(return_to, workout_id)
 
 
 @app.post("/workouts/{workout_id}/finish")
@@ -452,6 +520,105 @@ def new_workout():
 
     return RedirectResponse("/", status_code=303)
 
+@app.get("/workouts/{workout_id}/edit")
+def edit_workout_page(request: Request, workout_id: int):
+    with get_db() as conn:
+        workout = conn.execute(
+            """
+            SELECT *
+            FROM workouts
+            WHERE id = ?
+            """,
+            (workout_id,),
+        ).fetchone()
+
+        exercises = conn.execute(
+            """
+            SELECT *
+            FROM exercises
+            ORDER BY name ASC
+            """
+        ).fetchall()
+
+    if not workout:
+        raise HTTPException(status_code=404, detail="Workout not found")
+
+    workout_exercises = get_workout_details(workout_id)
+
+    total_volume = sum(item["total_volume"] for item in workout_exercises)
+    total_reps = sum(item["total_reps"] for item in workout_exercises)
+    total_sets = sum(len(item["sets"]) for item in workout_exercises)
+
+    existing_weights: list[float] = []
+    for item in workout_exercises:
+        for set_row in item["sets"]:
+            existing_weights.append(float(set_row["weight"]))
+
+    return templates.TemplateResponse(
+        "edit_workout.html",
+        {
+            "request": request,
+            "workout": workout,
+            "exercises": exercises,
+            "workout_exercises": workout_exercises,
+            "reps_options": range(1, 51),
+            "weight_options": get_weight_options(extra_weights=existing_weights),
+            "total_volume": total_volume,
+            "total_reps": total_reps,
+            "total_sets": total_sets,
+        },
+    )
+
+
+@app.post("/workouts/{workout_id}/update")
+def update_workout(
+    workout_id: int,
+    created_at: str = Form(...),
+    session_rpe: str | None = Form(None),
+    lower_back_pain: str | None = Form(None),
+):
+    created_at = created_at.strip()
+
+    # datetime-local sends YYYY-MM-DDTHH:MM
+    if len(created_at) == 16:
+        created_at = f"{created_at}:00"
+
+    workout_date = created_at[:10]
+
+    with get_db() as conn:
+        conn.execute(
+            """
+            UPDATE workouts
+            SET created_at = ?,
+                workout_date = ?,
+                session_rpe = ?,
+                lower_back_pain = ?
+            WHERE id = ?
+            """,
+            (
+                created_at,
+                workout_date,
+                parse_optional_int(session_rpe),
+                parse_optional_int(lower_back_pain),
+                workout_id,
+            ),
+        )
+
+    return RedirectResponse(f"/workouts/{workout_id}/edit", status_code=303)
+
+
+@app.post("/workouts/{workout_id}/delete")
+def delete_workout(workout_id: int):
+    with get_db() as conn:
+        conn.execute(
+            """
+            DELETE FROM workouts
+            WHERE id = ?
+            """,
+            (workout_id,),
+        )
+
+    return RedirectResponse("/history", status_code=303)
 
 @app.get("/history")
 def history(request: Request):
@@ -521,7 +688,10 @@ def workout_detail(request: Request, workout_id: int):
     )
 
 @app.post("/workout-exercises/{workout_exercise_id}/sets/duplicate")
-def duplicate_set(workout_exercise_id: int):
+def duplicate_set(
+    workout_exercise_id: int,
+    return_to: str | None = Form(None),
+):
     with get_db() as conn:
         workout_exercise = conn.execute(
             """
@@ -534,6 +704,8 @@ def duplicate_set(workout_exercise_id: int):
 
         if not workout_exercise:
             return RedirectResponse("/", status_code=303)
+
+        workout_id = int(workout_exercise["workout_id"])
 
         source_set = conn.execute(
             """
@@ -565,7 +737,7 @@ def duplicate_set(workout_exercise_id: int):
             ).fetchone()
 
         if not source_set:
-            return RedirectResponse("/", status_code=303)
+            return redirect_after_change(return_to, workout_id)
 
         next_set_number = conn.execute(
             """
@@ -591,26 +763,7 @@ def duplicate_set(workout_exercise_id: int):
             ),
         )
 
-    return RedirectResponse("/", status_code=303)
-
-@app.post("/workouts/{workout_id}/metadata")
-def update_workout_metadata(
-    workout_id: int,
-    session_rpe: int | None = Form(None),
-    lower_back_pain: int | None = Form(None),
-):
-    with get_db() as conn:
-        conn.execute(
-            """
-            UPDATE workouts
-            SET session_rpe = ?,
-                lower_back_pain = ?
-            WHERE id = ?
-            """,
-            (session_rpe, lower_back_pain, workout_id),
-        )
-
-    return RedirectResponse("/", status_code=303)
+    return redirect_after_change(return_to, workout_id)
 
 @app.get("/sets/{set_id}/edit")
 def edit_set_page(request: Request, set_id: int):
@@ -654,8 +807,24 @@ def update_set(
     set_id: int,
     weight: float = Form(...),
     reps: int = Form(...),
+    return_to: str | None = Form(None),
 ):
     with get_db() as conn:
+        set_row = conn.execute(
+            """
+            SELECT we.workout_id
+            FROM set_entries se
+            JOIN workout_exercises we ON we.id = se.workout_exercise_id
+            WHERE se.id = ?
+            """,
+            (set_id,),
+        ).fetchone()
+
+        if not set_row:
+            return RedirectResponse("/", status_code=303)
+
+        workout_id = int(set_row["workout_id"])
+
         conn.execute(
             """
             UPDATE set_entries
@@ -666,4 +835,4 @@ def update_set(
             (weight, reps, set_id),
         )
 
-    return RedirectResponse("/", status_code=303)
+    return redirect_after_change(return_to, workout_id)
