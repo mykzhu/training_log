@@ -61,6 +61,12 @@
             margin-bottom: 14px;
         }
 
+        .nav-links {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
         .muted {
             color: var(--muted);
         }
@@ -213,7 +219,10 @@
             <div class="muted">Workout #{{ workout.id }} · {{ workout.created_at | format_datetime }}</div>
         </div>
 
-        <a href="/history">History</a>
+        <div class="nav-links">
+            <a href="/history">History</a>
+            <a href="/backup">Backup</a>
+        </div>
     </div>
 
     <div class="stats">

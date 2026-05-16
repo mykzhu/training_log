@@ -1,11 +1,12 @@
+import json
 import os
 import sqlite3
 from datetime import datetime, date
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
 
@@ -13,6 +14,29 @@ DB_PATH = Path(os.getenv("DB_PATH", "data/training.db"))
 
 app = FastAPI(title="Training Log")
 templates = Jinja2Templates(directory="app/templates")
+
+BACKUP_SCHEMA_VERSION = 1
+BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
+    "exercises": ("id", "name"),
+    "workouts": (
+        "id",
+        "workout_date",
+        "created_at",
+        "finished_at",
+        "session_rpe",
+        "lower_back_pain",
+    ),
+    "workout_exercises": ("id", "workout_id", "exercise_id", "position"),
+    "set_entries": (
+        "id",
+        "workout_exercise_id",
+        "set_number",
+        "weight",
+        "reps",
+        "created_at",
+    ),
+}
+BACKUP_TABLES = tuple(BACKUP_TABLE_COLUMNS)
 
 def format_datetime(value: str | None) -> str:
     if not value:
@@ -52,6 +76,109 @@ def get_db() -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
+
+
+def get_table_counts(conn: sqlite3.Connection) -> dict[str, int]:
+    return {
+        table_name: conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+        for table_name in BACKUP_TABLES
+    }
+
+
+def build_backup_payload() -> dict[str, Any]:
+    with get_db() as conn:
+        tables = {}
+
+        for table_name, columns in BACKUP_TABLE_COLUMNS.items():
+            column_sql = ", ".join(columns)
+            rows = conn.execute(
+                f"SELECT {column_sql} FROM {table_name} ORDER BY id ASC"
+            ).fetchall()
+            tables[table_name] = [dict(row) for row in rows]
+
+    return {
+        "app": "training-log",
+        "schema_version": BACKUP_SCHEMA_VERSION,
+        "exported_at": datetime.now().isoformat(timespec="seconds"),
+        "tables": tables,
+    }
+
+
+def validate_backup_payload(payload: Any) -> dict[str, list[dict[str, Any]]]:
+    if not isinstance(payload, dict):
+        raise ValueError("Backup file must contain a JSON object.")
+
+    if payload.get("schema_version") != BACKUP_SCHEMA_VERSION:
+        raise ValueError(
+            f"Unsupported backup schema version. Expected {BACKUP_SCHEMA_VERSION}."
+        )
+
+    tables = payload.get("tables")
+    if not isinstance(tables, dict):
+        raise ValueError("Backup file is missing the tables object.")
+
+    validated: dict[str, list[dict[str, Any]]] = {}
+
+    for table_name, columns in BACKUP_TABLE_COLUMNS.items():
+        rows = tables.get(table_name)
+        if not isinstance(rows, list):
+            raise ValueError(f"Backup table {table_name} must be a list.")
+
+        validated_rows: list[dict[str, Any]] = []
+        for index, row in enumerate(rows, start=1):
+            if not isinstance(row, dict):
+                raise ValueError(f"Row {index} in {table_name} must be an object.")
+
+            missing_columns = [column for column in columns if column not in row]
+            if missing_columns:
+                missing = ", ".join(missing_columns)
+                raise ValueError(f"Row {index} in {table_name} is missing {missing}.")
+
+            validated_rows.append({column: row[column] for column in columns})
+
+        validated[table_name] = validated_rows
+
+    return validated
+
+
+def reset_sqlite_sequences(conn: sqlite3.Connection) -> None:
+    placeholders = ", ".join("?" for _ in BACKUP_TABLES)
+    conn.execute(
+        f"DELETE FROM sqlite_sequence WHERE name IN ({placeholders})",
+        BACKUP_TABLES,
+    )
+
+    for table_name in BACKUP_TABLES:
+        max_id = conn.execute(
+            f"SELECT COALESCE(MAX(id), 0) FROM {table_name}"
+        ).fetchone()[0]
+
+        if max_id:
+            conn.execute(
+                "INSERT INTO sqlite_sequence (name, seq) VALUES (?, ?)",
+                (table_name, max_id),
+            )
+
+
+def restore_backup_payload(payload: Any) -> None:
+    tables = validate_backup_payload(payload)
+
+    with get_db() as conn:
+        for table_name in reversed(BACKUP_TABLES):
+            conn.execute(f"DELETE FROM {table_name}")
+
+        for table_name, columns in BACKUP_TABLE_COLUMNS.items():
+            column_sql = ", ".join(columns)
+            placeholders = ", ".join("?" for _ in columns)
+            insert_sql = (
+                f"INSERT INTO {table_name} ({column_sql}) "
+                f"VALUES ({placeholders})"
+            )
+
+            for row in tables[table_name]:
+                conn.execute(insert_sql, tuple(row[column] for column in columns))
+
+        reset_sqlite_sequences(conn)
 
 def ensure_column(
     conn: sqlite3.Connection,
@@ -620,6 +747,61 @@ def delete_workout(workout_id: int):
 
     return RedirectResponse("/history", status_code=303)
 
+
+@app.get("/backup")
+def backup_page(request: Request):
+    with get_db() as conn:
+        counts = get_table_counts(conn)
+
+    return templates.TemplateResponse(
+        "backup.html",
+        {
+            "request": request,
+            "counts": counts,
+        },
+    )
+
+
+@app.get("/backup/export.json")
+def export_backup():
+    payload = build_backup_payload()
+    content = json.dumps(payload, ensure_ascii=False, indent=2)
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+
+    return Response(
+        content=content,
+        media_type="application/json",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="training-log-backup-{timestamp}.json"'
+            )
+        },
+    )
+
+
+@app.post("/backup/import")
+async def import_backup(backup_file: UploadFile = File(...)):
+    raw_content = await backup_file.read()
+
+    try:
+        payload = json.loads(raw_content.decode("utf-8-sig"))
+        restore_backup_payload(payload)
+    except UnicodeDecodeError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Backup file must be UTF-8 JSON.",
+        ) from exc
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Backup file is not valid JSON.",
+        ) from exc
+    except (ValueError, sqlite3.IntegrityError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return RedirectResponse("/history?restored=1", status_code=303)
+
+
 @app.get("/history")
 def history(request: Request):
     with get_db() as conn:
@@ -651,6 +833,7 @@ def history(request: Request):
         {
             "request": request,
             "items": enriched,
+            "restored": request.query_params.get("restored") == "1",
         },
     )
 

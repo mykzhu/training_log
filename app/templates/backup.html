@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="uk">
+<head>
+    <meta charset="utf-8">
+    <title>Backup</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <style>
+        :root {
+            color-scheme: dark;
+            --bg: #050505;
+            --card: #171717;
+            --card2: #222;
+            --text: #f2f2f2;
+            --muted: #999;
+            --blue: #0a84ff;
+            --green: #0f7a0f;
+            --red: #ff453a;
+            --border: #2e2e2e;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 14px;
+            background: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-size: 16px;
+        }
+
+        .page {
+            max-width: 720px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            margin: 0 0 6px;
+            font-size: 28px;
+        }
+
+        h2 {
+            margin: 0 0 10px;
+            color: var(--blue);
+            font-size: 21px;
+        }
+
+        a {
+            color: var(--blue);
+            text-decoration: none;
+        }
+
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+
+        .muted {
+            color: var(--muted);
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 14px;
+            margin: 14px 0;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .stat {
+            background: var(--card2);
+            padding: 10px;
+            border-radius: 14px;
+            text-align: center;
+        }
+
+        .stat strong {
+            display: block;
+            font-size: 18px;
+        }
+
+        button,
+        .button-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            border: 0;
+            border-radius: 14px;
+            padding: 14px;
+            font-size: 17px;
+            font-weight: 700;
+            color: white;
+            background: var(--blue);
+            cursor: pointer;
+            text-align: center;
+        }
+
+        .button-link.green {
+            background: var(--green);
+        }
+
+        button.danger {
+            background: var(--red);
+        }
+
+        input[type="file"] {
+            width: 100%;
+            border: 1px solid var(--border);
+            background: var(--card2);
+            color: var(--text);
+            border-radius: 14px;
+            padding: 12px;
+            font-size: 16px;
+        }
+
+        form {
+            margin: 0;
+        }
+
+        .warning {
+            color: var(--red);
+            margin: 10px 0 12px;
+        }
+
+        @media (max-width: 520px) {
+            .grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+
+<body>
+<div class="page">
+    <div class="topbar">
+        <div>
+            <h1>Backup</h1>
+            <div class="muted">Export and restore all training history</div>
+        </div>
+
+        <a href="/history">History</a>
+    </div>
+
+    <div class="card">
+        <h2>Current database</h2>
+
+        <div class="grid">
+            <div class="stat">
+                <strong>{{ counts.exercises }}</strong>
+                <span class="muted">exercises</span>
+            </div>
+            <div class="stat">
+                <strong>{{ counts.workouts }}</strong>
+                <span class="muted">workouts</span>
+            </div>
+            <div class="stat">
+                <strong>{{ counts.workout_exercises }}</strong>
+                <span class="muted">entries</span>
+            </div>
+            <div class="stat">
+                <strong>{{ counts.set_entries }}</strong>
+                <span class="muted">sets</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Export</h2>
+        <p class="muted">
+            JSON is best for full backup because it preserves IDs and links between
+            workouts, exercises, and sets.
+        </p>
+
+        <a class="button-link green" href="/backup/export.json">
+            Download JSON backup
+        </a>
+    </div>
+
+    <div class="card">
+        <h2>Restore</h2>
+        <p class="warning">
+            Restore replaces the current database with the uploaded backup.
+        </p>
+
+        <form
+            method="post"
+            action="/backup/import"
+            enctype="multipart/form-data"
+            onsubmit="return confirm('Restore this backup and replace the current database?');"
+        >
+            <input type="file" name="backup_file" accept="application/json,.json" required>
+            <button class="danger" type="submit" style="margin-top: 12px;">
+                Restore JSON backup
+            </button>
+        </form>
+    </div>
+</div>
+</body>
+</html>

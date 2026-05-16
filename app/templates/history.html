@@ -53,6 +53,12 @@
             margin-bottom: 14px;
         }
 
+        .nav-links {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
         .card {
             background: var(--card);
             border: 1px solid var(--border);
@@ -140,6 +146,14 @@
             margin: 0;
         }
 
+        .notice {
+            border: 1px solid var(--blue);
+            background: var(--card);
+            border-radius: 14px;
+            padding: 12px;
+            margin-bottom: 14px;
+        }
+
         @media (max-width: 420px) {
             .grid {
                 grid-template-columns: repeat(2, 1fr);
@@ -165,8 +179,17 @@
             <div class="muted">Last 30 workouts</div>
         </div>
 
-        <a href="/">Current</a>
+        <div class="nav-links">
+            <a href="/">Current</a>
+            <a href="/backup">Backup</a>
+        </div>
     </div>
+
+    {% if restored %}
+        <div class="notice">
+            Backup restored.
+        </div>
+    {% endif %}
 
     {% for item in items %}
         <div class="card">
