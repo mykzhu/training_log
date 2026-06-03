@@ -19,9 +19,7 @@
             --border: #2e2e2e;
         }
 
-        * {
-            box-sizing: border-box;
-        }
+        * { box-sizing: border-box; }
 
         body {
             margin: 0;
@@ -32,25 +30,15 @@
             font-size: 16px;
         }
 
-        .page {
-            max-width: 720px;
-            margin: 0 auto;
-        }
+        .page { max-width: 720px; margin: 0 auto; }
+        h1 { margin: 0 0 6px; font-size: 28px; }
+        h2 { margin: 0 0 10px; color: var(--blue); font-size: 21px; }
+        a { color: var(--blue); text-decoration: none; }
 
-        h1 {
-            margin: 0 0 6px;
-            font-size: 28px;
-        }
-
-        h2 {
-            margin: 0 0 10px;
-            color: var(--blue);
-            font-size: 21px;
-        }
-
-        a {
-            color: var(--blue);
-            text-decoration: none;
+        .nav-links {
+            display: flex;
+            gap: 12px;
+            align-items: center;
         }
 
         .topbar {
@@ -61,9 +49,7 @@
             margin-bottom: 14px;
         }
 
-        .muted {
-            color: var(--muted);
-        }
+        .muted { color: var(--muted); }
 
         .card {
             background: var(--card);
@@ -87,10 +73,7 @@
             text-align: center;
         }
 
-        .stat strong {
-            display: block;
-            font-size: 18px;
-        }
+        .stat strong { display: block; font-size: 18px; }
 
         button,
         .button-link {
@@ -109,13 +92,8 @@
             text-align: center;
         }
 
-        .button-link.green {
-            background: var(--green);
-        }
-
-        button.danger {
-            background: var(--red);
-        }
+        .button-link.green { background: var(--green); }
+        button.danger { background: var(--red); }
 
         input[type="file"] {
             width: 100%;
@@ -127,19 +105,19 @@
             font-size: 16px;
         }
 
-        form {
-            margin: 0;
-        }
+        form { margin: 0; }
+        .warning { color: var(--red); margin: 10px 0 12px; }
 
-        .warning {
-            color: var(--red);
-            margin: 10px 0 12px;
+        .notice {
+            border: 1px solid var(--blue);
+            background: var(--card);
+            border-radius: 14px;
+            padding: 12px;
+            margin-bottom: 14px;
         }
 
         @media (max-width: 520px) {
-            .grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
+            .grid { grid-template-columns: repeat(2, 1fr); }
         }
     </style>
 </head>
@@ -149,11 +127,20 @@
     <div class="topbar">
         <div>
             <h1>Backup</h1>
-            <div class="muted">Export and restore all training history</div>
+            <div class="muted">Export, restore, or reset training history</div>
         </div>
 
-        <a href="/history">History</a>
+        <div class="nav-links">
+            <a href="/">Current</a>
+            <a href="/history">History</a>
+        </div>
     </div>
+
+    {% if reset %}
+        <div class="notice">
+            Database reset completed.
+        </div>
+    {% endif %}
 
     <div class="card">
         <h2>Current database</h2>
@@ -205,6 +192,23 @@
             <input type="file" name="backup_file" accept="application/json,.json" required>
             <button class="danger" type="submit" style="margin-top: 12px;">
                 Restore JSON backup
+            </button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2>Reset database</h2>
+        <p class="warning">
+            This deletes all workouts, sets, and custom exercises, then recreates the default exercise list.
+        </p>
+
+        <form
+            method="post"
+            action="/backup/reset"
+            onsubmit="return confirm('Reset the whole database? This cannot be undone unless you have a backup.');"
+        >
+            <button class="danger" type="submit">
+                Reset database
             </button>
         </form>
     </div>

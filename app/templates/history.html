@@ -18,9 +18,7 @@
             --border: #2e2e2e;
         }
 
-        * {
-            box-sizing: border-box;
-        }
+        * { box-sizing: border-box; }
 
         body {
             margin: 0;
@@ -31,20 +29,9 @@
             font-size: 16px;
         }
 
-        .page {
-            max-width: 720px;
-            margin: 0 auto;
-        }
-
-        h1 {
-            margin: 0 0 6px;
-            font-size: 28px;
-        }
-
-        a {
-            color: var(--blue);
-            text-decoration: none;
-        }
+        .page { max-width: 720px; margin: 0 auto; }
+        h1 { margin: 0 0 6px; font-size: 28px; }
+        a { color: var(--blue); text-decoration: none; }
 
         .topbar {
             display: flex;
@@ -75,17 +62,9 @@
             flex-wrap: wrap;
         }
 
-        .card-title a {
-            color: var(--text);
-        }
-
-        .card-title a:hover {
-            color: var(--blue);
-        }
-
-        .muted {
-            color: var(--muted);
-        }
+        .card-title a { color: var(--text); }
+        .card-title a:hover { color: var(--blue); }
+        .muted { color: var(--muted); }
 
         .grid {
             display: grid;
@@ -101,10 +80,7 @@
             text-align: center;
         }
 
-        .stat strong {
-            display: block;
-            font-size: 18px;
-        }
+        .stat strong { display: block; font-size: 18px; }
 
         .actions {
             display: flex;
@@ -134,17 +110,9 @@
         }
 
         .card a.button-link,
-        .card a.button-link:hover {
-            color: white;
-        }
-
-        .actions button.danger {
-            background: var(--red);
-        }
-
-        .actions form {
-            margin: 0;
-        }
+        .card a.button-link:hover { color: white; }
+        .actions button.danger { background: var(--red); }
+        .actions form { margin: 0; }
 
         .notice {
             border: 1px solid var(--blue);
@@ -155,18 +123,9 @@
         }
 
         @media (max-width: 420px) {
-            .grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
-
-            .card-header {
-                align-items: flex-start;
-            }
-
-            .actions {
-                width: 100%;
-                justify-content: flex-start;
-            }
+            .grid { grid-template-columns: repeat(2, 1fr); }
+            .card-header { align-items: flex-start; }
+            .actions { width: 100%; justify-content: flex-start; }
         }
     </style>
 </head>
@@ -222,6 +181,8 @@
                 {% else %}
                     · active
                 {% endif %}
+
+                · Duration: {{ item.workout.duration_seconds | format_duration }}
 
                 · RPE:
                 {% if item.workout.session_rpe is not none %}

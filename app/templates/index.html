@@ -19,9 +19,7 @@
             --border: #2e2e2e;
         }
 
-        * {
-            box-sizing: border-box;
-        }
+        * { box-sizing: border-box; }
 
         body {
             margin: 0;
@@ -32,26 +30,10 @@
             font-size: 16px;
         }
 
-        .page {
-            max-width: 720px;
-            margin: 0 auto;
-        }
-
-        h1 {
-            margin: 0 0 6px;
-            font-size: 28px;
-        }
-
-        h2 {
-            font-size: 21px;
-            margin: 0;
-            color: var(--blue);
-        }
-
-        a {
-            color: var(--blue);
-            text-decoration: none;
-        }
+        .page { max-width: 720px; margin: 0 auto; }
+        h1 { margin: 0 0 6px; font-size: 28px; }
+        h2 { font-size: 21px; margin: 0; color: var(--blue); }
+        a { color: var(--blue); text-decoration: none; }
 
         .topbar {
             display: flex;
@@ -67,13 +49,11 @@
             align-items: center;
         }
 
-        .muted {
-            color: var(--muted);
-        }
+        .muted { color: var(--muted); }
 
         .stats {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(4, 1fr);
             gap: 8px;
             margin: 14px 0;
         }
@@ -85,10 +65,7 @@
             text-align: center;
         }
 
-        .stat strong {
-            display: block;
-            font-size: 20px;
-        }
+        .stat strong { display: block; font-size: 20px; }
 
         .card {
             background: var(--card);
@@ -106,9 +83,7 @@
             margin-bottom: 10px;
         }
 
-        form {
-            margin: 0;
-        }
+        form { margin: 0; }
 
         select,
         input[type="text"] {
@@ -129,11 +104,14 @@
             margin-top: 10px;
         }
 
-        .exercise-add {
+        .exercise-add,
+        .new-exercise-form {
             display: grid;
             grid-template-columns: 1fr auto;
             gap: 8px;
         }
+
+        .new-exercise-form { margin-top: 8px; }
 
         button {
             border: 0;
@@ -161,6 +139,14 @@
             width: 100%;
             margin-top: 14px;
             background: var(--green);
+            font-size: 18px;
+            padding: 16px;
+        }
+
+        button.start {
+            width: 100%;
+            margin-top: 12px;
+            background: var(--blue);
             font-size: 18px;
             padding: 16px;
         }
@@ -194,19 +180,11 @@
             border: 1px dashed var(--border);
         }
 
-        .inline-delete {
-            display: inline;
-        }
+        .inline-delete { display: inline; }
+        .small { font-size: 13px; }
 
-        .small {
-            font-size: 13px;
-        }
-
-        .new-exercise-form {
-            display: grid;
-            grid-template-columns: 1fr auto;
-            gap: 8px;
-            margin-top: 8px;
+        @media (max-width: 520px) {
+            .stats { grid-template-columns: repeat(2, 1fr); }
         }
     </style>
 </head>
@@ -216,7 +194,13 @@
     <div class="topbar">
         <div>
             <h1>Training Log</h1>
-            <div class="muted">Workout #{{ workout.id }} · {{ workout.created_at | format_datetime }}</div>
+            {% if active_workout %}
+                <div class="muted">
+                    Started · {{ workout.created_at | format_datetime }}
+                </div>
+            {% else %}
+                <div class="muted">No active workout</div>
+            {% endif %}
         </div>
 
         <div class="nav-links">
@@ -225,161 +209,212 @@
         </div>
     </div>
 
-    <div class="stats">
-        <div class="stat">
-            <strong>{{ total_sets }}</strong>
-            <span class="muted">sets</span>
+    {% if not active_workout %}
+        <div class="card">
+            <h2>Ready?</h2>
+            <p class="muted">
+                Workout will be created in the database only after you press Finish workout.
+            </p>
+            <form method="post" action="/workouts/start">
+                <button class="start" type="submit">Start workout</button>
+            </form>
         </div>
-        <div class="stat">
-            <strong>{{ total_reps }}</strong>
-            <span class="muted">reps</span>
-        </div>
-        <div class="stat">
-            <strong>{{ "%.1f"|format(total_volume) }}</strong>
-            <span class="muted">kg volume</span>
-        </div>
-    </div>
-
-    <div class="card">
-        <h2>Session status</h2>
-
-        <form method="post" action="/workouts/{{ workout.id }}/metadata">
-            <div class="row">
-                <select name="session_rpe">
-                    <option value="">RPE</option>
-                    {% for value in range(1, 11) %}
-                        <option value="{{ value }}" {% if workout.session_rpe == value %}selected{% endif %}>
-                            RPE {{ value }}
-                        </option>
-                    {% endfor %}
-                </select>
-
-                <select name="lower_back_pain">
-                    <option value="">Back</option>
-                    {% for value in range(0, 11) %}
-                        <option value="{{ value }}" {% if workout.lower_back_pain == value %}selected{% endif %}>
-                            Back {{ value }}/10
-                        </option>
-                    {% endfor %}
-                </select>
-
-                <button type="submit">Save</button>
+    {% else %}
+        <div class="stats">
+            <div class="stat">
+                <strong id="workout-timer" data-started-at="{{ workout.started_at }}">
+                    {{ active_elapsed_seconds | format_duration }}
+                </strong>
+                <span class="muted">duration</span>
             </div>
-        </form>
-    </div>
+            <div class="stat">
+                <strong>{{ total_sets }}</strong>
+                <span class="muted">sets</span>
+            </div>
+            <div class="stat">
+                <strong>{{ total_reps }}</strong>
+                <span class="muted">reps</span>
+            </div>
+            <div class="stat">
+                <strong>{{ "%.1f"|format(total_volume) }}</strong>
+                <span class="muted">kg volume</span>
+            </div>
+        </div>
 
-    <div class="card">
-        <h2>Add exercise</h2>
+        <div class="card">
+            <h2>Session status</h2>
 
-        <form class="exercise-add" method="post" action="/workouts/{{ workout.id }}/exercise">
-            <select name="exercise_id">
-                {% for exercise in exercises %}
-                    <option value="{{ exercise.id }}">{{ exercise.name }}</option>
-                {% endfor %}
-            </select>
+            <form method="post" action="/draft/metadata">
+                <div class="row">
+                    <select name="session_rpe">
+                        <option value="">RPE</option>
+                        {% for value in range(1, 11) %}
+                            <option value="{{ value }}" {% if workout.session_rpe == value %}selected{% endif %}>
+                                RPE {{ value }}
+                            </option>
+                        {% endfor %}
+                    </select>
 
-            <button type="submit">Add</button>
-        </form>
+                    <select name="lower_back_pain">
+                        <option value="">Back</option>
+                        {% for value in range(0, 11) %}
+                            <option value="{{ value }}" {% if workout.lower_back_pain == value %}selected{% endif %}>
+                                Back {{ value }}/10
+                            </option>
+                        {% endfor %}
+                    </select>
 
-        <form class="new-exercise-form" method="post" action="/exercises">
-            <input type="text" name="name" placeholder="New exercise name">
-            <button class="secondary" type="submit">Create</button>
-        </form>
-    </div>
+                    <button type="submit">Save</button>
+                </div>
+            </form>
+        </div>
 
-    {% if workout_exercises %}
-        {% for item in workout_exercises %}
-            <div class="card">
-                <div class="exercise-header">
-                    <div>
-                        <h2>{{ item.exercise_name }}</h2>
-                        <div class="muted small">
-                            {{ item.sets|length }} sets ·
-                            {{ item.total_reps }} reps ·
-                            {{ "%.1f"|format(item.total_volume) }} kg
+        <div class="card">
+            <h2>Add exercise</h2>
+
+            <form class="exercise-add" method="post" action="/draft/exercise">
+                <select name="exercise_id">
+                    {% for exercise in exercises %}
+                        <option value="{{ exercise.id }}">{{ exercise.name }}</option>
+                    {% endfor %}
+                </select>
+
+                <button type="submit">Add</button>
+            </form>
+
+            <form class="new-exercise-form" method="post" action="/exercises">
+                <input type="text" name="name" placeholder="New exercise name">
+                <button class="secondary" type="submit">Create</button>
+            </form>
+        </div>
+
+        {% if workout_exercises %}
+            {% for item in workout_exercises %}
+                <div class="card">
+                    <div class="exercise-header">
+                        <div>
+                            <h2>{{ item.exercise_name }}</h2>
+                            <div class="muted small">
+                                {{ item.sets|length }} sets ·
+                                {{ item.total_reps }} reps ·
+                                {{ "%.1f"|format(item.total_volume) }} kg
+                            </div>
                         </div>
+
+                        <form
+                            class="inline-delete"
+                            method="post"
+                            action="/draft-exercises/{{ item.workout_exercise_id }}/delete"
+                            onsubmit="return confirm('Delete {{ item.exercise_name }} from this workout?');"
+                        >
+                            <button class="danger" type="submit">Delete</button>
+                        </form>
                     </div>
 
-                    <form class="inline-delete" method="post" action="/workout-exercises/{{ item.workout_exercise_id }}/delete">
-                        <button class="danger" type="submit">Delete</button>
+                    {% if item.sets %}
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Set</th>
+                                    <th>Kg</th>
+                                    <th>Reps</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            {% for set in item.sets %}
+                                <tr>
+                                    <td>{{ set.set_number }}</td>
+                                    <td>{{ set.weight }}</td>
+                                    <td>{{ set.reps }}</td>
+                                    <td>
+                                        <form class="inline-delete" method="post" action="/draft-sets/{{ set.id }}/delete">
+                                            <button class="danger" type="submit">×</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                    {% else %}
+                        <p class="muted">No sets yet.</p>
+                    {% endif %}
+
+                    <form method="post" action="/draft-exercises/{{ item.workout_exercise_id }}/sets">
+                        <div class="row">
+                            <select name="weight">
+                                {% for weight in weight_options %}
+                                    <option value="{{ weight }}" {% if weight == item.default_weight %}selected{% endif %}>
+                                        {{ weight }} kg
+                                    </option>
+                                {% endfor %}
+                            </select>
+
+                            <select name="reps">
+                                {% for reps in reps_options %}
+                                    <option value="{{ reps }}" {% if reps == item.default_reps %}selected{% endif %}>
+                                        {{ reps }} reps
+                                    </option>
+                                {% endfor %}
+                            </select>
+
+                            <button type="submit">+</button>
+                        </div>
+                    </form>
+
+                    <form method="post" action="/draft-exercises/{{ item.workout_exercise_id }}/sets/duplicate" style="margin-top: 8px;">
+                        <button class="secondary" type="submit" style="width: 100%;">
+                            + Same
+                        </button>
                     </form>
                 </div>
-
-                {% if item.sets %}
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Set</th>
-                                <th>Kg</th>
-                                <th>Reps</th>
-                                <th></th>
-                                <th></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                        {% for set in item.sets %}
-                            <tr>
-                                <td>{{ set.set_number }}</td>
-                                <td>{{ set.weight }}</td>
-                                <td>{{ set.reps }}</td>
-                                <td>
-                                    <a href="/sets/{{ set.id }}/edit">Edit</a>
-                                </td>
-                                <td>
-                                    <form class="inline-delete" method="post" action="/sets/{{ set.id }}/delete">
-                                        <button class="danger" type="submit">×</button>
-                                    </form>
-                                </td>
-                            </tr>
-                        {% endfor %}
-                        </tbody>
-                    </table>
-                {% else %}
-                    <p class="muted">No sets yet.</p>
-                {% endif %}
-
-                <form method="post" action="/workout-exercises/{{ item.workout_exercise_id }}/sets">
-                    <div class="row">
-                        <select name="weight">
-                            {% for weight in weight_options %}
-                                <option value="{{ weight }}" {% if weight == item.default_weight %}selected{% endif %}>
-                                    {{ weight }} kg
-                                </option>
-                            {% endfor %}
-                        </select>
-
-                        <select name="reps">
-                            {% for reps in reps_options %}
-                                <option value="{{ reps }}" {% if reps == item.default_reps %}selected{% endif %}>
-                                    {{ reps }} reps
-                                </option>
-                            {% endfor %}
-                        </select>
-
-                        <button type="submit">+</button>
-                    </div>
-                </form>
-
-                <form method="post" action="/workout-exercises/{{ item.workout_exercise_id }}/sets/duplicate" style="margin-top: 8px;">
-                    <button class="secondary" type="submit" style="width: 100%;">
-                        + Same
-                    </button>
-                </form>
+            {% endfor %}
+        {% else %}
+            <div class="empty">
+                Add your first exercise for this workout.
             </div>
-        {% endfor %}
-    {% else %}
-        <div class="empty">
-            Add your first exercise for this workout.
-        </div>
+        {% endif %}
+
+        <form method="post" action="/workouts/finish">
+            <button class="finish" type="submit">Finish workout</button>
+        </form>
     {% endif %}
-
-    <form method="post" action="/workouts/{{ workout.id }}/finish">
-        <button class="finish" type="submit">Finish workout</button>
-    </form>
-
-    <form method="post" action="/workouts/new" style="margin-top: 10px;">
-        <button class="secondary" type="submit" style="width: 100%;">Start new workout</button>
-    </form>
 </div>
+
+{% if active_workout %}
+<script>
+    function formatDuration(totalSeconds) {
+        totalSeconds = Math.max(0, Math.floor(totalSeconds));
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+
+        if (hours > 0) {
+            return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+
+        return `${minutes}:${String(seconds).padStart(2, '0')}`;
+    }
+
+    function updateWorkoutTimer() {
+        const timer = document.getElementById('workout-timer');
+        if (!timer) {
+            return;
+        }
+
+        const startedAtRaw = timer.dataset.startedAt;
+        const startedAt = new Date(startedAtRaw);
+        if (Number.isNaN(startedAt.getTime())) {
+            return;
+        }
+
+        const elapsedSeconds = (Date.now() - startedAt.getTime()) / 1000;
+        timer.textContent = formatDuration(elapsedSeconds);
+    }
+
+    updateWorkoutTimer();
+    setInterval(updateWorkoutTimer, 1000);
+</script>
+{% endif %}
 </body>
 </html>

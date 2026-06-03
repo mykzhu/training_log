@@ -69,7 +69,7 @@
 
         .stats {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(4, 1fr);
             gap: 8px;
             margin: 14px 0;
         }
@@ -219,10 +219,14 @@
 <div class="page">
     <h1>Edit Workout #{{ workout.id }}</h1>
     <div class="muted">
-        {{ workout.created_at | format_datetime }}
+        {{ workout.created_at | format_datetime }} · Duration: {{ workout.duration_seconds | format_duration }}
     </div>
 
     <div class="stats">
+        <div class="stat">
+            <strong>{{ workout.duration_seconds | format_duration }}</strong>
+            <span class="muted">duration</span>
+        </div>
         <div class="stat">
             <strong>{{ total_sets }}</strong>
             <span class="muted">sets</span>

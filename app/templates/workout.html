@@ -65,7 +65,7 @@
 
         .stats {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(4, 1fr);
             gap: 8px;
             margin: 14px 0;
         }
@@ -170,6 +170,7 @@
                 {% else %}
                     · active
                 {% endif %}
+                · Duration: {{ workout.duration_seconds | format_duration }}
             </div>
         </div>
 
@@ -177,6 +178,10 @@
     </div>
 
     <div class="stats">
+        <div class="stat">
+            <strong>{{ workout.duration_seconds | format_duration }}</strong>
+            <span class="muted">duration</span>
+        </div>
         <div class="stat">
             <strong>{{ total_sets }}</strong>
             <span class="muted">sets</span>

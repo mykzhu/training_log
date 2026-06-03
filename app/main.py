@@ -3,8 +3,10 @@ import logging
 import os
 import sqlite3
 import time
+from copy import deepcopy
 from datetime import datetime, date
 from pathlib import Path
+from threading import RLock
 from typing import Any
 from uuid import uuid4
 
@@ -37,7 +39,7 @@ access_logger = logging.getLogger("training_log.access")
 app = FastAPI(title="Training Log")
 templates = Jinja2Templates(directory="app/templates")
 
-BACKUP_SCHEMA_VERSION = 1
+BACKUP_SCHEMA_VERSION = 2
 BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
     "exercises": ("id", "name"),
     "workouts": (
@@ -47,6 +49,7 @@ BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
         "finished_at",
         "session_rpe",
         "lower_back_pain",
+        "duration_seconds",
     ),
     "workout_exercises": ("id", "workout_id", "exercise_id", "position"),
     "set_entries": (
@@ -60,6 +63,20 @@ BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
 }
 BACKUP_TABLES = tuple(BACKUP_TABLE_COLUMNS)
 
+DEFAULT_EXERCISES = (
+    "Deadlift",
+    "Goblet Squat",
+    "DB Bench Press",
+    "DB Row",
+    "EZ Curl",
+    "Triceps Extension",
+    "Lateral Raise",
+    "Crunches",
+)
+
+ACTIVE_WORKOUT_DRAFT: dict[str, Any] | None = None
+DRAFT_LOCK = RLock()
+
 def format_datetime(value: str | None) -> str:
     if not value:
         return "—"
@@ -72,6 +89,24 @@ def datetime_local_value(value: str | None) -> str:
         return ""
 
     return value[:16]
+
+
+def format_duration(value: int | str | None) -> str:
+    if value is None or value == "":
+        return "—"
+
+    try:
+        total_seconds = max(0, int(value))
+    except (TypeError, ValueError):
+        return "—"
+
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+
+    if hours:
+        return f"{hours}:{minutes:02d}:{seconds:02d}"
+
+    return f"{minutes}:{seconds:02d}"
 
 
 def parse_optional_int(value: str | None) -> int | None:
@@ -91,6 +126,7 @@ def redirect_after_change(
 
 templates.env.filters["format_datetime"] = format_datetime
 templates.env.filters["datetime_local_value"] = datetime_local_value
+templates.env.filters["format_duration"] = format_duration
 
 
 @app.middleware("http")
@@ -184,9 +220,10 @@ def validate_backup_payload(payload: Any) -> dict[str, list[dict[str, Any]]]:
     if not isinstance(payload, dict):
         raise ValueError("Backup file must contain a JSON object.")
 
-    if payload.get("schema_version") != BACKUP_SCHEMA_VERSION:
+    schema_version = payload.get("schema_version")
+    if schema_version not in (1, BACKUP_SCHEMA_VERSION):
         raise ValueError(
-            f"Unsupported backup schema version. Expected {BACKUP_SCHEMA_VERSION}."
+            f"Unsupported backup schema version. Expected 1 or {BACKUP_SCHEMA_VERSION}."
         )
 
     tables = payload.get("tables")
@@ -205,17 +242,24 @@ def validate_backup_payload(payload: Any) -> dict[str, list[dict[str, Any]]]:
             if not isinstance(row, dict):
                 raise ValueError(f"Row {index} in {table_name} must be an object.")
 
-            missing_columns = [column for column in columns if column not in row]
-            if missing_columns:
-                missing = ", ".join(missing_columns)
-                raise ValueError(f"Row {index} in {table_name} is missing {missing}.")
+            row_data: dict[str, Any] = {}
+            for column in columns:
+                if column in row:
+                    row_data[column] = row[column]
+                elif table_name == "workouts" and column == "duration_seconds" and schema_version == 1:
+                    row_data[column] = None
+                else:
+                    raise ValueError(
+                        f"Row {index} in {table_name} is missing {column}."
+                    )
 
-            validated_rows.append({column: row[column] for column in columns})
+            validated_rows.append(row_data)
 
         validated[table_name] = validated_rows
 
     logger.info(
-        "backup.validate.success schema_version=%s counts=%s",
+        "backup.validate.success schema_version=%s target_schema_version=%s counts=%s",
+        schema_version,
         BACKUP_SCHEMA_VERSION,
         {table_name: len(rows) for table_name, rows in validated.items()},
     )
@@ -273,6 +317,37 @@ def restore_backup_payload(payload: Any) -> None:
         {table_name: len(rows) for table_name, rows in tables.items()},
     )
 
+
+def seed_default_exercises(conn: sqlite3.Connection) -> None:
+    for exercise in DEFAULT_EXERCISES:
+        conn.execute(
+            "INSERT OR IGNORE INTO exercises (name) VALUES (?)",
+            (exercise,),
+        )
+
+
+def reset_database_data() -> None:
+    global ACTIVE_WORKOUT_DRAFT
+
+    with DRAFT_LOCK:
+        ACTIVE_WORKOUT_DRAFT = None
+
+    with get_db() as conn:
+        logger.warning("db.reset.start")
+
+        for table_name in reversed(BACKUP_TABLES):
+            conn.execute(f"DELETE FROM {table_name}")
+
+        placeholders = ", ".join("?" for _ in BACKUP_TABLES)
+        conn.execute(
+            f"DELETE FROM sqlite_sequence WHERE name IN ({placeholders})",
+            BACKUP_TABLES,
+        )
+
+        seed_default_exercises(conn)
+
+        logger.warning("db.reset.done")
+
 def ensure_column(
     conn: sqlite3.Connection,
     table_name: str,
@@ -310,7 +385,8 @@ def init_db() -> None:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 workout_date TEXT NOT NULL,
                 created_at TEXT NOT NULL,
-                finished_at TEXT
+                finished_at TEXT,
+                duration_seconds INTEGER
             );
 
             CREATE TABLE IF NOT EXISTS workout_exercises (
@@ -336,23 +412,9 @@ def init_db() -> None:
 
         ensure_column(conn, "workouts", "session_rpe", "INTEGER")
         ensure_column(conn, "workouts", "lower_back_pain", "INTEGER")
+        ensure_column(conn, "workouts", "duration_seconds", "INTEGER")
 
-        default_exercises = [
-            "Deadlift",
-            "Goblet Squat",
-            "DB Bench Press",
-            "DB Row",
-            "EZ Curl",
-            "Triceps Extension",
-            "Lateral Raise",
-            "Crunches",
-        ]
-
-        for exercise in default_exercises:
-            conn.execute(
-                "INSERT OR IGNORE INTO exercises (name) VALUES (?)",
-                (exercise,),
-            )
+        seed_default_exercises(conn)
 
         logger.info("db.init.done")
 
@@ -364,39 +426,181 @@ def on_startup() -> None:
     logger.info("app.ready")
 
 
-def get_or_create_active_workout() -> sqlite3.Row:
-    with get_db() as conn:
-        workout = conn.execute(
-            """
-            SELECT *
-            FROM workouts
-            WHERE finished_at IS NULL
-            ORDER BY id DESC
-            LIMIT 1
-            """
-        ).fetchone()
+def get_active_workout_draft() -> dict[str, Any] | None:
+    with DRAFT_LOCK:
+        return ACTIVE_WORKOUT_DRAFT
 
-        if workout:
-            logger.debug("workout.active.found workout_id=%s", workout["id"])
-            return workout
 
-        now = datetime.now().isoformat(timespec="seconds")
+def create_workout_draft() -> dict[str, Any]:
+    now = datetime.now().isoformat(timespec="seconds")
 
-        cursor = conn.execute(
-            """
-            INSERT INTO workouts (workout_date, created_at)
-            VALUES (?, ?)
-            """,
-            (date.today().isoformat(), now),
+    return {
+        "started_at": now,
+        "session_rpe": None,
+        "lower_back_pain": None,
+        "workout_exercises": [],
+        "next_workout_exercise_id": 1,
+        "next_set_id": 1,
+    }
+
+
+def get_draft_workout_exercise(
+    draft: dict[str, Any],
+    draft_exercise_id: int,
+) -> dict[str, Any] | None:
+    for item in draft["workout_exercises"]:
+        if int(item["id"]) == draft_exercise_id:
+            return item
+
+    return None
+
+
+def get_draft_set(
+    draft: dict[str, Any],
+    draft_set_id: int,
+) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    for item in draft["workout_exercises"]:
+        for set_entry in item["sets"]:
+            if int(set_entry["id"]) == draft_set_id:
+                return item, set_entry
+
+    return None
+
+
+def renumber_draft_sets(draft_exercise: dict[str, Any]) -> None:
+    for index, set_entry in enumerate(draft_exercise["sets"], start=1):
+        set_entry["set_number"] = index
+
+
+def get_draft_workout_details(draft: dict[str, Any]) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+
+    for item in sorted(draft["workout_exercises"], key=lambda x: (x["position"], x["id"])):
+        sets = item["sets"]
+        total_volume = sum(float(s["weight"]) * int(s["reps"]) for s in sets)
+        total_reps = sum(int(s["reps"]) for s in sets)
+
+        if sets:
+            last_set = sets[-1]
+            default_weight = float(last_set["weight"])
+            default_reps = int(last_set["reps"])
+        else:
+            previous_set = get_previous_set_for_exercise(
+                exercise_id=int(item["exercise_id"]),
+                current_workout_id=0,
+            )
+
+            if previous_set:
+                default_weight = float(previous_set["weight"])
+                default_reps = int(previous_set["reps"])
+            else:
+                default_weight = 0.0
+                default_reps = 10
+
+        result.append(
+            {
+                "workout_exercise_id": item["id"],
+                "exercise_id": item["exercise_id"],
+                "exercise_name": item["exercise_name"],
+                "position": item["position"],
+                "sets": sets,
+                "total_volume": total_volume,
+                "total_reps": total_reps,
+                "default_weight": default_weight,
+                "default_reps": default_reps,
+            }
         )
 
-        workout_id = cursor.lastrowid
-        logger.info("workout.active.create workout_id=%s created_at=%s", workout_id, now)
+    return result
 
-        return conn.execute(
-            "SELECT * FROM workouts WHERE id = ?",
-            (workout_id,),
-        ).fetchone()
+
+def calculate_draft_elapsed_seconds(draft: dict[str, Any]) -> int:
+    try:
+        started_at = datetime.fromisoformat(draft["started_at"])
+    except (KeyError, TypeError, ValueError):
+        return 0
+
+    return max(0, int((datetime.now() - started_at).total_seconds()))
+
+
+def save_workout_draft_to_db(draft: dict[str, Any]) -> int:
+    started_at_raw = str(draft["started_at"])
+    finished_at = datetime.now().isoformat(timespec="seconds")
+
+    try:
+        started_at_dt = datetime.fromisoformat(started_at_raw)
+        finished_at_dt = datetime.fromisoformat(finished_at)
+        duration_seconds = max(0, int((finished_at_dt - started_at_dt).total_seconds()))
+    except ValueError:
+        duration_seconds = None
+
+    with get_db() as conn:
+        workout_cursor = conn.execute(
+            """
+            INSERT INTO workouts (
+                workout_date,
+                created_at,
+                finished_at,
+                session_rpe,
+                lower_back_pain,
+                duration_seconds
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                started_at_raw[:10],
+                started_at_raw,
+                finished_at,
+                draft.get("session_rpe"),
+                draft.get("lower_back_pain"),
+                duration_seconds,
+            ),
+        )
+
+        workout_id = int(workout_cursor.lastrowid)
+
+        for draft_exercise in sorted(
+            draft["workout_exercises"],
+            key=lambda item: (item["position"], item["id"]),
+        ):
+            workout_exercise_cursor = conn.execute(
+                """
+                INSERT INTO workout_exercises (workout_id, exercise_id, position)
+                VALUES (?, ?, ?)
+                """,
+                (
+                    workout_id,
+                    int(draft_exercise["exercise_id"]),
+                    int(draft_exercise["position"]),
+                ),
+            )
+
+            workout_exercise_id = int(workout_exercise_cursor.lastrowid)
+
+            for set_entry in draft_exercise["sets"]:
+                conn.execute(
+                    """
+                    INSERT INTO set_entries
+                        (workout_exercise_id, set_number, weight, reps, created_at)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        workout_exercise_id,
+                        int(set_entry["set_number"]),
+                        float(set_entry["weight"]),
+                        int(set_entry["reps"]),
+                        str(set_entry["created_at"]),
+                    ),
+                )
+
+    logger.info(
+        "workout.draft.save workout_id=%s exercises=%s duration_seconds=%s",
+        workout_id,
+        len(draft["workout_exercises"]),
+        duration_seconds,
+    )
+
+    return workout_id
 
 def get_previous_set_for_exercise(
     exercise_id: int,
@@ -528,14 +732,41 @@ def renumber_sets(conn: sqlite3.Connection, workout_exercise_id: int) -> None:
 
 @app.get("/")
 def index(request: Request):
-    workout = get_or_create_active_workout()
-
     with get_db() as conn:
         exercises = conn.execute(
             "SELECT * FROM exercises ORDER BY name ASC"
         ).fetchall()
 
-    workout_exercises = get_workout_details(workout["id"])
+    draft = get_active_workout_draft()
+
+    if draft is None:
+        logger.debug("page.index no_active_workout")
+        return templates.TemplateResponse(
+            "index.html",
+            {
+                "request": request,
+                "active_workout": False,
+                "workout": None,
+                "exercises": exercises,
+                "workout_exercises": [],
+                "reps_options": range(1, 51),
+                "weight_options": get_weight_options(),
+                "total_volume": 0,
+                "total_reps": 0,
+                "total_sets": 0,
+                "active_elapsed_seconds": 0,
+            },
+        )
+
+    workout = {
+        "id": "draft",
+        "created_at": draft["started_at"],
+        "started_at": draft["started_at"],
+        "session_rpe": draft.get("session_rpe"),
+        "lower_back_pain": draft.get("lower_back_pain"),
+    }
+
+    workout_exercises = get_draft_workout_details(draft)
 
     total_volume = sum(item["total_volume"] for item in workout_exercises)
     total_reps = sum(item["total_reps"] for item in workout_exercises)
@@ -547,17 +778,20 @@ def index(request: Request):
         for set_row in item["sets"]:
             existing_weights.append(float(set_row["weight"]))
 
+    active_elapsed_seconds = calculate_draft_elapsed_seconds(draft)
+
     logger.debug(
-        "page.index workout_id=%s exercises=%s sets=%s",
-        workout["id"],
+        "page.index active_draft exercises=%s sets=%s elapsed_seconds=%s",
         len(workout_exercises),
         total_sets,
+        active_elapsed_seconds,
     )
 
     return templates.TemplateResponse(
         "index.html",
         {
             "request": request,
+            "active_workout": True,
             "workout": workout,
             "exercises": exercises,
             "workout_exercises": workout_exercises,
@@ -566,9 +800,9 @@ def index(request: Request):
             "total_volume": total_volume,
             "total_reps": total_reps,
             "total_sets": total_sets,
+            "active_elapsed_seconds": active_elapsed_seconds,
         },
     )
-
 
 @app.post("/exercises")
 def add_exercise(name: str = Form(...)):
@@ -586,6 +820,235 @@ def add_exercise(name: str = Form(...)):
 
     return RedirectResponse("/", status_code=303)
 
+
+
+
+@app.post("/workouts/start")
+def start_workout():
+    global ACTIVE_WORKOUT_DRAFT
+
+    with DRAFT_LOCK:
+        if ACTIVE_WORKOUT_DRAFT is None:
+            ACTIVE_WORKOUT_DRAFT = create_workout_draft()
+            logger.info(
+                "workout.draft.start started_at=%s",
+                ACTIVE_WORKOUT_DRAFT["started_at"],
+            )
+        else:
+            logger.info(
+                "workout.draft.start.ignored reason=already_active started_at=%s",
+                ACTIVE_WORKOUT_DRAFT["started_at"],
+            )
+
+    return RedirectResponse("/", status_code=303)
+
+
+@app.post("/draft/metadata")
+def update_draft_metadata(
+    session_rpe: int | None = Form(None),
+    lower_back_pain: int | None = Form(None),
+):
+    with DRAFT_LOCK:
+        draft = ACTIVE_WORKOUT_DRAFT
+        if draft is None:
+            logger.warning("workout.draft.metadata.no_active")
+            return RedirectResponse("/", status_code=303)
+
+        draft["session_rpe"] = session_rpe
+        draft["lower_back_pain"] = lower_back_pain
+
+    logger.info(
+        "workout.draft.metadata.update session_rpe=%s lower_back_pain=%s",
+        session_rpe,
+        lower_back_pain,
+    )
+    return RedirectResponse("/", status_code=303)
+
+
+@app.post("/draft/exercise")
+def add_exercise_to_draft(exercise_id: int = Form(...)):
+    with get_db() as conn:
+        exercise = conn.execute(
+            "SELECT * FROM exercises WHERE id = ?",
+            (exercise_id,),
+        ).fetchone()
+
+    if not exercise:
+        logger.warning("workout.draft.exercise.add.not_found exercise_id=%s", exercise_id)
+        return RedirectResponse("/", status_code=303)
+
+    with DRAFT_LOCK:
+        draft = ACTIVE_WORKOUT_DRAFT
+        if draft is None:
+            logger.warning("workout.draft.exercise.add.no_active exercise_id=%s", exercise_id)
+            return RedirectResponse("/", status_code=303)
+
+        draft_exercise_id = int(draft["next_workout_exercise_id"])
+        draft["next_workout_exercise_id"] = draft_exercise_id + 1
+        position = len(draft["workout_exercises"]) + 1
+
+        draft["workout_exercises"].append(
+            {
+                "id": draft_exercise_id,
+                "exercise_id": int(exercise["id"]),
+                "exercise_name": str(exercise["name"]),
+                "position": position,
+                "sets": [],
+            }
+        )
+
+    logger.info(
+        "workout.draft.exercise.add draft_exercise_id=%s exercise_id=%s position=%s",
+        draft_exercise_id,
+        exercise_id,
+        position,
+    )
+    return RedirectResponse("/", status_code=303)
+
+
+@app.post("/draft-exercises/{draft_exercise_id}/sets")
+def add_set_to_draft(
+    draft_exercise_id: int,
+    weight: float = Form(...),
+    reps: int = Form(...),
+):
+    with DRAFT_LOCK:
+        draft = ACTIVE_WORKOUT_DRAFT
+        if draft is None:
+            logger.warning("workout.draft.set.add.no_active draft_exercise_id=%s", draft_exercise_id)
+            return RedirectResponse("/", status_code=303)
+
+        draft_exercise = get_draft_workout_exercise(draft, draft_exercise_id)
+        if not draft_exercise:
+            logger.warning("workout.draft.set.add.exercise_not_found draft_exercise_id=%s", draft_exercise_id)
+            return RedirectResponse("/", status_code=303)
+
+        set_id = int(draft["next_set_id"])
+        draft["next_set_id"] = set_id + 1
+        set_number = len(draft_exercise["sets"]) + 1
+
+        draft_exercise["sets"].append(
+            {
+                "id": set_id,
+                "set_number": set_number,
+                "weight": weight,
+                "reps": reps,
+                "created_at": datetime.now().isoformat(timespec="seconds"),
+            }
+        )
+
+    logger.info(
+        "workout.draft.set.add set_id=%s draft_exercise_id=%s set_number=%s weight=%s reps=%s",
+        set_id,
+        draft_exercise_id,
+        set_number,
+        weight,
+        reps,
+    )
+    return RedirectResponse("/", status_code=303)
+
+
+@app.post("/draft-exercises/{draft_exercise_id}/sets/duplicate")
+def duplicate_draft_set(draft_exercise_id: int):
+    with DRAFT_LOCK:
+        draft = ACTIVE_WORKOUT_DRAFT
+        if draft is None:
+            logger.warning("workout.draft.set.duplicate.no_active draft_exercise_id=%s", draft_exercise_id)
+            return RedirectResponse("/", status_code=303)
+
+        draft_exercise = get_draft_workout_exercise(draft, draft_exercise_id)
+        if not draft_exercise:
+            logger.warning("workout.draft.set.duplicate.exercise_not_found draft_exercise_id=%s", draft_exercise_id)
+            return RedirectResponse("/", status_code=303)
+
+        if draft_exercise["sets"]:
+            source_set = draft_exercise["sets"][-1]
+            weight = float(source_set["weight"])
+            reps = int(source_set["reps"])
+        else:
+            previous_set = get_previous_set_for_exercise(
+                exercise_id=int(draft_exercise["exercise_id"]),
+                current_workout_id=0,
+            )
+            if not previous_set:
+                logger.warning("workout.draft.set.duplicate.no_source draft_exercise_id=%s", draft_exercise_id)
+                return RedirectResponse("/", status_code=303)
+
+            weight = float(previous_set["weight"])
+            reps = int(previous_set["reps"])
+
+        set_id = int(draft["next_set_id"])
+        draft["next_set_id"] = set_id + 1
+        set_number = len(draft_exercise["sets"]) + 1
+
+        draft_exercise["sets"].append(
+            {
+                "id": set_id,
+                "set_number": set_number,
+                "weight": weight,
+                "reps": reps,
+                "created_at": datetime.now().isoformat(timespec="seconds"),
+            }
+        )
+
+    logger.info(
+        "workout.draft.set.duplicate set_id=%s draft_exercise_id=%s set_number=%s weight=%s reps=%s",
+        set_id,
+        draft_exercise_id,
+        set_number,
+        weight,
+        reps,
+    )
+    return RedirectResponse("/", status_code=303)
+
+
+@app.post("/draft-sets/{draft_set_id}/delete")
+def delete_draft_set(draft_set_id: int):
+    with DRAFT_LOCK:
+        draft = ACTIVE_WORKOUT_DRAFT
+        if draft is None:
+            logger.warning("workout.draft.set.delete.no_active set_id=%s", draft_set_id)
+            return RedirectResponse("/", status_code=303)
+
+        found = get_draft_set(draft, draft_set_id)
+        if not found:
+            logger.warning("workout.draft.set.delete.not_found set_id=%s", draft_set_id)
+            return RedirectResponse("/", status_code=303)
+
+        draft_exercise, _ = found
+        draft_exercise["sets"] = [
+            set_entry for set_entry in draft_exercise["sets"]
+            if int(set_entry["id"]) != draft_set_id
+        ]
+        renumber_draft_sets(draft_exercise)
+
+    logger.info("workout.draft.set.delete set_id=%s", draft_set_id)
+    return RedirectResponse("/", status_code=303)
+
+
+@app.post("/draft-exercises/{draft_exercise_id}/delete")
+def delete_draft_exercise(draft_exercise_id: int):
+    with DRAFT_LOCK:
+        draft = ACTIVE_WORKOUT_DRAFT
+        if draft is None:
+            logger.warning("workout.draft.exercise.delete.no_active draft_exercise_id=%s", draft_exercise_id)
+            return RedirectResponse("/", status_code=303)
+
+        before_count = len(draft["workout_exercises"])
+        draft["workout_exercises"] = [
+            item for item in draft["workout_exercises"]
+            if int(item["id"]) != draft_exercise_id
+        ]
+
+        for index, item in enumerate(draft["workout_exercises"], start=1):
+            item["position"] = index
+
+    logger.info(
+        "workout.draft.exercise.delete draft_exercise_id=%s deleted=%s",
+        draft_exercise_id,
+        before_count != len(draft["workout_exercises"]),
+    )
+    return RedirectResponse("/", status_code=303)
 
 @app.post("/workouts/{workout_id}/exercise")
 def add_exercise_to_workout(
@@ -777,48 +1240,24 @@ def delete_workout_exercise(
     return redirect_after_change(return_to, workout_id)
 
 
-@app.post("/workouts/{workout_id}/finish")
-def finish_workout(workout_id: int):
-    finished_at = datetime.now().isoformat(timespec="seconds")
+@app.post("/workouts/finish")
+def finish_workout():
+    global ACTIVE_WORKOUT_DRAFT
 
-    with get_db() as conn:
-        conn.execute(
-            """
-            UPDATE workouts
-            SET finished_at = ?
-            WHERE id = ?
-            """,
-            (finished_at, workout_id),
-        )
+    with DRAFT_LOCK:
+        if ACTIVE_WORKOUT_DRAFT is None:
+            logger.warning("workout.draft.finish.no_active")
+            return RedirectResponse("/", status_code=303)
 
-    logger.info("workout.finish workout_id=%s finished_at=%s", workout_id, finished_at)
-    return RedirectResponse("/history", status_code=303)
+        draft = deepcopy(ACTIVE_WORKOUT_DRAFT)
 
+    workout_id = save_workout_draft_to_db(draft)
 
-@app.post("/workouts/new")
-def new_workout():
-    now = datetime.now().isoformat(timespec="seconds")
+    with DRAFT_LOCK:
+        ACTIVE_WORKOUT_DRAFT = None
 
-    with get_db() as conn:
-        conn.execute(
-            """
-            UPDATE workouts
-            SET finished_at = COALESCE(finished_at, ?)
-            WHERE finished_at IS NULL
-            """,
-            (now,),
-        )
-
-        cursor = conn.execute(
-            """
-            INSERT INTO workouts (workout_date, created_at)
-            VALUES (?, ?)
-            """,
-            (date.today().isoformat(), now),
-        )
-
-    logger.info("workout.new workout_id=%s created_at=%s", cursor.lastrowid, now)
-    return RedirectResponse("/", status_code=303)
+    logger.info("workout.draft.finish workout_id=%s", workout_id)
+    return RedirectResponse(f"/workouts/{workout_id}", status_code=303)
 
 
 @app.get("/workouts/{workout_id}/edit")
@@ -897,13 +1336,34 @@ def update_workout(
         parsed_session_rpe = parse_optional_int(session_rpe)
         parsed_lower_back_pain = parse_optional_int(lower_back_pain)
 
+        existing_workout = conn.execute(
+            "SELECT finished_at FROM workouts WHERE id = ?",
+            (workout_id,),
+        ).fetchone()
+
+        duration_seconds = None
+        if existing_workout and existing_workout["finished_at"]:
+            try:
+                duration_seconds = max(
+                    0,
+                    int(
+                        (
+                            datetime.fromisoformat(existing_workout["finished_at"])
+                            - datetime.fromisoformat(created_at)
+                        ).total_seconds()
+                    ),
+                )
+            except ValueError:
+                duration_seconds = None
+
         conn.execute(
             """
             UPDATE workouts
             SET created_at = ?,
                 workout_date = ?,
                 session_rpe = ?,
-                lower_back_pain = ?
+                lower_back_pain = ?,
+                duration_seconds = COALESCE(?, duration_seconds)
             WHERE id = ?
             """,
             (
@@ -911,17 +1371,19 @@ def update_workout(
                 workout_date,
                 parsed_session_rpe,
                 parsed_lower_back_pain,
+                duration_seconds,
                 workout_id,
             ),
         )
 
     logger.info(
-        "workout.update workout_id=%s created_at=%s workout_date=%s session_rpe=%s lower_back_pain=%s",
+        "workout.update workout_id=%s created_at=%s workout_date=%s session_rpe=%s lower_back_pain=%s duration_seconds=%s",
         workout_id,
         created_at,
         workout_date,
         parsed_session_rpe,
         parsed_lower_back_pain,
+        duration_seconds,
     )
     return RedirectResponse(f"/workouts/{workout_id}/edit", status_code=303)
 
@@ -952,6 +1414,7 @@ def backup_page(request: Request):
         {
             "request": request,
             "counts": counts,
+            "reset": request.query_params.get("reset") == "1",
         },
     )
 
@@ -1005,6 +1468,12 @@ async def import_backup(backup_file: UploadFile = File(...)):
     logger.warning("backup.import.success filename=%s", backup_file.filename)
     return RedirectResponse("/history?restored=1", status_code=303)
 
+
+@app.post("/backup/reset")
+def reset_database():
+    reset_database_data()
+    logger.warning("backup.reset.success")
+    return RedirectResponse("/backup?reset=1", status_code=303)
 
 @app.get("/history")
 def history(request: Request):
