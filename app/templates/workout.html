@@ -155,6 +155,63 @@
         form {
             margin: 0;
         }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 999px;
+            padding: 3px 8px;
+            font-size: 13px;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+
+        .status-finished {
+            background: rgba(48, 209, 88, 0.18);
+            color: #30d158;
+            border: 1px solid rgba(48, 209, 88, 0.45);
+        }
+
+        .status-active {
+            background: rgba(255, 69, 58, 0.18);
+            color: #ff453a;
+            border: 1px solid rgba(255, 69, 58, 0.45);
+        }
+
+        .stat.metric-neutral {
+            border: 1px solid var(--border);
+        }
+
+        .stat.metric-green,
+        select.metric-green {
+            border: 1px solid rgba(48, 209, 88, 0.65);
+            background: rgba(48, 209, 88, 0.16);
+        }
+
+        .stat.metric-lime,
+        select.metric-lime {
+            border: 1px solid rgba(126, 217, 87, 0.65);
+            background: rgba(126, 217, 87, 0.14);
+        }
+
+        .stat.metric-yellow,
+        select.metric-yellow {
+            border: 1px solid rgba(255, 214, 10, 0.70);
+            background: rgba(255, 214, 10, 0.14);
+        }
+
+        .stat.metric-orange,
+        select.metric-orange {
+            border: 1px solid rgba(255, 159, 10, 0.70);
+            background: rgba(255, 159, 10, 0.16);
+        }
+
+        .stat.metric-red,
+        select.metric-red {
+            border: 1px solid rgba(255, 69, 58, 0.75);
+            background: rgba(255, 69, 58, 0.18);
+        }
+
     </style>
 </head>
 
@@ -166,11 +223,10 @@
             <div class="muted">
                 {{ workout.created_at | format_datetime }}
                 {% if workout.finished_at %}
-                    · finished
+                    <span class="status-badge status-finished">finished</span>
                 {% else %}
-                    · active
+                    <span class="status-badge status-active">active</span>
                 {% endif %}
-                · Duration: {{ workout.duration_seconds | format_duration }}
             </div>
         </div>
 
@@ -194,6 +250,26 @@
             <strong>{{ "%.1f"|format(total_volume) }}</strong>
             <span class="muted">kg volume</span>
         </div>
+            <div class="stat {{ workout.session_rpe | metric_status_class }}">
+                <strong>
+                    {% if workout.session_rpe is not none %}
+                        {{ workout.session_rpe }}/10
+                    {% else %}
+                        —
+                    {% endif %}
+                </strong>
+                <span class="muted">RPE</span>
+            </div>
+            <div class="stat {{ workout.lower_back_pain | metric_status_class }}">
+                <strong>
+                    {% if workout.lower_back_pain is not none %}
+                        {{ workout.lower_back_pain }}/10
+                    {% else %}
+                        —
+                    {% endif %}
+                </strong>
+                <span class="muted">Back Pain</span>
+            </div>
     </div>
 
     <div class="card">
@@ -209,28 +285,6 @@
         >
             <button class="danger" type="submit">Delete workout</button>
         </form>
-    </div>
-
-    <div class="card">
-        <h2>Session status</h2>
-
-        <div class="muted">
-            Session RPE:
-            {% if workout.session_rpe is not none %}
-                {{ workout.session_rpe }}/10
-            {% else %}
-                —
-            {% endif %}
-        </div>
-
-        <div class="muted">
-            Lower back:
-            {% if workout.lower_back_pain is not none %}
-                {{ workout.lower_back_pain }}/10
-            {% else %}
-                —
-            {% endif %}
-        </div>
     </div>
 
     {% if workout_exercises %}

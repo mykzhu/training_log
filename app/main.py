@@ -109,6 +109,51 @@ def format_duration(value: int | str | None) -> str:
     return f"{minutes}:{seconds:02d}"
 
 
+RPE_EMOJIS: dict[int, str] = {
+    1: "😄",
+    2: "🙂",
+    3: "🙂",
+    4: "😐",
+    5: "😐",
+    6: "😟",
+    7: "😣",
+    8: "😫",
+    9: "🥵",
+    10: "😵",
+}
+
+
+def rpe_option_label(value: int | str | None) -> str:
+    try:
+        numeric_value = int(value)
+    except (TypeError, ValueError):
+        return "RPE"
+
+    emoji = RPE_EMOJIS.get(numeric_value, "😐")
+    return f"{emoji} {numeric_value}"
+
+
+def metric_status_class(value: int | str | None) -> str:
+    if value is None or value == "":
+        return "metric-neutral"
+
+    try:
+        numeric_value = int(value)
+    except (TypeError, ValueError):
+        return "metric-neutral"
+
+    if numeric_value <= 2:
+        return "metric-green"
+    if numeric_value <= 4:
+        return "metric-lime"
+    if numeric_value <= 6:
+        return "metric-yellow"
+    if numeric_value <= 8:
+        return "metric-orange"
+
+    return "metric-red"
+
+
 def parse_optional_int(value: str | None) -> int | None:
     if value is None or value == "":
         return None
@@ -127,6 +172,8 @@ def redirect_after_change(
 templates.env.filters["format_datetime"] = format_datetime
 templates.env.filters["datetime_local_value"] = datetime_local_value
 templates.env.filters["format_duration"] = format_duration
+templates.env.filters["rpe_option_label"] = rpe_option_label
+templates.env.filters["metric_status_class"] = metric_status_class
 
 
 @app.middleware("http")
@@ -264,7 +311,6 @@ def validate_backup_payload(payload: Any) -> dict[str, list[dict[str, Any]]]:
         {table_name: len(rows) for table_name, rows in validated.items()},
     )
     return validated
-
 
 def reset_sqlite_sequences(conn: sqlite3.Connection) -> None:
     logger.debug("db.sqlite_sequence.reset.start")
@@ -1467,6 +1513,8 @@ async def import_backup(backup_file: UploadFile = File(...)):
 
     logger.warning("backup.import.success filename=%s", backup_file.filename)
     return RedirectResponse("/history?restored=1", status_code=303)
+
+
 
 
 @app.post("/backup/reset")

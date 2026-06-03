@@ -2,6 +2,17 @@
 
 All notable changes to this project.
 
+## Unreleased - 2026-06-04
+
+### Changed
+- Updated application logic: `app/main.py` — minor fixes and logging improvements.
+- Templates updated: `app/templates/edit_workout.html`, `app/templates/history.html`, `app/templates/index.html`, `app/templates/workout.html` — UI tweaks and cleanup.
+- Local database updated: `data/training.db` — schema/data changes.
+
+### Notes
+- These are pending/local changes to be included in the next release (0.1.4).
+
+
 ## 0.1.4 - 2026-06-03
 
 ### Changed

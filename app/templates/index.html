@@ -186,6 +186,63 @@
         @media (max-width: 520px) {
             .stats { grid-template-columns: repeat(2, 1fr); }
         }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 999px;
+            padding: 3px 8px;
+            font-size: 13px;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+
+        .status-finished {
+            background: rgba(48, 209, 88, 0.18);
+            color: #30d158;
+            border: 1px solid rgba(48, 209, 88, 0.45);
+        }
+
+        .status-active {
+            background: rgba(255, 69, 58, 0.18);
+            color: #ff453a;
+            border: 1px solid rgba(255, 69, 58, 0.45);
+        }
+
+        .stat.metric-neutral {
+            border: 1px solid var(--border);
+        }
+
+        .stat.metric-green,
+        select.metric-green {
+            border: 1px solid rgba(48, 209, 88, 0.65);
+            background: rgba(48, 209, 88, 0.16);
+        }
+
+        .stat.metric-lime,
+        select.metric-lime {
+            border: 1px solid rgba(126, 217, 87, 0.65);
+            background: rgba(126, 217, 87, 0.14);
+        }
+
+        .stat.metric-yellow,
+        select.metric-yellow {
+            border: 1px solid rgba(255, 214, 10, 0.70);
+            background: rgba(255, 214, 10, 0.14);
+        }
+
+        .stat.metric-orange,
+        select.metric-orange {
+            border: 1px solid rgba(255, 159, 10, 0.70);
+            background: rgba(255, 159, 10, 0.16);
+        }
+
+        .stat.metric-red,
+        select.metric-red {
+            border: 1px solid rgba(255, 69, 58, 0.75);
+            background: rgba(255, 69, 58, 0.18);
+        }
+
     </style>
 </head>
 
@@ -197,6 +254,7 @@
             {% if active_workout %}
                 <div class="muted">
                     Started · {{ workout.created_at | format_datetime }}
+                    <span class="status-badge status-active">active</span>
                 </div>
             {% else %}
                 <div class="muted">No active workout</div>
@@ -239,6 +297,26 @@
                 <strong>{{ "%.1f"|format(total_volume) }}</strong>
                 <span class="muted">kg volume</span>
             </div>
+            <div class="stat {{ workout.session_rpe | metric_status_class }}">
+                <strong>
+                    {% if workout.session_rpe is not none %}
+                        {{ workout.session_rpe }}/10
+                    {% else %}
+                        —
+                    {% endif %}
+                </strong>
+                <span class="muted">RPE</span>
+            </div>
+            <div class="stat {{ workout.lower_back_pain | metric_status_class }}">
+                <strong>
+                    {% if workout.lower_back_pain is not none %}
+                        {{ workout.lower_back_pain }}/10
+                    {% else %}
+                        —
+                    {% endif %}
+                </strong>
+                <span class="muted">Back Pain</span>
+            </div>
         </div>
 
         <div class="card">
@@ -246,20 +324,20 @@
 
             <form method="post" action="/draft/metadata">
                 <div class="row">
-                    <select name="session_rpe">
+                    <select name="session_rpe" class="{{ workout.session_rpe | metric_status_class }}">
                         <option value="">RPE</option>
                         {% for value in range(1, 11) %}
                             <option value="{{ value }}" {% if workout.session_rpe == value %}selected{% endif %}>
-                                RPE {{ value }}
+                                {{ value | rpe_option_label }}
                             </option>
                         {% endfor %}
                     </select>
 
-                    <select name="lower_back_pain">
-                        <option value="">Back</option>
+                    <select name="lower_back_pain" class="{{ workout.lower_back_pain | metric_status_class }}">
+                        <option value="">Back Pain</option>
                         {% for value in range(0, 11) %}
                             <option value="{{ value }}" {% if workout.lower_back_pain == value %}selected{% endif %}>
-                                Back {{ value }}/10
+                                Back Pain {{ value }}/10
                             </option>
                         {% endfor %}
                     </select>
@@ -360,12 +438,6 @@
 
                             <button type="submit">+</button>
                         </div>
-                    </form>
-
-                    <form method="post" action="/draft-exercises/{{ item.workout_exercise_id }}/sets/duplicate" style="margin-top: 8px;">
-                        <button class="secondary" type="submit" style="width: 100%;">
-                            + Same
-                        </button>
                     </form>
                 </div>
             {% endfor %}

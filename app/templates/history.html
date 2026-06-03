@@ -127,6 +127,63 @@
             .card-header { align-items: flex-start; }
             .actions { width: 100%; justify-content: flex-start; }
         }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 999px;
+            padding: 3px 8px;
+            font-size: 13px;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+
+        .status-finished {
+            background: rgba(48, 209, 88, 0.18);
+            color: #30d158;
+            border: 1px solid rgba(48, 209, 88, 0.45);
+        }
+
+        .status-active {
+            background: rgba(255, 69, 58, 0.18);
+            color: #ff453a;
+            border: 1px solid rgba(255, 69, 58, 0.45);
+        }
+
+        .stat.metric-neutral {
+            border: 1px solid var(--border);
+        }
+
+        .stat.metric-green,
+        select.metric-green {
+            border: 1px solid rgba(48, 209, 88, 0.65);
+            background: rgba(48, 209, 88, 0.16);
+        }
+
+        .stat.metric-lime,
+        select.metric-lime {
+            border: 1px solid rgba(126, 217, 87, 0.65);
+            background: rgba(126, 217, 87, 0.14);
+        }
+
+        .stat.metric-yellow,
+        select.metric-yellow {
+            border: 1px solid rgba(255, 214, 10, 0.70);
+            background: rgba(255, 214, 10, 0.14);
+        }
+
+        .stat.metric-orange,
+        select.metric-orange {
+            border: 1px solid rgba(255, 159, 10, 0.70);
+            background: rgba(255, 159, 10, 0.16);
+        }
+
+        .stat.metric-red,
+        select.metric-red {
+            border: 1px solid rgba(255, 69, 58, 0.75);
+            background: rgba(255, 69, 58, 0.18);
+        }
+
     </style>
 </head>
 
@@ -177,29 +234,17 @@
             <div class="muted">
                 {{ item.workout.created_at | format_datetime }}
                 {% if item.workout.finished_at %}
-                    · finished
+                    <span class="status-badge status-finished">finished</span>
                 {% else %}
-                    · active
-                {% endif %}
-
-                · Duration: {{ item.workout.duration_seconds | format_duration }}
-
-                · RPE:
-                {% if item.workout.session_rpe is not none %}
-                    {{ item.workout.session_rpe }}/10
-                {% else %}
-                    —
-                {% endif %}
-
-                · Back:
-                {% if item.workout.lower_back_pain is not none %}
-                    {{ item.workout.lower_back_pain }}/10
-                {% else %}
-                    —
+                    <span class="status-badge status-active">active</span>
                 {% endif %}
             </div>
 
             <div class="grid">
+                <div class="stat">
+                    <strong>{{ item.workout.duration_seconds | format_duration }}</strong>
+                    <span class="muted">duration</span>
+                </div>
                 <div class="stat">
                     <strong>{{ item.exercises_count }}</strong>
                     <span class="muted">exercises</span>
@@ -216,6 +261,26 @@
                     <strong>{{ "%.1f"|format(item.total_volume) }}</strong>
                     <span class="muted">kg</span>
                 </div>
+            <div class="stat {{ item.workout.session_rpe | metric_status_class }}">
+                <strong>
+                    {% if item.workout.session_rpe is not none %}
+                        {{ item.workout.session_rpe }}/10
+                    {% else %}
+                        —
+                    {% endif %}
+                </strong>
+                <span class="muted">RPE</span>
+            </div>
+            <div class="stat {{ item.workout.lower_back_pain | metric_status_class }}">
+                <strong>
+                    {% if item.workout.lower_back_pain is not none %}
+                        {{ item.workout.lower_back_pain }}/10
+                    {% else %}
+                        —
+                    {% endif %}
+                </strong>
+                <span class="muted">Back Pain</span>
+            </div>
             </div>
         </div>
     {% else %}
