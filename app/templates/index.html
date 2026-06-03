@@ -222,7 +222,7 @@
     {% else %}
         <div class="stats">
             <div class="stat">
-                <strong id="workout-timer" data-started-at="{{ workout.started_at }}">
+                <strong id="workout-timer" data-elapsed-seconds="{{ active_elapsed_seconds }}">
                     {{ active_elapsed_seconds | format_duration }}
                 </strong>
                 <span class="muted">duration</span>
@@ -396,19 +396,17 @@
         return `${minutes}:${String(seconds).padStart(2, '0')}`;
     }
 
+    const timer = document.getElementById('workout-timer');
+    const initialElapsedSeconds = Number(timer?.dataset.elapsedSeconds || 0);
+    const pageLoadedAtMs = performance.now();
+
     function updateWorkoutTimer() {
-        const timer = document.getElementById('workout-timer');
         if (!timer) {
             return;
         }
 
-        const startedAtRaw = timer.dataset.startedAt;
-        const startedAt = new Date(startedAtRaw);
-        if (Number.isNaN(startedAt.getTime())) {
-            return;
-        }
-
-        const elapsedSeconds = (Date.now() - startedAt.getTime()) / 1000;
+        const elapsedSincePageLoadSeconds = (performance.now() - pageLoadedAtMs) / 1000;
+        const elapsedSeconds = initialElapsedSeconds + elapsedSincePageLoadSeconds;
         timer.textContent = formatDuration(elapsedSeconds);
     }
 
