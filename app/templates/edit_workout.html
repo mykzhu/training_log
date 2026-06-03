@@ -394,10 +394,6 @@
                     </div>
                 </form>
 
-                <form method="post" action="/workout-exercises/{{ item.workout_exercise_id }}/sets/duplicate" style="margin-top: 8px;">
-                    <input type="hidden" name="return_to" value="edit_workout">
-                    <button class="secondary" type="submit">+ Same</button>
-                </form>
             </div>
         {% endfor %}
     {% else %}
