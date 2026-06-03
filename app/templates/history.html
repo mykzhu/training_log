@@ -238,13 +238,10 @@
                 {% else %}
                     <span class="status-badge status-active">active</span>
                 {% endif %}
+                · Duration: {{ item.workout.duration_seconds | format_duration }}
             </div>
 
             <div class="grid">
-                <div class="stat">
-                    <strong>{{ item.workout.duration_seconds | format_duration }}</strong>
-                    <span class="muted">duration</span>
-                </div>
                 <div class="stat">
                     <strong>{{ item.exercises_count }}</strong>
                     <span class="muted">exercises</span>
