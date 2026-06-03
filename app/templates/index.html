@@ -297,26 +297,6 @@
                 <strong>{{ "%.1f"|format(total_volume) }}</strong>
                 <span class="muted">kg volume</span>
             </div>
-            <div class="stat {{ workout.session_rpe | metric_status_class }}">
-                <strong>
-                    {% if workout.session_rpe is not none %}
-                        {{ workout.session_rpe }}/10
-                    {% else %}
-                        —
-                    {% endif %}
-                </strong>
-                <span class="muted">RPE</span>
-            </div>
-            <div class="stat {{ workout.lower_back_pain | metric_status_class }}">
-                <strong>
-                    {% if workout.lower_back_pain is not none %}
-                        {{ workout.lower_back_pain }}/10
-                    {% else %}
-                        —
-                    {% endif %}
-                </strong>
-                <span class="muted">Back Pain</span>
-            </div>
         </div>
 
         <div class="card">
