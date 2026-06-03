@@ -14,12 +14,12 @@ from fastapi.templating import Jinja2Templates
 
 
 DB_PATH = Path(os.getenv("DB_PATH", "data/training.db"))
-LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+LOG_LEVEL = os.getenv("LOG_LEVEL", "DEBUG").upper()
 
 
 def configure_logging() -> None:
     logging.basicConfig(
-        level=getattr(logging, LOG_LEVEL, logging.INFO),
+        level=getattr(logging, LOG_LEVEL, logging.DEBUG),
         format=(
             "%(asctime)s "
             "%(levelname)s "
