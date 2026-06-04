@@ -2,6 +2,25 @@
 
 All notable changes to this project.
 
+## 0.1.5 - 2026-06-04
+
+### Added
+- `app/templates/_analysis_card.html` — new reusable analysis card component. (c5574e1)
+
+### Changed
+- feat(ui): UI tweaks across workout/index views to integrate analysis card and improve layout. (c5574e1)
+- fix(workout): parse session metadata inputs as integers to ensure consistent types (1161626)
+
+### Notes
+- These changes add a small UI component and improve input handling for session metadata.
+
+---
+
+Commits included (newest first):
+- 1161626 — fix(workout): parse session metadata as integers
+- c5574e1 — feat(ui): add analysis card and tweak workout/index templates
+
+
 ## 0.1.4 - 2026-06-04
 
 ### Added
@@ -30,22 +49,4 @@ Commits included (newest first):
 - 74ef2c8 — Logger update
 
 Generated from commits since version 0.1.3.
-
-## 0.1.5 - 2026-06-04
-
-### Added
-- `app/templates/_analysis_card.html` — new reusable analysis card component. (c5574e1)
-
-### Changed
-- feat(ui): UI tweaks across workout/index views to integrate analysis card and improve layout. (c5574e1)
-- fix(workout): parse session metadata inputs as integers to ensure consistent types (1161626)
-
-### Notes
-- These changes add a small UI component and improve input handling for session metadata.
-
----
-
-Commits included (newest first):
-- 1161626 — fix(workout): parse session metadata as integers
-- c5574e1 — feat(ui): add analysis card and tweak workout/index templates
 

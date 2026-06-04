@@ -1,5 +1,5 @@
 name: "Training Log"
-version: "0.1.4"
+version: "0.1.5"
 slug: "training_log"
 description: "Personal workout logger for Home Assistant"
 url: "https://github.com/mykzhu/training_log"
