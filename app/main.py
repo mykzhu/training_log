@@ -4,7 +4,7 @@ import os
 import sqlite3
 import time
 from copy import deepcopy
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from pathlib import Path
 from threading import RLock
 from typing import Any
@@ -76,6 +76,93 @@ DEFAULT_EXERCISES = (
 
 ACTIVE_WORKOUT_DRAFT: dict[str, Any] | None = None
 DRAFT_LOCK = RLock()
+
+def build_calendar_heatmap(
+    workouts: list[dict[str, Any]],
+    value_key: str,
+) -> dict[str, Any]:
+    if not workouts:
+        return {"weeks": []}
+
+    daily: dict[date, dict[str, Any]] = {}
+
+    for workout in workouts:
+        workout_date = date.fromisoformat(workout["date"])
+
+        if workout_date not in daily:
+            daily[workout_date] = {
+                "date": workout["date"],
+                "count": 0,
+                "value": None,
+                "workout_id": workout["id"],
+            }
+
+        day = daily[workout_date]
+        day["count"] += 1
+        day["workout_id"] = workout["id"]
+
+        value = workout.get(value_key)
+        if value is not None:
+            numeric_value = float(value)
+
+            # If multiple workouts exist on one day, show the worst value.
+            if day["value"] is None or numeric_value > day["value"]:
+                day["value"] = numeric_value
+
+    first_day = min(daily)
+    last_day = max(daily)
+
+    calendar_start = first_day - timedelta(days=first_day.weekday())
+    calendar_end = last_day + timedelta(days=6 - last_day.weekday())
+
+    weeks = []
+    current = calendar_start
+
+    while current <= calendar_end:
+        week_days = []
+        month_label = ""
+
+        for offset in range(7):
+            current_day = current + timedelta(days=offset)
+
+            if current_day.day == 1 or current_day == calendar_start:
+                month_label = current_day.strftime("%b")
+
+            day_data = daily.get(current_day)
+
+            if day_data:
+                week_days.append(
+                    {
+                        "date": current_day.isoformat(),
+                        "day": current_day.day,
+                        "has_workout": True,
+                        "count": day_data["count"],
+                        "value": day_data["value"],
+                        "workout_id": day_data["workout_id"],
+                    }
+                )
+            else:
+                week_days.append(
+                    {
+                        "date": current_day.isoformat(),
+                        "day": current_day.day,
+                        "has_workout": False,
+                        "count": 0,
+                        "value": None,
+                        "workout_id": None,
+                    }
+                )
+
+        weeks.append(
+            {
+                "month_label": month_label,
+                "days": week_days,
+            }
+        )
+
+        current += timedelta(days=7)
+
+    return {"weeks": weeks}
 
 def parse_limit(value: str | None, default: int = 30) -> int | None:
     if value == "all":
@@ -226,6 +313,8 @@ def build_stats2_charts(stats: dict[str, Any]) -> dict[str, Any]:
         "rpe": build_line_chart_series(workouts, "session_rpe", max_value=10),
         "back": build_line_chart_series(workouts, "lower_back_pain", max_value=10),
         "scatter": build_scatter_points(workouts),
+        "back_calendar": build_calendar_heatmap(workouts, "lower_back_pain"),
+        "rpe_calendar": build_calendar_heatmap(workouts, "session_rpe"),
         "best_strength": best_strength,
         "max_e1rm": max_e1rm,
         "max_exercise_volume": max_exercise_volume,

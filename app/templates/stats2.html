@@ -202,6 +202,92 @@
             margin-top: 6px;
         }
 
+        .calendar-scroll {
+            overflow-x: auto;
+            padding-bottom: 4px;
+        }
+
+        .calendar-shell {
+            display: inline-grid;
+            grid-template-columns: 32px auto;
+            gap: 8px;
+            min-width: max-content;
+        }
+
+        .calendar-months {
+            grid-column: 2;
+            display: grid;
+            gap: 5px;
+            margin-bottom: 6px;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .calendar-month {
+            min-width: 14px;
+            height: 14px;
+            white-space: nowrap;
+        }
+
+        .calendar-weekdays {
+            display: grid;
+            grid-template-rows: repeat(7, 14px);
+            gap: 5px;
+            color: var(--muted);
+            font-size: 11px;
+            line-height: 14px;
+        }
+
+        .calendar-weeks {
+            display: flex;
+            gap: 5px;
+        }
+
+        .calendar-week {
+            display: grid;
+            grid-template-rows: repeat(7, 14px);
+            gap: 5px;
+        }
+
+        .calendar-cell {
+            width: 14px;
+            height: 14px;
+            border-radius: 4px;
+            background: var(--card2);
+            border: 1px solid var(--border);
+            display: block;
+        }
+
+        .calendar-cell.metric-neutral {
+            background: var(--card2);
+            border-color: var(--border);
+        }
+
+        .calendar-cell.metric-green {
+            background: rgba(48, 209, 88, 0.30);
+            border-color: rgba(48, 209, 88, 0.65);
+        }
+
+        .calendar-cell.metric-lime {
+            background: rgba(126, 217, 87, 0.26);
+            border-color: rgba(126, 217, 87, 0.65);
+        }
+
+        .calendar-cell.metric-yellow {
+            background: rgba(255, 214, 10, 0.28);
+            border-color: rgba(255, 214, 10, 0.70);
+        }
+
+        .calendar-cell.metric-orange {
+            background: rgba(255, 159, 10, 0.32);
+            border-color: rgba(255, 159, 10, 0.70);
+        }
+
+        .calendar-cell.metric-red {
+            background: rgba(255, 69, 58, 0.36);
+            border-color: rgba(255, 69, 58, 0.75);
+        }
+
         .two-column {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -547,21 +633,120 @@
         </div>
 
         <div class="card">
-            <h2>Back pain heatmap</h2>
-            <div class="muted small">One square per workout</div>
+            <h2>Back pain calendar</h2>
+            <div class="muted small">Calendar heatmap · one square per day</div>
 
-            <div class="heatmap">
-                {% for workout in workouts %}
-                    <a
-                        href="/workouts/{{ workout.id }}"
-                        class="heat-cell {{ workout.lower_back_pain | metric_status_class }}"
-                        title="{{ workout.date }} · Back Pain {% if workout.lower_back_pain is not none %}{{ workout.lower_back_pain }}/10{% else %}—{% endif %}"
-                    ></a>
-                {% endfor %}
-            </div>
+            {% if charts.back_calendar.weeks %}
+                <div class="calendar-scroll">
+                    <div class="calendar-shell">
+                        <div></div>
+
+                        <div
+                            class="calendar-months"
+                            style="grid-template-columns: repeat({{ charts.back_calendar.weeks|length }}, 14px);"
+                        >
+                            {% for week in charts.back_calendar.weeks %}
+                                <div class="calendar-month">{{ week.month_label }}</div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="calendar-weekdays">
+                            <div>Mon</div>
+                            <div></div>
+                            <div>Wed</div>
+                            <div></div>
+                            <div>Fri</div>
+                            <div></div>
+                            <div>Sun</div>
+                        </div>
+
+                        <div class="calendar-weeks">
+                            {% for week in charts.back_calendar.weeks %}
+                                <div class="calendar-week">
+                                    {% for day in week.days %}
+                                        {% if day.has_workout %}
+                                            <a
+                                                href="/workouts/{{ day.workout_id }}"
+                                                class="calendar-cell {{ day.value | metric_status_class }}"
+                                                title="{{ day.date }} · Back Pain {% if day.value is not none %}{{ '%.0f'|format(day.value) }}/10{% else %}—{% endif %} · {{ day.count }} workout(s)"
+                                            ></a>
+                                        {% else %}
+                                            <span
+                                                class="calendar-cell metric-neutral"
+                                                title="{{ day.date }} · no workout"
+                                            ></span>
+                                        {% endif %}
+                                    {% endfor %}
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            {% else %}
+                <div class="empty">No calendar data.</div>
+            {% endif %}
 
             <div class="note">
-                This makes it easier to spot clusters of back-sensitive sessions.
+                Empty/dark days are rest days. Brighter or warmer colors mean higher back pain.
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>RPE calendar</h2>
+            <div class="muted small">Calendar heatmap · one square per day</div>
+
+            {% if charts.rpe_calendar.weeks %}
+                <div class="calendar-scroll">
+                    <div class="calendar-shell">
+                        <div></div>
+
+                        <div
+                            class="calendar-months"
+                            style="grid-template-columns: repeat({{ charts.rpe_calendar.weeks|length }}, 14px);"
+                        >
+                            {% for week in charts.rpe_calendar.weeks %}
+                                <div class="calendar-month">{{ week.month_label }}</div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="calendar-weekdays">
+                            <div>Mon</div>
+                            <div></div>
+                            <div>Wed</div>
+                            <div></div>
+                            <div>Fri</div>
+                            <div></div>
+                            <div>Sun</div>
+                        </div>
+
+                        <div class="calendar-weeks">
+                            {% for week in charts.rpe_calendar.weeks %}
+                                <div class="calendar-week">
+                                    {% for day in week.days %}
+                                        {% if day.has_workout %}
+                                            <a
+                                                href="/workouts/{{ day.workout_id }}"
+                                                class="calendar-cell {{ day.value | metric_status_class }}"
+                                                title="{{ day.date }} · RPE {% if day.value is not none %}{{ '%.0f'|format(day.value) }}/10{% else %}—{% endif %} · {{ day.count }} workout(s)"
+                                            ></a>
+                                        {% else %}
+                                            <span
+                                                class="calendar-cell metric-neutral"
+                                                title="{{ day.date }} · no workout"
+                                            ></span>
+                                        {% endif %}
+                                    {% endfor %}
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            {% else %}
+                <div class="empty">No calendar data.</div>
+            {% endif %}
+
+            <div class="note">
+                This shows hard training clusters and helps avoid stacking too many hard days.
             </div>
         </div>
 
