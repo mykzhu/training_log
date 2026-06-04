@@ -77,6 +77,123 @@ DEFAULT_EXERCISES = (
 ACTIVE_WORKOUT_DRAFT: dict[str, Any] | None = None
 DRAFT_LOCK = RLock()
 
+def estimated_1rm(weight: float, reps: int) -> float | None:
+    if weight <= 0:
+        return None
+
+    if reps < 3 or reps > 12:
+        return None
+
+    return weight * (1 + reps / 30)
+
+def build_stats(limit: int = 30) -> dict[str, Any]:
+    with get_db() as conn:
+        workouts = conn.execute(
+            """
+            SELECT *
+            FROM workouts
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+
+    workout_items = []
+    exercise_stats: dict[str, dict[str, Any]] = {}
+
+    for workout in reversed(workouts):
+        details = get_workout_details(workout["id"])
+
+        total_volume = sum(item["total_volume"] for item in details)
+        total_reps = sum(item["total_reps"] for item in details)
+        total_sets = sum(len(item["sets"]) for item in details)
+
+        avg_intensity = None
+        if total_reps:
+            avg_intensity = total_volume / total_reps
+
+        workout_items.append(
+            {
+                "id": workout["id"],
+                "date": workout["created_at"][:10],
+                "created_at": workout["created_at"],
+                "total_volume": total_volume,
+                "total_reps": total_reps,
+                "total_sets": total_sets,
+                "avg_intensity": avg_intensity,
+                "session_rpe": workout["session_rpe"],
+                "lower_back_pain": workout["lower_back_pain"],
+            }
+        )
+
+        for item in details:
+            exercise_name = item["exercise_name"]
+
+            if exercise_name not in exercise_stats:
+                exercise_stats[exercise_name] = {
+                    "name": exercise_name,
+                    "total_volume": 0.0,
+                    "total_reps": 0,
+                    "total_sets": 0,
+                    "best_e1rm": None,
+                    "best_set": None,
+                }
+
+            stats = exercise_stats[exercise_name]
+            stats["total_volume"] += item["total_volume"]
+            stats["total_reps"] += item["total_reps"]
+            stats["total_sets"] += len(item["sets"])
+
+            for set_row in item["sets"]:
+                weight = float(set_row["weight"])
+                reps = int(set_row["reps"])
+                e1rm = estimated_1rm(weight, reps)
+
+                if e1rm is None:
+                    continue
+
+                if stats["best_e1rm"] is None or e1rm > stats["best_e1rm"]:
+                    stats["best_e1rm"] = e1rm
+                    stats["best_set"] = {
+                        "weight": weight,
+                        "reps": reps,
+                        "workout_id": workout["id"],
+                        "date": workout["created_at"][:10],
+                    }
+
+    total_volume = sum(item["total_volume"] for item in workout_items)
+    total_reps = sum(item["total_reps"] for item in workout_items)
+    total_sets = sum(item["total_sets"] for item in workout_items)
+
+    rpe_values = [
+        int(item["session_rpe"])
+        for item in workout_items
+        if item["session_rpe"] is not None
+    ]
+    back_values = [
+        int(item["lower_back_pain"])
+        for item in workout_items
+        if item["lower_back_pain"] is not None
+    ]
+
+    return {
+        "workouts": workout_items,
+        "exercise_stats": sorted(
+            exercise_stats.values(),
+            key=lambda item: item["total_volume"],
+            reverse=True,
+        ),
+        "summary": {
+            "workout_count": len(workout_items),
+            "total_volume": total_volume,
+            "total_reps": total_reps,
+            "total_sets": total_sets,
+            "avg_intensity": total_volume / total_reps if total_reps else None,
+            "avg_rpe": sum(rpe_values) / len(rpe_values) if rpe_values else None,
+            "avg_back_pain": sum(back_values) / len(back_values) if back_values else None,
+        },
+    }
+
 def format_datetime(value: str | None) -> str:
     if not value:
         return "—"
@@ -133,12 +250,12 @@ def rpe_option_label(value: int | str | None) -> str:
     return f"{emoji} {numeric_value}"
 
 
-def metric_status_class(value: int | str | None) -> str:
+def metric_status_class(value: int | float | str | None) -> str:
     if value is None or value == "":
         return "metric-neutral"
 
     try:
-        numeric_value = int(value)
+        numeric_value = float(value)
     except (TypeError, ValueError):
         return "metric-neutral"
 
@@ -1812,3 +1929,21 @@ def update_set(
         return_to,
     )
     return redirect_after_change(return_to, workout_id)
+
+@app.get("/stats")
+def stats_page(request: Request):
+    stats = build_stats(limit=30)
+
+    logger.debug(
+        "page.stats workouts=%s exercises=%s",
+        len(stats["workouts"]),
+        len(stats["exercise_stats"]),
+    )
+
+    return templates.TemplateResponse(
+        "stats.html",
+        {
+            "request": request,
+            "stats": stats,
+        },
+    )

@@ -1,0 +1,623 @@
+<!doctype html>
+<html lang="uk">
+<head>
+    <meta charset="utf-8">
+    <title>Training Stats</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <style>
+        :root {
+            color-scheme: dark;
+            --bg: #050505;
+            --card: #171717;
+            --card2: #222;
+            --text: #f2f2f2;
+            --muted: #999;
+            --blue: #0a84ff;
+            --green: #30d158;
+            --orange: #ff9f0a;
+            --red: #ff453a;
+            --border: #2e2e2e;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            padding: 14px;
+            background: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-size: 16px;
+        }
+
+        .page {
+            max-width: 820px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            margin: 0 0 6px;
+            font-size: 28px;
+        }
+
+        h2 {
+            margin: 0 0 10px;
+            font-size: 21px;
+            color: var(--blue);
+        }
+
+        h3 {
+            margin: 0 0 8px;
+            font-size: 15px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        a {
+            color: var(--blue);
+            text-decoration: none;
+        }
+
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .muted {
+            color: var(--muted);
+        }
+
+        .small {
+            font-size: 13px;
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 14px;
+            margin: 14px 0;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .stat {
+            background: var(--card2);
+            padding: 12px;
+            border-radius: 16px;
+            text-align: center;
+        }
+
+        .stat strong {
+            display: block;
+            font-size: 20px;
+        }
+
+        .chart-scroll {
+            overflow-x: auto;
+            padding-bottom: 4px;
+        }
+
+        .bar-chart {
+            min-width: 620px;
+            height: 180px;
+            display: flex;
+            align-items: flex-end;
+            gap: 6px;
+            padding: 14px 4px 4px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .bar-group {
+            flex: 1;
+            min-width: 14px;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .bar-link {
+            width: 100%;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            height: 130px;
+        }
+
+        .bar {
+            width: 100%;
+            max-width: 18px;
+            min-height: 2px;
+            border-radius: 999px 999px 0 0;
+            background: var(--blue);
+        }
+
+        .bar.secondary {
+            background: var(--green);
+        }
+
+        .bar.warning {
+            background: var(--orange);
+        }
+
+        .bar.danger {
+            background: var(--red);
+        }
+
+        .bar-label {
+            font-size: 10px;
+            color: var(--muted);
+            writing-mode: vertical-rl;
+            transform: rotate(180deg);
+            max-height: 36px;
+            overflow: hidden;
+        }
+
+        .dual-bar.warning {
+            background: var(--orange);
+        }
+
+        .dual-bar.danger {
+            background: var(--red);
+        }
+
+        .dual-chart {
+            min-width: 620px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .dual-row {
+            display: grid;
+            grid-template-columns: 76px 1fr;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .dual-bars {
+            height: 42px;
+            display: flex;
+            align-items: flex-end;
+            gap: 6px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .dual-bar {
+            flex: 1;
+            min-width: 14px;
+            max-width: 22px;
+            border-radius: 999px 999px 0 0;
+        }
+
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 8px;
+        }
+
+        .table th,
+        .table td {
+            padding: 9px 4px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .table th {
+            color: var(--muted);
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .stat.metric-neutral {
+            border: 1px solid var(--border);
+        }
+
+        .stat.metric-green {
+            border: 1px solid rgba(48, 209, 88, 0.65);
+            background: rgba(48, 209, 88, 0.16);
+        }
+
+        .stat.metric-lime {
+            border: 1px solid rgba(126, 217, 87, 0.65);
+            background: rgba(126, 217, 87, 0.14);
+        }
+
+        .stat.metric-yellow {
+            border: 1px solid rgba(255, 214, 10, 0.70);
+            background: rgba(255, 214, 10, 0.14);
+        }
+
+        .stat.metric-orange {
+            border: 1px solid rgba(255, 159, 10, 0.70);
+            background: rgba(255, 159, 10, 0.16);
+        }
+
+        .stat.metric-red {
+            border: 1px solid rgba(255, 69, 58, 0.75);
+            background: rgba(255, 69, 58, 0.18);
+        }
+
+        .progress-row {
+            display: grid;
+            grid-template-columns: minmax(110px, 1fr) 2fr auto;
+            gap: 10px;
+            align-items: center;
+            padding: 9px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .progress-row:last-child {
+            border-bottom: 0;
+        }
+
+        .progress-track {
+            height: 10px;
+            background: var(--card2);
+            border-radius: 999px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--blue);
+            border-radius: 999px;
+        }
+
+        .note {
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.35;
+            margin-top: 8px;
+        }
+
+        .empty {
+            padding: 22px;
+            text-align: center;
+            color: var(--muted);
+            background: var(--card);
+            border-radius: 18px;
+            border: 1px dashed var(--border);
+        }
+
+        @media (max-width: 620px) {
+            .topbar {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            .summary-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .progress-row {
+                grid-template-columns: 1fr;
+                gap: 6px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+{% set summary = stats.summary %}
+{% set workouts = stats.workouts %}
+{% set exercise_stats = stats.exercise_stats %}
+
+{% set max_volume = namespace(value=0) %}
+{% set max_intensity = namespace(value=0) %}
+{% set max_exercise_volume = namespace(value=0) %}
+
+{% for workout in workouts %}
+    {% if workout.total_volume > max_volume.value %}
+        {% set max_volume.value = workout.total_volume %}
+    {% endif %}
+
+    {% if workout.avg_intensity is not none and workout.avg_intensity > max_intensity.value %}
+        {% set max_intensity.value = workout.avg_intensity %}
+    {% endif %}
+{% endfor %}
+
+{% for exercise in exercise_stats %}
+    {% if exercise.total_volume > max_exercise_volume.value %}
+        {% set max_exercise_volume.value = exercise.total_volume %}
+    {% endif %}
+{% endfor %}
+
+<div class="page">
+    <div class="topbar">
+        <div>
+            <h1>Stats</h1>
+            <div class="muted">Last {{ summary.workout_count }} workouts</div>
+        </div>
+
+        <div class="nav-links">
+            <a href="/">Current</a>
+            <a href="/history">History</a>
+            <a href="/backup">Backup</a>
+        </div>
+    </div>
+
+    {% if summary.workout_count == 0 %}
+        <div class="empty">
+            No workouts yet.
+        </div>
+    {% else %}
+
+        <div class="card">
+            <h2>Summary</h2>
+
+            <div class="summary-grid">
+                <div class="stat">
+                    <strong>{{ summary.workout_count }}</strong>
+                    <span class="muted">workouts</span>
+                </div>
+
+                <div class="stat">
+                    <strong>{{ "%.1f"|format(summary.total_volume) }}</strong>
+                    <span class="muted">kg volume</span>
+                </div>
+
+                <div class="stat">
+                    <strong>{{ summary.total_sets }}</strong>
+                    <span class="muted">sets</span>
+                </div>
+
+                <div class="stat">
+                    <strong>{{ summary.total_reps }}</strong>
+                    <span class="muted">reps</span>
+                </div>
+
+                <div class="stat">
+                    <strong>
+                        {% if summary.avg_intensity is not none %}
+                            {{ "%.1f"|format(summary.avg_intensity) }}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </strong>
+                    <span class="muted">kg / rep</span>
+                </div>
+
+                <div class="stat {{ summary.avg_rpe | metric_status_class }}">
+                    <strong>
+                        {% if summary.avg_rpe is not none %}
+                            {{ "%.1f"|format(summary.avg_rpe) }}/10
+                        {% else %}
+                            —
+                        {% endif %}
+                    </strong>
+                    <span class="muted">avg RPE</span>
+                </div>
+
+                <div class="stat {{ summary.avg_back_pain | metric_status_class }}">
+                    <strong>
+                        {% if summary.avg_back_pain is not none %}
+                            {{ "%.1f"|format(summary.avg_back_pain) }}/10
+                        {% else %}
+                            —
+                        {% endif %}
+                    </strong>
+                    <span class="muted">avg back</span>
+                </div>
+
+                <div class="stat">
+                    <strong>{{ exercise_stats|length }}</strong>
+                    <span class="muted">exercises</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Volume trend</h2>
+            <div class="muted small">Total kg per workout</div>
+
+            <div class="chart-scroll">
+                <div class="bar-chart">
+                    {% for workout in workouts %}
+                        {% set height = 0 %}
+                        {% if max_volume.value > 0 %}
+                            {% set height = (workout.total_volume / max_volume.value * 130) %}
+                        {% endif %}
+
+                        <div class="bar-group">
+                            <a
+                                class="bar-link"
+                                href="/workouts/{{ workout.id }}"
+                                title="{{ workout.date }} · {{ '%.1f'|format(workout.total_volume) }} kg"
+                            >
+                                <div class="bar" style="height: {{ height }}px;"></div>
+                            </a>
+                            <div class="bar-label">{{ workout.date[5:] }}</div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="note">
+                Higher is not always better. Read this together with RPE and Back Pain.
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Average intensity</h2>
+            <div class="muted small">Average kg per rep</div>
+
+            <div class="chart-scroll">
+                <div class="bar-chart">
+                    {% for workout in workouts %}
+                        {% set height = 0 %}
+                        {% if workout.avg_intensity is not none and max_intensity.value > 0 %}
+                            {% set height = (workout.avg_intensity / max_intensity.value * 130) %}
+                        {% endif %}
+
+                        <div class="bar-group">
+                            <a
+                                class="bar-link"
+                                href="/workouts/{{ workout.id }}"
+                                title="{{ workout.date }} · {% if workout.avg_intensity is not none %}{{ '%.1f'|format(workout.avg_intensity) }} kg/rep{% else %}no reps{% endif %}"
+                            >
+                                <div class="bar secondary" style="height: {{ height }}px;"></div>
+                            </a>
+                            <div class="bar-label">{{ workout.date[5:] }}</div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="note">
+                This helps separate real intensity growth from just doing more light reps.
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Recovery / safety</h2>
+            <div class="muted small">RPE and Back Pain trend</div>
+
+            <div class="chart-scroll">
+                <div class="dual-chart">
+                    <div class="dual-row">
+                        <div class="muted small">RPE</div>
+                        <div class="dual-bars">
+                            {% for workout in workouts %}
+                                {% set height = 0 %}
+                                {% if workout.session_rpe is not none %}
+                                    {% set height = (workout.session_rpe / 10 * 42) %}
+                                {% endif %}
+
+                                <a
+                                    href="/workouts/{{ workout.id }}"
+                                    title="{{ workout.date }} · RPE {% if workout.session_rpe is not none %}{{ workout.session_rpe }}/10{% else %}—{% endif %}"
+                                    class="dual-bar warning"
+                                    style="height: {{ height }}px;"
+                                ></a>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <div class="dual-row">
+                        <div class="muted small">Back</div>
+                        <div class="dual-bars">
+                            {% for workout in workouts %}
+                                {% set height = 0 %}
+                                {% if workout.lower_back_pain is not none %}
+                                    {% set height = (workout.lower_back_pain / 10 * 42) %}
+                                {% endif %}
+
+                                <a
+                                    href="/workouts/{{ workout.id }}"
+                                    title="{{ workout.date }} · Back Pain {% if workout.lower_back_pain is not none %}{{ workout.lower_back_pain }}/10{% else %}—{% endif %}"
+                                    class="dual-bar danger"
+                                    style="height: {{ height }}px;"
+                                ></a>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="note">
+                For your back, a workout with higher volume but higher pain is not a better workout.
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Exercise volume</h2>
+            <div class="muted small">Total volume by exercise in this period</div>
+
+            {% for exercise in exercise_stats %}
+                <div class="progress-row">
+                    <div>
+                        <strong>{{ exercise.name }}</strong>
+                        <div class="muted small">
+                            {{ exercise.total_sets }} sets · {{ exercise.total_reps }} reps
+                        </div>
+                    </div>
+
+                    <div class="progress-track">
+                        {% set width = 0 %}
+                        {% if max_exercise_volume.value > 0 %}
+                            {% set width = (exercise.total_volume / max_exercise_volume.value * 100) %}
+                        {% endif %}
+                        <div class="progress-fill" style="width: {{ width }}%;"></div>
+                    </div>
+
+                    <div>
+                        {{ "%.1f"|format(exercise.total_volume) }} kg
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+
+        <div class="card">
+            <h2>Best strength estimates</h2>
+            <div class="muted small">e1RM is shown only for weighted sets with 3–12 reps</div>
+
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Exercise</th>
+                        <th>Best e1RM</th>
+                        <th>From set</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% set e1rm_count = namespace(value=0) %}
+
+                    {% for exercise in exercise_stats %}
+                        {% if exercise.best_e1rm is not none and exercise.best_set %}
+                            {% set e1rm_count.value = e1rm_count.value + 1 %}
+                            <tr>
+                                <td>{{ exercise.name }}</td>
+                                <td>{{ "%.1f"|format(exercise.best_e1rm) }} kg</td>
+                                <td>
+                                    {{ exercise.best_set.weight }} × {{ exercise.best_set.reps }}
+                                </td>
+                                <td>
+                                    <a href="/workouts/{{ exercise.best_set.workout_id }}">
+                                        {{ exercise.best_set.date }}
+                                    </a>
+                                </td>
+                            </tr>
+                        {% endif %}
+                    {% endfor %}
+
+                    {% if e1rm_count.value == 0 %}
+                        <tr>
+                            <td colspan="4" class="muted">
+                                No reliable e1RM data yet.
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+
+            <div class="note">
+                Sets like 50×2, 20×15, or 0×50 are intentionally excluded from e1RM.
+            </div>
+        </div>
+
+    {% endif %}
+</div>
+</body>
+</html>
