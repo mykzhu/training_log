@@ -2,6 +2,21 @@
 
 All notable changes to this project.
 
+## 0.1.6 - 2026-06-05
+
+### Added
+- Add stats page and supporting routes/logic (6e88c7a) — new `app/templates/stats.html` and initial stats integration.
+
+### Changed
+- Refine stats UI and supporting logic (af5227d) — UI tweaks and logic adjustments for stats features.
+- chore: ongoing stats improvements and local DB updates (7418751) — database updates to support stats data.
+
+### Notes
+- This release adds a stats page and finalizes related UI and DB changes.
+
+---
+
+
 ## 0.1.5 - 2026-06-04
 
 ### Added
