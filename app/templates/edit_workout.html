@@ -1,3 +1,4 @@
+{% from "_analysis_card.html" import render_analysis %}
 <!doctype html>
 <html lang="uk">
 <head>
@@ -322,6 +323,8 @@
                 <span class="muted">Back Pain</span>
             </div>
     </div>
+
+    {{ render_analysis(workout, workout_exercises, total_volume, total_reps) }}
 
     <div class="card">
         <h2>Workout info</h2>

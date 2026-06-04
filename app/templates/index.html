@@ -1,3 +1,4 @@
+{% from "_analysis_card.html" import render_analysis %}
 <!doctype html>
 <html lang="uk">
 <head>
@@ -298,6 +299,10 @@
                 <span class="muted">kg volume</span>
             </div>
         </div>
+
+        {% if workout_exercises %}
+            {{ render_analysis(workout, workout_exercises, total_volume, total_reps) }}
+        {% endif %}
 
         <div class="card">
             <h2>Session status</h2>

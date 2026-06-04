@@ -1,0 +1,234 @@
+{% macro render_analysis(workout, workout_exercises, total_volume, total_reps) %}
+    <style>
+        .analysis-card h2 {
+            margin-bottom: 10px;
+        }
+
+        .analysis-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .analysis-section {
+            background: var(--card2);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 12px;
+        }
+
+        .analysis-section h3 {
+            margin: 0 0 8px;
+            font-size: 15px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        .analysis-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 7px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .analysis-row:last-child {
+            border-bottom: 0;
+        }
+
+        .analysis-main {
+            font-weight: 700;
+        }
+
+        .analysis-value {
+            white-space: nowrap;
+            color: var(--text);
+        }
+
+        .analysis-note {
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.35;
+            margin-top: 8px;
+        }
+
+        .analysis-recommendation {
+            margin-top: 12px;
+            padding: 12px;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            background: var(--card2);
+            line-height: 1.4;
+        }
+
+        .analysis-recommendation.good {
+            border-color: rgba(48, 209, 88, 0.65);
+            background: rgba(48, 209, 88, 0.14);
+        }
+
+        .analysis-recommendation.warning {
+            border-color: rgba(255, 159, 10, 0.70);
+            background: rgba(255, 159, 10, 0.14);
+        }
+
+        .analysis-recommendation.danger {
+            border-color: rgba(255, 69, 58, 0.75);
+            background: rgba(255, 69, 58, 0.16);
+        }
+
+        @media (max-width: 620px) {
+            .analysis-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+
+    <div class="card analysis-card">
+        <h2>Analysis</h2>
+
+        <div class="analysis-grid">
+            <div class="analysis-section">
+                <h3>Best sets</h3>
+
+                {% if workout_exercises %}
+                    {% for item in workout_exercises %}
+                        {% set best = namespace(set=None, score=-1, e1rm=None, used_e1rm=false) %}
+
+                        {% for set in item.sets %}
+                            {% set weight = set.weight | float %}
+                            {% set reps = set.reps | int %}
+                            {% set volume = weight * reps %}
+
+                            {% if weight > 0 and reps >= 3 and reps <= 12 %}
+                                {% set estimate = weight * (1 + reps / 30) %}
+
+                                {% if not best.used_e1rm or estimate > best.e1rm %}
+                                    {% set best.set = set %}
+                                    {% set best.e1rm = estimate %}
+                                    {% set best.used_e1rm = true %}
+                                {% endif %}
+                            {% elif not best.used_e1rm and volume > best.score %}
+                                {% set best.set = set %}
+                                {% set best.score = volume %}
+                            {% endif %}
+                        {% endfor %}
+
+                        {% if best.set %}
+                            <div class="analysis-row">
+                                <div>
+                                    <div class="analysis-main">{{ item.exercise_name }}</div>
+                                    {% if best.used_e1rm %}
+                                        <div class="muted small">best reliable strength set</div>
+                                    {% else %}
+                                        <div class="muted small">best by set volume</div>
+                                    {% endif %}
+                                </div>
+
+                                <div class="analysis-value">
+                                    {% if best.set.weight | float > 0 %}
+                                        {{ best.set.weight }} × {{ best.set.reps }}
+                                    {% else %}
+                                        {{ best.set.reps }} reps
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% endif %}
+                    {% endfor %}
+                {% else %}
+                    <div class="muted">No sets yet.</div>
+                {% endif %}
+            </div>
+
+            <div class="analysis-section">
+                <h3>Strength estimate</h3>
+
+                {% set estimate_count = namespace(value=0) %}
+
+                {% for item in workout_exercises %}
+                    {% set best = namespace(e1rm=None, set=None) %}
+
+                    {% for set in item.sets %}
+                        {% set weight = set.weight | float %}
+                        {% set reps = set.reps | int %}
+
+                        {% if weight > 0 and reps >= 3 and reps <= 12 %}
+                            {% set estimate = weight * (1 + reps / 30) %}
+
+                            {% if best.e1rm is none or estimate > best.e1rm %}
+                                {% set best.e1rm = estimate %}
+                                {% set best.set = set %}
+                            {% endif %}
+                        {% endif %}
+                    {% endfor %}
+
+                    {% if best.e1rm is not none %}
+                        {% set estimate_count.value = estimate_count.value + 1 %}
+
+                        <div class="analysis-row">
+                            <div>
+                                <div class="analysis-main">{{ item.exercise_name }}</div>
+                                <div class="muted small">from {{ best.set.weight }} × {{ best.set.reps }}</div>
+                            </div>
+
+                            <div class="analysis-value">{{ "%.1f"|format(best.e1rm) }} kg</div>
+                        </div>
+                    {% endif %}
+                {% endfor %}
+
+                {% if estimate_count.value == 0 %}
+                    <div class="muted">No reliable e1RM estimate yet.</div>
+                {% endif %}
+
+                <div class="analysis-note">
+                    e1RM is shown only for weighted sets with 3–12 reps. 1–2 reps are too close to max testing, and high-rep sets are less reliable for strength estimate.
+                </div>
+            </div>
+        </div>
+
+        <div class="analysis-section" style="margin-top: 12px;">
+            <h3>Intensity</h3>
+
+            <div class="analysis-row">
+                <div class="analysis-main">Average weight per rep</div>
+                <div class="analysis-value">
+                    {% if total_reps %}
+                        {{ "%.1f"|format(total_volume / total_reps) }} kg/rep
+                    {% else %}
+                        —
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        {% set rpe = workout.session_rpe if workout.session_rpe is not none else none %}
+        {% set back = workout.lower_back_pain if workout.lower_back_pain is not none else none %}
+
+        {% if back is not none and back | int >= 3 %}
+            <div class="analysis-recommendation danger">
+                <strong>⛔ Progression paused.</strong><br>
+                Back pain is {{ back }}/10, so keep the next session conservative and avoid increasing deadlift/back-loading work.
+            </div>
+        {% elif rpe is not none and rpe | int >= 8 %}
+            <div class="analysis-recommendation warning">
+                <strong>⚠️ Keep load stable.</strong><br>
+                RPE is {{ rpe }}/10. This was hard enough; repeat the same load or add only a small rep if back stays calm.
+            </div>
+        {% elif total_reps == 0 %}
+            <div class="analysis-recommendation warning">
+                <strong>ℹ️ No training stimulus yet.</strong><br>
+                Add working sets before judging progression.
+            </div>
+        {% elif rpe is not none and back is not none and rpe | int <= 7 and back | int <= 2 %}
+            <div class="analysis-recommendation good">
+                <strong>✅ Progress allowed.</strong><br>
+                RPE and back pain are in a safe range. Next time you can add a small amount of weight or 1–2 reps to the main exercises.
+            </div>
+        {% else %}
+            <div class="analysis-recommendation warning">
+                <strong>ℹ️ Progress unclear.</strong><br>
+                Log both RPE and Back Pain to make the next-session recommendation more reliable.
+            </div>
+        {% endif %}
+    </div>
+{% endmacro %}
