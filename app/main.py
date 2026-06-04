@@ -891,17 +891,20 @@ def start_workout():
 
 @app.post("/draft/metadata")
 def update_draft_metadata(
-    session_rpe: int | None = Form(None),
-    lower_back_pain: int | None = Form(None),
+    session_rpe: str | None = Form(None),
+    lower_back_pain: str | None = Form(None),
 ):
+    parsed_session_rpe = parse_optional_int(session_rpe)
+    parsed_lower_back_pain = parse_optional_int(lower_back_pain)
+
     with DRAFT_LOCK:
         draft = ACTIVE_WORKOUT_DRAFT
         if draft is None:
             logger.warning("workout.draft.metadata.no_active")
             return RedirectResponse("/", status_code=303)
 
-        draft["session_rpe"] = session_rpe
-        draft["lower_back_pain"] = lower_back_pain
+        draft["session_rpe"] = parsed_session_rpe
+        draft["lower_back_pain"] = parsed_lower_back_pain
 
     logger.info(
         "workout.draft.metadata.update session_rpe=%s lower_back_pain=%s",
