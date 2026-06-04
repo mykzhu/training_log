@@ -1,0 +1,676 @@
+<!doctype html>
+<html lang="uk">
+<head>
+    <meta charset="utf-8">
+    <title>Training Stats 2</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <style>
+        :root {
+            color-scheme: dark;
+            --bg: #050505;
+            --card: #171717;
+            --card2: #222;
+            --text: #f2f2f2;
+            --muted: #999;
+            --blue: #0a84ff;
+            --green: #30d158;
+            --orange: #ff9f0a;
+            --red: #ff453a;
+            --border: #2e2e2e;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            padding: 14px;
+            background: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-size: 16px;
+        }
+
+        .page {
+            max-width: 880px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            margin: 0 0 6px;
+            font-size: 28px;
+        }
+
+        h2 {
+            margin: 0 0 10px;
+            font-size: 21px;
+            color: var(--blue);
+        }
+
+        h3 {
+            margin: 0 0 8px;
+            font-size: 15px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        a {
+            color: var(--blue);
+            text-decoration: none;
+        }
+
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .muted { color: var(--muted); }
+        .small { font-size: 13px; }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 14px;
+            margin: 14px 0;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .stat {
+            background: var(--card2);
+            padding: 12px;
+            border-radius: 16px;
+            text-align: center;
+        }
+
+        .stat strong {
+            display: block;
+            font-size: 20px;
+        }
+
+        .stat.metric-neutral {
+            border: 1px solid var(--border);
+        }
+
+        .stat.metric-green {
+            border: 1px solid rgba(48, 209, 88, 0.65);
+            background: rgba(48, 209, 88, 0.16);
+        }
+
+        .stat.metric-lime {
+            border: 1px solid rgba(126, 217, 87, 0.65);
+            background: rgba(126, 217, 87, 0.14);
+        }
+
+        .stat.metric-yellow {
+            border: 1px solid rgba(255, 214, 10, 0.70);
+            background: rgba(255, 214, 10, 0.14);
+        }
+
+        .stat.metric-orange {
+            border: 1px solid rgba(255, 159, 10, 0.70);
+            background: rgba(255, 159, 10, 0.16);
+        }
+
+        .stat.metric-red {
+            border: 1px solid rgba(255, 69, 58, 0.75);
+            background: rgba(255, 69, 58, 0.18);
+        }
+
+        .chart-card-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: baseline;
+            margin-bottom: 8px;
+        }
+
+        .svg-chart {
+            width: 100%;
+            height: 200px;
+            display: block;
+            overflow: visible;
+        }
+
+        .svg-chart.compact {
+            height: 170px;
+        }
+
+        .grid-line {
+            stroke: rgba(255, 255, 255, 0.08);
+            stroke-width: 1;
+            vector-effect: non-scaling-stroke;
+        }
+
+        .axis-label {
+            display: none;
+        }
+
+        .line-blue,
+        .line-green,
+        .line-orange,
+        .line-red {
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            vector-effect: non-scaling-stroke;
+        }
+
+        .line-blue { stroke: var(--blue); }
+        .line-green { stroke: var(--green); }
+        .line-orange { stroke: var(--orange); }
+        .line-red { stroke: var(--red); }
+
+        .area-blue {
+            fill: rgba(10, 132, 255, 0.12);
+        }
+
+        .marker {
+            display: none;
+        }
+
+        .marker-blue { stroke: var(--blue); }
+        .marker-green { stroke: var(--green); }
+        .marker-orange { stroke: var(--orange); }
+        .marker-red { stroke: var(--red); }
+
+        .chart-axis-note {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            color: var(--muted);
+            font-size: 12px;
+            margin-top: 6px;
+        }
+
+        .two-column {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+        }
+
+        .progress-row {
+            display: grid;
+            grid-template-columns: minmax(120px, 1fr) 2fr auto;
+            gap: 10px;
+            align-items: center;
+            padding: 9px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .progress-row:last-child {
+            border-bottom: 0;
+        }
+
+        .progress-track {
+            height: 12px;
+            background: var(--card2);
+            border-radius: 999px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            border-radius: 999px;
+            background: var(--blue);
+        }
+
+        .progress-fill.green {
+            background: var(--green);
+        }
+
+        .heatmap {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(26px, 1fr));
+            gap: 6px;
+            margin-top: 10px;
+        }
+
+        .heat-cell {
+            aspect-ratio: 1;
+            border-radius: 8px;
+            background: var(--card2);
+            border: 1px solid var(--border);
+            display: block;
+        }
+
+        .heat-cell.metric-green {
+            background: rgba(48, 209, 88, 0.30);
+            border-color: rgba(48, 209, 88, 0.65);
+        }
+
+        .heat-cell.metric-lime {
+            background: rgba(126, 217, 87, 0.24);
+            border-color: rgba(126, 217, 87, 0.65);
+        }
+
+        .heat-cell.metric-yellow {
+            background: rgba(255, 214, 10, 0.24);
+            border-color: rgba(255, 214, 10, 0.70);
+        }
+
+        .heat-cell.metric-orange {
+            background: rgba(255, 159, 10, 0.28);
+            border-color: rgba(255, 159, 10, 0.70);
+        }
+
+        .heat-cell.metric-red {
+            background: rgba(255, 69, 58, 0.32);
+            border-color: rgba(255, 69, 58, 0.75);
+        }
+
+        .scatter-point {
+            fill: var(--orange);
+            stroke: var(--card);
+            stroke-width: 1.5;
+            vector-effect: non-scaling-stroke;
+        }
+
+        .note {
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.35;
+            margin-top: 8px;
+        }
+
+        .empty {
+            padding: 22px;
+            text-align: center;
+            color: var(--muted);
+            background: var(--card);
+            border-radius: 18px;
+            border: 1px dashed var(--border);
+        }
+
+        @media (max-width: 720px) {
+            .topbar {
+                flex-direction: column;
+            }
+
+            .nav-links {
+                justify-content: flex-start;
+            }
+
+            .summary-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .two-column {
+                grid-template-columns: 1fr;
+            }
+
+            .progress-row {
+                grid-template-columns: 1fr;
+                gap: 6px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+{% set summary = stats.summary %}
+{% set workouts = stats.workouts %}
+{% set exercise_stats = stats.exercise_stats %}
+
+<div class="page">
+    <div class="topbar">
+        <div>
+            <h1>Stats 2</h1>
+            <div class="muted">
+                {% if limit is none %}
+                    All {{ summary.workout_count }} workouts
+                {% else %}
+                    Last {{ summary.workout_count }} workouts
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="nav-links">
+            <a href="/">Current</a>
+            <a href="/history">History</a>
+            <a href="/stats">Stats</a>
+            <a href="/stats2">Stats 2</a>
+            <a href="/backup">Backup</a>
+        </div>
+    </div>
+
+    {% if summary.workout_count == 0 %}
+        <div class="empty">No workouts yet.</div>
+    {% else %}
+
+        <div class="card">
+            <h2>Summary</h2>
+
+            <div class="summary-grid">
+                <div class="stat">
+                    <strong>{{ summary.workout_count }}</strong>
+                    <span class="muted">workouts</span>
+                </div>
+
+                <div class="stat">
+                    <strong>{{ "%.1f"|format(summary.total_volume) }}</strong>
+                    <span class="muted">kg volume</span>
+                </div>
+
+                <div class="stat">
+                    <strong>{{ summary.total_sets }}</strong>
+                    <span class="muted">sets</span>
+                </div>
+
+                <div class="stat">
+                    <strong>{{ summary.total_reps }}</strong>
+                    <span class="muted">reps</span>
+                </div>
+
+                <div class="stat">
+                    <strong>
+                        {% if summary.avg_intensity is not none %}
+                            {{ "%.1f"|format(summary.avg_intensity) }}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </strong>
+                    <span class="muted">kg / rep</span>
+                </div>
+
+                <div class="stat {{ summary.avg_rpe | metric_status_class }}">
+                    <strong>
+                        {% if summary.avg_rpe is not none %}
+                            {{ "%.1f"|format(summary.avg_rpe) }}/10
+                        {% else %}
+                            —
+                        {% endif %}
+                    </strong>
+                    <span class="muted">avg RPE</span>
+                </div>
+
+                <div class="stat {{ summary.avg_back_pain | metric_status_class }}">
+                    <strong>
+                        {% if summary.avg_back_pain is not none %}
+                            {{ "%.1f"|format(summary.avg_back_pain) }}/10
+                        {% else %}
+                            —
+                        {% endif %}
+                    </strong>
+                    <span class="muted">avg back</span>
+                </div>
+
+                <div class="stat">
+                    <strong>{{ exercise_stats|length }}</strong>
+                    <span class="muted">exercises</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="chart-card-header">
+                <h2>Volume trend</h2>
+                <span class="muted small">area chart</span>
+            </div>
+
+            {% if charts.volume.points %}
+                <svg class="svg-chart" viewBox="-4 -4 108 112" preserveAspectRatio="none">
+                    <line class="grid-line" x1="0" y1="25" x2="100" y2="25"></line>
+                    <line class="grid-line" x1="0" y1="50" x2="100" y2="50"></line>
+                    <line class="grid-line" x1="0" y1="75" x2="100" y2="75"></line>
+                    <line class="grid-line" x1="0" y1="100" x2="100" y2="100"></line>
+
+                    <polygon class="area-blue" points="{{ charts.volume.area_points }}"></polygon>
+                    <polyline class="line-blue" points="{{ charts.volume.points }}"></polyline>
+
+                    {% for marker in charts.volume.markers %}
+                        <a href="/workouts/{{ marker.workout_id }}">
+                            <circle class="marker marker-blue" cx="{{ marker.x }}" cy="{{ marker.y }}" r="1.6">
+                                <title>{{ marker.date }} · {{ "%.1f"|format(marker.value) }} kg</title>
+                            </circle>
+                        </a>
+                    {% endfor %}
+                </svg>
+            {% else %}
+                <div class="empty">No volume data.</div>
+            {% endif %}
+
+            <div class="note">
+                This shows total training volume per workout. Use it together with RPE and Back Pain.
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="chart-card-header">
+                <h2>Average intensity</h2>
+                <span class="muted small">line chart</span>
+            </div>
+
+            {% if charts.intensity.points %}
+                <svg class="svg-chart compact" viewBox="-4 -4 108 112" preserveAspectRatio="none">
+                    <line class="grid-line" x1="0" y1="25" x2="100" y2="25"></line>
+                    <line class="grid-line" x1="0" y1="50" x2="100" y2="50"></line>
+                    <line class="grid-line" x1="0" y1="75" x2="100" y2="75"></line>
+                    <line class="grid-line" x1="0" y1="100" x2="100" y2="100"></line>
+
+                    <polyline class="line-green" points="{{ charts.intensity.points }}"></polyline>
+
+                    {% for marker in charts.intensity.markers %}
+                        <a href="/workouts/{{ marker.workout_id }}">
+                            <circle class="marker marker-green" cx="{{ marker.x }}" cy="{{ marker.y }}" r="1.6">
+                                <title>{{ marker.date }} · {{ "%.1f"|format(marker.value) }} kg/rep</title>
+                            </circle>
+                        </a>
+                    {% endfor %}
+                </svg>
+            {% else %}
+                <div class="empty">No intensity data.</div>
+            {% endif %}
+
+            <div class="note">
+                This separates heavier training from just doing more light reps.
+            </div>
+        </div>
+
+        <div class="two-column">
+            <div class="card">
+                <div class="chart-card-header">
+                    <h2>RPE trend</h2>
+                    <span class="muted small">line chart</span>
+                </div>
+
+                {% if charts.rpe.points %}
+                    <svg class="svg-chart compact" viewBox="-4 -4 108 112" preserveAspectRatio="none">
+                        <line class="grid-line" x1="0" y1="20" x2="100" y2="20"></line>
+                        <line class="grid-line" x1="0" y1="40" x2="100" y2="40"></line>
+                        <line class="grid-line" x1="0" y1="60" x2="100" y2="60"></line>
+                        <line class="grid-line" x1="0" y1="80" x2="100" y2="80"></line>
+                        <line class="grid-line" x1="0" y1="100" x2="100" y2="100"></line>
+
+                        <polyline class="line-orange" points="{{ charts.rpe.points }}"></polyline>
+
+                        {% for marker in charts.rpe.markers %}
+                            <a href="/workouts/{{ marker.workout_id }}">
+                                <circle class="marker marker-orange" cx="{{ marker.x }}" cy="{{ marker.y }}" r="1.8">
+                                    <title>{{ marker.date }} · RPE {{ "%.0f"|format(marker.value) }}/10</title>
+                                </circle>
+                            </a>
+                        {% endfor %}
+                    </svg>
+                {% else %}
+                    <div class="empty">No RPE data.</div>
+                {% endif %}
+            </div>
+
+            <div class="card">
+                <div class="chart-card-header">
+                    <h2>Back pain trend</h2>
+                    <span class="muted small">line chart</span>
+                </div>
+
+                {% if charts.back.points %}
+                    <svg class="svg-chart compact" viewBox="-4 -4 108 112" preserveAspectRatio="none">
+                        <line class="grid-line" x1="0" y1="20" x2="100" y2="20"></line>
+                        <line class="grid-line" x1="0" y1="40" x2="100" y2="40"></line>
+                        <line class="grid-line" x1="0" y1="60" x2="100" y2="60"></line>
+                        <line class="grid-line" x1="0" y1="80" x2="100" y2="80"></line>
+                        <line class="grid-line" x1="0" y1="100" x2="100" y2="100"></line>
+
+                        <polyline class="line-red" points="{{ charts.back.points }}"></polyline>
+
+                        {% for marker in charts.back.markers %}
+                            <a href="/workouts/{{ marker.workout_id }}">
+                                <circle class="marker marker-red" cx="{{ marker.x }}" cy="{{ marker.y }}" r="1.8">
+                                    <title>{{ marker.date }} · Back Pain {{ "%.0f"|format(marker.value) }}/10</title>
+                                </circle>
+                            </a>
+                        {% endfor %}
+                    </svg>
+                {% else %}
+                    <div class="empty">No back pain data.</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Back pain heatmap</h2>
+            <div class="muted small">One square per workout</div>
+
+            <div class="heatmap">
+                {% for workout in workouts %}
+                    <a
+                        href="/workouts/{{ workout.id }}"
+                        class="heat-cell {{ workout.lower_back_pain | metric_status_class }}"
+                        title="{{ workout.date }} · Back Pain {% if workout.lower_back_pain is not none %}{{ workout.lower_back_pain }}/10{% else %}—{% endif %}"
+                    ></a>
+                {% endfor %}
+            </div>
+
+            <div class="note">
+                This makes it easier to spot clusters of back-sensitive sessions.
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Exercise volume</h2>
+            <div class="muted small">Horizontal bar chart</div>
+
+            {% for exercise in exercise_stats %}
+                {% set width = 0 %}
+                {% if charts.max_exercise_volume > 0 %}
+                    {% set width = exercise.total_volume / charts.max_exercise_volume * 100 %}
+                {% endif %}
+
+                <div class="progress-row">
+                    <div>
+                        <strong>{{ exercise.name }}</strong>
+                        <div class="muted small">
+                            {{ exercise.total_sets }} sets · {{ exercise.total_reps }} reps
+                        </div>
+                    </div>
+
+                    <div class="progress-track">
+                        <div class="progress-fill" style="width: {{ width }}%;"></div>
+                    </div>
+
+                    <div>{{ "%.1f"|format(exercise.total_volume) }} kg</div>
+                </div>
+            {% endfor %}
+        </div>
+
+        <div class="card">
+            <h2>Best strength estimates</h2>
+            <div class="muted small">e1RM from weighted sets with 3–12 reps only</div>
+
+            {% if charts.best_strength %}
+                {% for exercise in charts.best_strength %}
+                    {% set width = 0 %}
+                    {% if charts.max_e1rm > 0 %}
+                        {% set width = exercise.best_e1rm / charts.max_e1rm * 100 %}
+                    {% endif %}
+
+                    <div class="progress-row">
+                        <div>
+                            <strong>{{ exercise.name }}</strong>
+                            <div class="muted small">
+                                {{ exercise.best_set.weight }} × {{ exercise.best_set.reps }}
+                                · {{ exercise.best_set.date }}
+                            </div>
+                        </div>
+
+                        <div class="progress-track">
+                            <div class="progress-fill green" style="width: {{ width }}%;"></div>
+                        </div>
+
+                        <div>{{ "%.1f"|format(exercise.best_e1rm) }} kg</div>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <div class="empty">No reliable e1RM data yet.</div>
+            {% endif %}
+
+            <div class="note">
+                1–2 reps, 15+ reps and 0 kg exercises are intentionally excluded.
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="chart-card-header">
+                <h2>Volume vs Back Pain</h2>
+                <span class="muted small">scatter plot</span>
+            </div>
+
+            {% if charts.scatter.points %}
+                <svg class="svg-chart compact" viewBox="-6 -6 112 112" preserveAspectRatio="none">
+                    <line class="grid-line" x1="0" y1="25" x2="100" y2="25"></line>
+                    <line class="grid-line" x1="0" y1="50" x2="100" y2="50"></line>
+                    <line class="grid-line" x1="0" y1="75" x2="100" y2="75"></line>
+                    <line class="grid-line" x1="0" y1="100" x2="100" y2="100"></line>
+                    <line class="grid-line" x1="0" y1="0" x2="0" y2="100"></line>
+
+                    {% for point in charts.scatter.points %}
+                        <a href="/workouts/{{ point.workout_id }}">
+                            <circle class="scatter-point" cx="{{ point.x }}" cy="{{ point.y }}" r="1.4">
+                                <title>{{ point.date }} · {{ "%.1f"|format(point.volume) }} kg · Back {{ "%.0f"|format(point.back) }}/10</title>
+                            </circle>
+                        </a>
+                    {% endfor %}
+
+                    <!-- <text class="axis-label" x="0" y="108">low volume</text>
+                    <text class="axis-label" x="75" y="108">high volume</text>
+                    <text class="axis-label" x="-5" y="5">more pain</text> -->
+                </svg>
+                <div class="chart-axis-note">
+                    <span>low volume</span>
+                    <span>higher volume</span>
+                </div>
+                <div class="note">
+                    Higher dots mean more back pain. If dots move upward as volume grows, higher-volume sessions may affect your back.
+                </div>
+            {% else %}
+                <div class="empty">No scatter data.</div>
+            {% endif %}
+
+            <div class="note">
+                If dots move upward as volume grows, that may mean higher-volume sessions affect your back.
+            </div>
+        </div>
+
+    {% endif %}
+</div>
+</body>
+</html>

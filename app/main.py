@@ -77,6 +77,160 @@ DEFAULT_EXERCISES = (
 ACTIVE_WORKOUT_DRAFT: dict[str, Any] | None = None
 DRAFT_LOCK = RLock()
 
+def parse_limit(value: str | None, default: int = 30) -> int | None:
+    if value == "all":
+        return None
+
+    if not value:
+        return default
+
+    try:
+        parsed = int(value)
+    except ValueError:
+        return default
+
+    return max(1, min(parsed, 500))
+
+def build_line_chart_series(
+    workouts: list[dict[str, Any]],
+    value_key: str,
+    max_value: float | None = None,
+) -> dict[str, Any]:
+    points: list[str] = []
+    markers: list[dict[str, Any]] = []
+
+    raw_values: list[float | None] = []
+    for workout in workouts:
+        value = workout.get(value_key)
+        raw_values.append(float(value) if value is not None else None)
+
+    valid_values = [value for value in raw_values if value is not None]
+
+    if not valid_values:
+        return {
+            "points": "",
+            "area_points": "",
+            "markers": [],
+            "max_value": None,
+        }
+
+    chart_max = max_value if max_value is not None else max(valid_values)
+    if chart_max <= 0:
+        chart_max = 1.0
+
+    count = len(workouts)
+
+    for index, workout in enumerate(workouts):
+        value = raw_values[index]
+        if value is None:
+            continue
+
+        x = 50.0 if count <= 1 else index / (count - 1) * 100
+        y = 100 - min(100, max(0, value / chart_max * 100))
+
+        points.append(f"{x:.2f},{y:.2f}")
+        markers.append(
+            {
+                "x": x,
+                "y": y,
+                "value": value,
+                "date": workout["date"],
+                "workout_id": workout["id"],
+            }
+        )
+
+    area_points = ""
+    if markers:
+        area_points = (
+            f"{markers[0]['x']:.2f},100 "
+            f"{' '.join(points)} "
+            f"{markers[-1]['x']:.2f},100"
+        )
+
+    return {
+        "points": " ".join(points),
+        "area_points": area_points,
+        "markers": markers,
+        "max_value": chart_max,
+    }
+
+
+def build_scatter_points(workouts: list[dict[str, Any]]) -> dict[str, Any]:
+    valid_items = [
+        workout
+        for workout in workouts
+        if workout["total_volume"] > 0
+        and workout["lower_back_pain"] is not None
+    ]
+
+    if not valid_items:
+        return {
+            "points": [],
+            "max_volume": None,
+        }
+
+    max_volume = max(float(item["total_volume"]) for item in valid_items)
+    if max_volume <= 0:
+        max_volume = 1.0
+
+    points = []
+
+    for workout in valid_items:
+        volume = float(workout["total_volume"])
+        back = float(workout["lower_back_pain"])
+
+        points.append(
+            {
+                "x": min(100, max(0, volume / max_volume * 100)),
+                "y": 100 - min(100, max(0, back / 10 * 100)),
+                "volume": volume,
+                "back": back,
+                "date": workout["date"],
+                "workout_id": workout["id"],
+            }
+        )
+
+    return {
+        "points": points,
+        "max_volume": max_volume,
+    }
+
+
+def build_stats2_charts(stats: dict[str, Any]) -> dict[str, Any]:
+    workouts = stats["workouts"]
+    exercise_stats = stats["exercise_stats"]
+
+    best_strength = [
+        exercise
+        for exercise in exercise_stats
+        if exercise["best_e1rm"] is not None and exercise["best_set"]
+    ]
+    best_strength.sort(
+        key=lambda exercise: exercise["best_e1rm"],
+        reverse=True,
+    )
+
+    max_e1rm = max(
+        [exercise["best_e1rm"] for exercise in best_strength],
+        default=0,
+    )
+
+    max_exercise_volume = max(
+        [exercise["total_volume"] for exercise in exercise_stats],
+        default=0,
+    )
+
+    return {
+        "volume": build_line_chart_series(workouts, "total_volume"),
+        "intensity": build_line_chart_series(workouts, "avg_intensity"),
+        "rpe": build_line_chart_series(workouts, "session_rpe", max_value=10),
+        "back": build_line_chart_series(workouts, "lower_back_pain", max_value=10),
+        "scatter": build_scatter_points(workouts),
+        "best_strength": best_strength,
+        "max_e1rm": max_e1rm,
+        "max_exercise_volume": max_exercise_volume,
+    }
+
 def estimated_1rm(weight: float, reps: int) -> float | None:
     if weight <= 0:
         return None
@@ -1945,5 +2099,28 @@ def stats_page(request: Request):
         {
             "request": request,
             "stats": stats,
+        },
+    )
+
+@app.get("/stats2")
+def stats2_page(request: Request):
+    limit = parse_limit(request.query_params.get("limit"), default=30)
+    stats = build_stats(limit=limit)
+    charts = build_stats2_charts(stats)
+
+    logger.debug(
+        "page.stats2 workouts=%s exercises=%s limit=%s",
+        len(stats["workouts"]),
+        len(stats["exercise_stats"]),
+        "all" if limit is None else limit,
+    )
+
+    return templates.TemplateResponse(
+        "stats2.html",
+        {
+            "request": request,
+            "stats": stats,
+            "charts": charts,
+            "limit": limit,
         },
     )
