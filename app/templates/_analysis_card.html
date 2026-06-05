@@ -1,4 +1,4 @@
-{% macro render_analysis(workout, workout_exercises, total_volume, total_reps) %}
+{% macro render_analysis(workout, workout_exercises, total_volume, total_reps, analysis=None) %}
     <style>
         .analysis-card h2 {
             margin-bottom: 10px;
@@ -183,6 +183,24 @@
                 <div class="analysis-note">
                     e1RM is shown only for weighted sets with 3–12 reps. 1–2 reps are too close to max testing, and high-rep sets are less reliable for strength estimate.
                 </div>
+            </div>
+            <div class="analysis-section">
+                <h3>PRs</h3>
+
+                {% if analysis and analysis.prs %}
+                    {% for pr in analysis.prs %}
+                        <div class="analysis-row">
+                            <div class="analysis-main">
+                                🏆 {{ pr.exercise_name }}
+                            </div>
+                            <div class="analysis-value">
+                                {{ pr.type }}
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="muted">No PRs in this workout.</div>
+                {% endif %}
             </div>
         </div>
 

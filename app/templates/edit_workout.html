@@ -224,6 +224,20 @@
             line-height: 1.2;
         }
 
+        .pr-badge {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 999px;
+            padding: 3px 8px;
+            margin-left: 6px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #ffd60a;
+            background: rgba(255, 214, 10, 0.14);
+            border: 1px solid rgba(255, 214, 10, 0.55);
+            vertical-align: middle;
+        }
+
         .status-finished {
             background: rgba(48, 209, 88, 0.18);
             color: #30d158;
@@ -324,7 +338,7 @@
             </div>
     </div>
 
-    {{ render_analysis(workout, workout_exercises, total_volume, total_reps) }}
+    {{ render_analysis(workout, workout_exercises, total_volume, total_reps, analysis) }}
 
     <div class="card">
         <h2>Workout info</h2>
@@ -389,14 +403,31 @@
 
     {% if workout_exercises %}
         {% for item in workout_exercises %}
+            {% set exercise_analysis = namespace(value=None) %}
+            {% if analysis %}
+                {% for candidate in analysis.exercises %}
+                    {% if candidate.exercise_id == item.exercise_id %}
+                        {% set exercise_analysis.value = candidate %}
+                    {% endif %}
+                {% endfor %}
+            {% endif %}
             <div class="card">
                 <div class="exercise-header">
                     <div>
-                        <h2>{{ item.exercise_name }}</h2>
+                        <h2>
+                            {{ item.exercise_name }}
+                            {% if exercise_analysis.value and exercise_analysis.value.pr_flags %}
+                                <span class="pr-badge">🏆 {{ exercise_analysis.value.pr_flags | join(", ") }}</span>
+                            {% endif %}
+                        </h2>
                         <div class="muted small">
                             {{ item.sets|length }} sets ·
                             {{ item.total_reps }} reps ·
                             {{ "%.1f"|format(item.total_volume) }} kg
+
+                            {% if exercise_analysis.value and exercise_analysis.value.best_e1rm is not none %}
+                                · e1RM {{ "%.1f"|format(exercise_analysis.value.best_e1rm) }} kg
+                            {% endif %}
                         </div>
                     </div>
 

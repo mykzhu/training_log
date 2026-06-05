@@ -437,6 +437,209 @@ def build_stats(limit: int = 30) -> dict[str, Any]:
         },
     }
 
+def build_workout_analysis(
+    workout_id: int,
+    workout_exercises: list[dict[str, Any]],
+) -> dict[str, Any]:
+    exercise_analyses: list[dict[str, Any]] = []
+    all_prs: list[dict[str, Any]] = []
+
+    with get_db() as conn:
+        current_workout = conn.execute(
+            """
+            SELECT id, created_at
+            FROM workouts
+            WHERE id = ?
+            """,
+            (workout_id,),
+        ).fetchone()
+
+        if not current_workout:
+            return {
+                "exercises": [],
+                "prs": [],
+            }
+
+        current_created_at = current_workout["created_at"]
+
+        for item in workout_exercises:
+            exercise_id = int(item["exercise_id"])
+            exercise_name = str(item["exercise_name"])
+            sets = item["sets"]
+
+            current_max_weight: float | None = None
+            current_max_reps: int | None = None
+            current_best_e1rm: float | None = None
+            current_best_e1rm_set: dict[str, Any] | None = None
+            current_best_set: dict[str, Any] | None = None
+            current_best_set_score = -1.0
+            current_total_volume = float(item["total_volume"])
+
+            for set_row in sets:
+                weight = float(set_row["weight"])
+                reps = int(set_row["reps"])
+                volume = weight * reps
+
+                if current_max_weight is None or weight > current_max_weight:
+                    current_max_weight = weight
+
+                if current_max_reps is None or reps > current_max_reps:
+                    current_max_reps = reps
+
+                e1rm = estimated_1rm(weight, reps)
+                if e1rm is not None:
+                    if current_best_e1rm is None or e1rm > current_best_e1rm:
+                        current_best_e1rm = e1rm
+                        current_best_e1rm_set = {
+                            "weight": weight,
+                            "reps": reps,
+                        }
+
+                # Best set display:
+                # prefer reliable e1RM set for weighted exercises;
+                # otherwise fall back to volume/reps.
+                if e1rm is not None:
+                    score = e1rm
+                elif weight > 0:
+                    score = volume
+                else:
+                    score = reps
+
+                if score > current_best_set_score:
+                    current_best_set_score = score
+                    current_best_set = {
+                        "weight": weight,
+                        "reps": reps,
+                    }
+
+            previous_rows = conn.execute(
+                """
+                SELECT
+                    w.id AS workout_id,
+                    w.created_at,
+                    se.weight,
+                    se.reps
+                FROM set_entries se
+                JOIN workout_exercises we ON we.id = se.workout_exercise_id
+                JOIN workouts w ON w.id = we.workout_id
+                WHERE we.exercise_id = ?
+                  AND (
+                        w.created_at < ?
+                        OR (w.created_at = ? AND w.id < ?)
+                  )
+                ORDER BY w.created_at ASC, w.id ASC, se.set_number ASC, se.id ASC
+                """,
+                (
+                    exercise_id,
+                    current_created_at,
+                    current_created_at,
+                    workout_id,
+                ),
+            ).fetchall()
+
+            previous_max_weight: float | None = None
+            previous_max_reps: int | None = None
+            previous_best_e1rm: float | None = None
+
+            for row in previous_rows:
+                weight = float(row["weight"])
+                reps = int(row["reps"])
+
+                if previous_max_weight is None or weight > previous_max_weight:
+                    previous_max_weight = weight
+
+                if previous_max_reps is None or reps > previous_max_reps:
+                    previous_max_reps = reps
+
+                e1rm = estimated_1rm(weight, reps)
+                if e1rm is not None:
+                    if previous_best_e1rm is None or e1rm > previous_best_e1rm:
+                        previous_best_e1rm = e1rm
+
+            previous_volume_rows = conn.execute(
+                """
+                SELECT
+                    w.id AS workout_id,
+                    SUM(se.weight * se.reps) AS exercise_volume
+                FROM set_entries se
+                JOIN workout_exercises we ON we.id = se.workout_exercise_id
+                JOIN workouts w ON w.id = we.workout_id
+                WHERE we.exercise_id = ?
+                  AND (
+                        w.created_at < ?
+                        OR (w.created_at = ? AND w.id < ?)
+                  )
+                GROUP BY w.id
+                """,
+                (
+                    exercise_id,
+                    current_created_at,
+                    current_created_at,
+                    workout_id,
+                ),
+            ).fetchall()
+
+            previous_best_volume: float | None = None
+            for row in previous_volume_rows:
+                volume = float(row["exercise_volume"] or 0)
+                if previous_best_volume is None or volume > previous_best_volume:
+                    previous_best_volume = volume
+
+            pr_flags: list[str] = []
+
+            if (
+                current_max_weight is not None
+                and current_max_weight > 0
+                and previous_max_weight is not None
+                and current_max_weight > previous_max_weight
+            ):
+                pr_flags.append("Weight PR")
+
+            if (
+                current_max_reps is not None
+                and previous_max_reps is not None
+                and current_max_reps > previous_max_reps
+            ):
+                pr_flags.append("Rep PR")
+
+            if (
+                current_best_e1rm is not None
+                and previous_best_e1rm is not None
+                and current_best_e1rm > previous_best_e1rm
+            ):
+                pr_flags.append("e1RM PR")
+
+            if (
+                current_total_volume > 0
+                and previous_best_volume is not None
+                and current_total_volume > previous_best_volume
+            ):
+                pr_flags.append("Volume PR")
+
+            exercise_analysis = {
+                "exercise_id": exercise_id,
+                "exercise_name": exercise_name,
+                "best_set": current_best_set,
+                "best_e1rm": current_best_e1rm,
+                "best_e1rm_set": current_best_e1rm_set,
+                "pr_flags": pr_flags,
+            }
+
+            exercise_analyses.append(exercise_analysis)
+
+            for flag in pr_flags:
+                all_prs.append(
+                    {
+                        "exercise_name": exercise_name,
+                        "type": flag,
+                    }
+                )
+
+    return {
+        "exercises": exercise_analyses,
+        "prs": all_prs,
+    }
+
 def format_datetime(value: str | None) -> str:
     if not value:
         return "—"
@@ -1697,6 +1900,7 @@ def edit_workout_page(request: Request, workout_id: int):
     total_volume = sum(item["total_volume"] for item in workout_exercises)
     total_reps = sum(item["total_reps"] for item in workout_exercises)
     total_sets = sum(len(item["sets"]) for item in workout_exercises)
+    analysis = build_workout_analysis(workout_id, workout_exercises)
 
     existing_weights: list[float] = []
     for item in workout_exercises:
@@ -1722,6 +1926,7 @@ def edit_workout_page(request: Request, workout_id: int):
             "total_volume": total_volume,
             "total_reps": total_reps,
             "total_sets": total_sets,
+            "analysis": analysis,
         },
     )
 
@@ -1943,6 +2148,7 @@ def workout_detail(request: Request, workout_id: int):
     total_volume = sum(item["total_volume"] for item in workout_exercises)
     total_reps = sum(item["total_reps"] for item in workout_exercises)
     total_sets = sum(len(item["sets"]) for item in workout_exercises)
+    analysis = build_workout_analysis(workout_id, workout_exercises)
 
     logger.debug(
         "page.workout_detail workout_id=%s exercises=%s sets=%s",
@@ -1960,6 +2166,7 @@ def workout_detail(request: Request, workout_id: int):
             "total_volume": total_volume,
             "total_reps": total_reps,
             "total_sets": total_sets,
+            "analysis": analysis,
         },
     )
 
