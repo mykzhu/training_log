@@ -2,6 +2,21 @@
 
 All notable changes to this project.
 
+## 0.1.7 - 2026-06-05
+
+### Added
+- `app/templates/stats2.html` — new "Stats 2" analytics dashboard with dashboard sparkbars, area/line charts for volume/intensity/RPE/back pain, calendar heatmaps, scatter plot (volume vs back pain), exercise volume bars, and best-strength (e1RM) estimates.
+- Server-side chart helpers in `app/main.py` (`build_stats2_charts`, `build_line_chart_series`, `build_sparkbar`, `build_calendar_heatmap`, `build_scatter_points`, `estimated_1rm`) to compute chart data for the template.
+
+### Changed
+- `app/main.py`: compute and expose additional stats (total volume, avg intensity, session RPE, back pain, PR detection) and refine workout analysis to support the new dashboard.
+- `data/training.db`: local DB updates and migrations/seeding to ensure stats-related fields and default exercises exist.
+
+### Notes
+- Bumped version in `config.yaml` to `0.1.7`.
+
+---
+
 ## 0.1.6 - 2026-06-05
 
 ### Added
