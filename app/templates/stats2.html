@@ -94,6 +94,164 @@
             margin-top: 12px;
         }
 
+        .dashboard-sparkbar {
+            margin-top: 14px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 18px;
+            line-height: 1;
+            letter-spacing: -1px;
+            white-space: nowrap;
+            overflow: hidden;
+            max-width: 100%;
+        }
+
+        .dashboard-sparkbar.blue {
+            color: var(--blue);
+        }
+
+        .dashboard-sparkbar.green {
+            color: var(--green);
+        }
+
+        .dashboard-sparkbar.orange {
+            color: var(--orange);
+        }
+
+        .dashboard-sparkbar.red {
+            color: var(--red);
+        }
+
+        @media (max-width: 420px) {
+            .dashboard-sparkbar {
+                font-size: 24px;
+                letter-spacing: 0;
+            }
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin: 14px 0;
+        }
+
+        .dashboard-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 14px;
+            min-height: 132px;
+        }
+
+        .dashboard-card.metric-green {
+            border-color: rgba(48, 209, 88, 0.65);
+            background: rgba(48, 209, 88, 0.10);
+        }
+
+        .dashboard-card.metric-lime {
+            border-color: rgba(126, 217, 87, 0.65);
+            background: rgba(126, 217, 87, 0.09);
+        }
+
+        .dashboard-card.metric-yellow {
+            border-color: rgba(255, 214, 10, 0.70);
+            background: rgba(255, 214, 10, 0.09);
+        }
+
+        .dashboard-card.metric-orange {
+            border-color: rgba(255, 159, 10, 0.70);
+            background: rgba(255, 159, 10, 0.10);
+        }
+
+        .dashboard-card.metric-red {
+            border-color: rgba(255, 69, 58, 0.75);
+            background: rgba(255, 69, 58, 0.11);
+        }
+
+        .dashboard-label {
+            color: var(--muted);
+            font-size: 13px;
+            margin-bottom: 6px;
+        }
+
+        .dashboard-value {
+            font-size: 24px;
+            font-weight: 800;
+            line-height: 1.1;
+        }
+
+        .dashboard-subvalue {
+            color: var(--muted);
+            font-size: 12px;
+            margin-top: 4px;
+        }
+
+        .sparkline {
+            width: 100%;
+            height: 42px;
+            display: block;
+            margin-top: 14px;
+            overflow: visible;
+        }
+
+        .sparkline-grid {
+            stroke: rgba(255, 255, 255, 0.06);
+            stroke-width: 1;
+            vector-effect: non-scaling-stroke;
+        }
+
+        .sparkline-line {
+            fill: none;
+            stroke-width: 2.2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            vector-effect: non-scaling-stroke;
+        }
+
+        .sparkline-line.blue {
+            stroke: var(--blue);
+        }
+
+        .sparkline-line.green {
+            stroke: var(--green);
+        }
+
+        .sparkline-line.orange {
+            stroke: var(--orange);
+        }
+
+        .sparkline-line.red {
+            stroke: var(--red);
+        }
+
+        .sparkline-area-blue {
+            fill: rgba(10, 132, 255, 0.12);
+        }
+
+        .sparkline-area-green {
+            fill: rgba(48, 209, 88, 0.10);
+        }
+
+        .sparkline-area-orange {
+            fill: rgba(255, 159, 10, 0.10);
+        }
+
+        .sparkline-area-red {
+            fill: rgba(255, 69, 58, 0.10);
+        }
+
+        @media (max-width: 720px) {
+            .dashboard-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 420px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
         .stat {
             background: var(--card2);
             padding: 12px;
@@ -442,7 +600,90 @@
     {% if summary.workout_count == 0 %}
         <div class="empty">No workouts yet.</div>
     {% else %}
+        <div class="dashboard-grid">
+            <div class="dashboard-card">
+                <div class="dashboard-label">Volume</div>
+                <div class="dashboard-value">{{ "%.0f"|format(summary.total_volume) }} kg</div>
+                <div class="dashboard-subvalue">{{ summary.workout_count }} workouts</div>
 
+                {% if charts.volume.points %}
+                    <!-- <svg class="sparkline" viewBox="0 0 100 100" preserveAspectRatio="none">
+                        <line class="sparkline-grid" x1="0" y1="50" x2="100" y2="50"></line>
+                        <polygon class="sparkline-area-blue" points="{{ charts.volume.area_points }}"></polygon>
+                        <polyline class="sparkline-line blue" points="{{ charts.volume.points }}"></polyline>
+                    </svg> -->
+                    <div class="dashboard-sparkbar blue" title="Volume trend">
+                        {{ charts.sparkbars.volume }}
+                    </div>
+                {% endif %}
+            </div>
+
+            <div class="dashboard-card">
+                <div class="dashboard-label">Avg intensity</div>
+                <div class="dashboard-value">
+                    {% if summary.avg_intensity is not none %}
+                        {{ "%.1f"|format(summary.avg_intensity) }}
+                    {% else %}
+                        —
+                    {% endif %}
+                </div>
+                <div class="dashboard-subvalue">kg / rep</div>
+
+                {% if charts.intensity.points %}
+                    <!-- <svg class="sparkline" viewBox="0 0 100 100" preserveAspectRatio="none">
+                        <line class="sparkline-grid" x1="0" y1="50" x2="100" y2="50"></line>
+                        <polyline class="sparkline-line green" points="{{ charts.intensity.points }}"></polyline>
+                    </svg> -->
+                    <div class="dashboard-sparkbar green" title="Average intensity trend">
+                        {{ charts.sparkbars.intensity }}
+                    </div>
+                {% endif %}
+            </div>
+
+            <div class="dashboard-card {{ summary.avg_rpe | metric_status_class }}">
+                <div class="dashboard-label">Avg RPE</div>
+                <div class="dashboard-value">
+                    {% if summary.avg_rpe is not none %}
+                        {{ "%.1f"|format(summary.avg_rpe) }}/10
+                    {% else %}
+                        —
+                    {% endif %}
+                </div>
+                <div class="dashboard-subvalue">session difficulty</div>
+
+                {% if charts.rpe.points %}
+                    <!-- <svg class="sparkline" viewBox="0 0 100 100" preserveAspectRatio="none">
+                        <line class="sparkline-grid" x1="0" y1="50" x2="100" y2="50"></line>
+                        <polyline class="sparkline-line orange" points="{{ charts.rpe.points }}"></polyline>
+                    </svg> -->
+                    <div class="dashboard-sparkbar orange" title="RPE trend">
+                        {{ charts.sparkbars.rpe }}
+                    </div>
+                {% endif %}
+            </div>
+
+            <div class="dashboard-card {{ summary.avg_back_pain | metric_status_class }}">
+                <div class="dashboard-label">Back Pain</div>
+                <div class="dashboard-value">
+                    {% if summary.avg_back_pain is not none %}
+                        {{ "%.1f"|format(summary.avg_back_pain) }}/10
+                    {% else %}
+                        —
+                    {% endif %}
+                </div>
+                <div class="dashboard-subvalue">average after sessions</div>
+
+                {% if charts.back.points %}
+                    <!-- <svg class="sparkline" viewBox="0 0 100 100" preserveAspectRatio="none">
+                        <line class="sparkline-grid" x1="0" y1="50" x2="100" y2="50"></line>
+                        <polyline class="sparkline-line red" points="{{ charts.back.points }}"></polyline>
+                    </svg> -->
+                    <div class="dashboard-sparkbar red" title="Back pain trend">
+                        {{ charts.sparkbars.back }}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
         <div class="card">
             <h2>Summary</h2>
 

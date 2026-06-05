@@ -77,6 +77,76 @@ DEFAULT_EXERCISES = (
 ACTIVE_WORKOUT_DRAFT: dict[str, Any] | None = None
 DRAFT_LOCK = RLock()
 
+# SPARK_CHARS = "_▁▂▃▄▅▆▇█"
+
+SPARK_CHARS_INC = " ⢀⣀⣠⣤⣴⣶⣾⣿"
+SPARK_CHARS_DEC = "⣿⣷⣶⣦⣤⣄⣀⡀ "
+
+
+def build_sparkbar(
+    values: list[float | int | None],
+    width: int = 16,
+    max_value: float | None = None,
+) -> str:
+    valid_values = [float(value) for value in values if value is not None]
+
+    if not valid_values:
+        return "—"
+
+    values = list(values)
+
+    if len(values) > width:
+        bucketed_values: list[float | None] = []
+
+        for index in range(width):
+            start = int(index * len(values) / width)
+            end = int((index + 1) * len(values) / width)
+
+            bucket = [
+                float(value)
+                for value in values[start:end]
+                if value is not None
+            ]
+
+            bucketed_values.append(
+                sum(bucket) / len(bucket) if bucket else None
+            )
+
+        values = bucketed_values
+
+    chart_max = max_value if max_value is not None else max(valid_values)
+
+    if chart_max <= 0:
+        return SPARK_CHARS_INC[0] * len(values)
+
+    max_index = len(SPARK_CHARS_INC) - 1
+    result: list[str] = []
+
+    previous_value: float | None = None
+
+    for value in values:
+        if value is None:
+            result.append("·")
+            continue
+
+        numeric_value = float(value)
+        ratio = max(0.0, min(1.0, numeric_value / chart_max))
+        level = round(ratio * max_index)
+
+        if previous_value is not None and numeric_value < previous_value:
+            # DEC is stored high→low, so invert level:
+            # high value -> ⣿, low value -> space
+            char = SPARK_CHARS_DEC[max_index - level]
+        else:
+            # INC is stored low→high:
+            # low value -> space, high value -> ⣿
+            char = SPARK_CHARS_INC[level]
+
+        result.append(char)
+        previous_value = numeric_value
+
+    return "".join(result)
+
 def build_calendar_heatmap(
     workouts: list[dict[str, Any]],
     value_key: str,
@@ -315,6 +385,26 @@ def build_stats2_charts(stats: dict[str, Any]) -> dict[str, Any]:
         "scatter": build_scatter_points(workouts),
         "back_calendar": build_calendar_heatmap(workouts, "lower_back_pain"),
         "rpe_calendar": build_calendar_heatmap(workouts, "session_rpe"),
+        "sparkbars": {
+            "volume": build_sparkbar(
+                [workout["total_volume"] for workout in workouts],
+                width=14,
+            ),
+            "intensity": build_sparkbar(
+                [workout["avg_intensity"] for workout in workouts],
+                width=14,
+            ),
+            "rpe": build_sparkbar(
+                [workout["session_rpe"] for workout in workouts],
+                width=14,
+                max_value=10,
+            ),
+            "back": build_sparkbar(
+                [workout["lower_back_pain"] for workout in workouts],
+                width=14,
+                max_value=10,
+            ),
+        },
         "best_strength": best_strength,
         "max_e1rm": max_e1rm,
         "max_exercise_volume": max_exercise_volume,
