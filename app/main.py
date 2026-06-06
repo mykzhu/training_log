@@ -74,6 +74,296 @@ DEFAULT_EXERCISES = (
     "Crunches",
 )
 
+EXERCISE_LOAD_PROFILES: dict[str, dict[str, float | str]] = {
+    "deadlift": {
+        "category": "heavy compound",
+        "exercise_factor": 1.8,
+        "compound_factor": 1.8,
+        "back_factor": 1.8,
+    },
+    "goblet squat": {
+        "category": "legs compound",
+        "exercise_factor": 1.5,
+        "compound_factor": 1.5,
+        "back_factor": 1.1,
+    },
+    "db bench press": {
+        "category": "upper compound",
+        "exercise_factor": 1.2,
+        "compound_factor": 1.2,
+        "back_factor": 0.2,
+    },
+    "db row": {
+        "category": "upper pull",
+        "exercise_factor": 1.2,
+        "compound_factor": 1.2,
+        "back_factor": 0.7,
+    },
+    "ez curl": {
+        "category": "arms",
+        "exercise_factor": 0.75,
+        "compound_factor": 0.25,
+        "back_factor": 0.1,
+    },
+    "triceps extension": {
+        "category": "arms",
+        "exercise_factor": 0.75,
+        "compound_factor": 0.25,
+        "back_factor": 0.1,
+    },
+    "lateral raise": {
+        "category": "shoulders",
+        "exercise_factor": 1.0,
+        "compound_factor": 0.4,
+        "back_factor": 0.15,
+    },
+    "crunches": {
+        "category": "core",
+        "exercise_factor": 0.5,
+        "compound_factor": 0.2,
+        "back_factor": 0.25,
+    },
+}
+
+DEFAULT_LOAD_PROFILE = {
+    "category": "accessory",
+    "exercise_factor": 1.0,
+    "compound_factor": 0.5,
+    "back_factor": 0.3,
+}
+
+
+def get_exercise_load_profile(exercise_name: str) -> dict[str, float | str]:
+    normalized = exercise_name.strip().lower()
+
+    for key, profile in EXERCISE_LOAD_PROFILES.items():
+        if key in normalized:
+            return profile
+
+    return DEFAULT_LOAD_PROFILE
+
+
+def rep_factor(reps: int) -> float:
+    if reps <= 0:
+        return 0.0
+    if reps <= 3:
+        return 1.15
+    if reps <= 8:
+        return 1.10
+    if reps <= 15:
+        return 1.00
+    return 0.85
+
+
+def intensity_factor(relative_intensity: float | None) -> float:
+    if relative_intensity is None:
+        return 1.0
+
+    if relative_intensity < 0.55:
+        return 0.5
+    if relative_intensity < 0.70:
+        return 0.8
+    if relative_intensity < 0.80:
+        return 1.0
+    if relative_intensity < 0.90:
+        return 1.25
+
+    return 1.5
+
+
+def rpe_factor(session_rpe: int | float | None) -> float:
+    if session_rpe is None:
+        return 1.0
+
+    return 0.7 + float(session_rpe) * 0.06
+
+
+def workout_load_label(load_score: float) -> str:
+    if load_score < 4:
+        return "Light"
+    if load_score < 8:
+        return "Medium"
+    if load_score < 14:
+        return "Hard"
+    return "Very hard"
+
+
+def load_label_class(load_label: str | None) -> str:
+    if load_label == "Light":
+        return "metric-green"
+    if load_label == "Medium":
+        return "metric-yellow"
+    if load_label == "Hard":
+        return "metric-orange"
+    if load_label == "Very hard":
+        return "metric-red"
+
+    return "metric-neutral"
+
+def get_best_e1rm_by_exercise(
+    workout_exercises: list[dict[str, Any]],
+    current_workout_id: int | None = None,
+) -> dict[int, float]:
+    exercise_ids = sorted(
+        {
+            int(item["exercise_id"])
+            for item in workout_exercises
+            if item.get("exercise_id") is not None
+        }
+    )
+
+    if not exercise_ids:
+        return {}
+
+    placeholders = ", ".join("?" for _ in exercise_ids)
+    params: list[Any] = list(exercise_ids)
+
+    workout_filter = ""
+    if current_workout_id is not None:
+        workout_filter = "AND w.id != ?"
+        params.append(current_workout_id)
+
+    with get_db() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT
+                we.exercise_id,
+                se.weight,
+                se.reps
+            FROM set_entries se
+            JOIN workout_exercises we ON we.id = se.workout_exercise_id
+            JOIN workouts w ON w.id = we.workout_id
+            WHERE we.exercise_id IN ({placeholders})
+              {workout_filter}
+            """,
+            params,
+        ).fetchall()
+
+    best_by_exercise: dict[int, float] = {}
+
+    for row in rows:
+        exercise_id = int(row["exercise_id"])
+        weight = float(row["weight"])
+        reps = int(row["reps"])
+        e1rm = estimated_1rm(weight, reps)
+
+        if e1rm is None:
+            continue
+
+        if exercise_id not in best_by_exercise or e1rm > best_by_exercise[exercise_id]:
+            best_by_exercise[exercise_id] = e1rm
+
+    return best_by_exercise
+
+def calculate_workout_load_metrics(
+    workout_exercises: list[dict[str, Any]],
+    session_rpe: int | float | None = None,
+    current_workout_id: int | None = None,
+) -> dict[str, Any]:
+    best_e1rm_by_exercise = get_best_e1rm_by_exercise(
+        workout_exercises=workout_exercises,
+        current_workout_id=current_workout_id,
+    )
+
+    raw_load_score = 0.0
+    compound_score = 0.0
+    intensity_score = 0.0
+    back_stress_score = 0.0
+    scored_sets = 0
+    known_intensity_sets = 0
+
+    exercise_breakdown: list[dict[str, Any]] = []
+
+    for item in workout_exercises:
+        exercise_id = int(item["exercise_id"])
+        exercise_name = str(item["exercise_name"])
+        profile = get_exercise_load_profile(exercise_name)
+
+        exercise_factor = float(profile["exercise_factor"])
+        compound_factor = float(profile["compound_factor"])
+        back_factor = float(profile["back_factor"])
+        category = str(profile["category"])
+
+        exercise_load = 0.0
+        exercise_compound = 0.0
+        exercise_intensity = 0.0
+        exercise_back = 0.0
+
+        best_e1rm = best_e1rm_by_exercise.get(exercise_id)
+
+        for set_row in item["sets"]:
+            weight = float(set_row["weight"])
+            reps = int(set_row["reps"])
+
+            if reps <= 0:
+                continue
+
+            set_e1rm = estimated_1rm(weight, reps)
+            relative_intensity = None
+
+            if best_e1rm and best_e1rm > 0 and set_e1rm is not None:
+                relative_intensity = min(1.5, set_e1rm / best_e1rm)
+                known_intensity_sets += 1
+
+            set_rep_factor = rep_factor(reps)
+            set_intensity_factor = intensity_factor(relative_intensity)
+
+            set_score = exercise_factor * set_rep_factor * set_intensity_factor
+            set_compound_score = compound_factor * set_rep_factor
+            set_back_score = back_factor * set_rep_factor * set_intensity_factor
+
+            raw_load_score += set_score
+            compound_score += set_compound_score
+            back_stress_score += set_back_score
+
+            if relative_intensity is not None:
+                intensity_score += relative_intensity * 100
+
+            exercise_load += set_score
+            exercise_compound += set_compound_score
+            exercise_back += set_back_score
+
+            if relative_intensity is not None:
+                exercise_intensity += relative_intensity * 100
+
+            scored_sets += 1
+
+        exercise_breakdown.append(
+            {
+                "exercise_id": exercise_id,
+                "exercise_name": exercise_name,
+                "category": category,
+                "load_score": exercise_load,
+                "compound_score": exercise_compound,
+                "intensity_score": (
+                    exercise_intensity / len(item["sets"])
+                    if item["sets"]
+                    else None
+                ),
+                "back_stress_score": exercise_back,
+            }
+        )
+
+    rpe_multiplier = rpe_factor(session_rpe)
+    load_score = raw_load_score * rpe_multiplier
+    load_label = workout_load_label(load_score)
+
+    return {
+        "load_score": load_score,
+        "raw_load_score": raw_load_score,
+        "load_label": load_label,
+        "rpe_factor": rpe_multiplier,
+        "compound_score": compound_score,
+        "intensity_score": (
+            intensity_score / known_intensity_sets
+            if known_intensity_sets
+            else None
+        ),
+        "back_stress_score": back_stress_score,
+        "scored_sets": scored_sets,
+        "exercise_breakdown": exercise_breakdown,
+    }
+
 ACTIVE_WORKOUT_DRAFT: dict[str, Any] | None = None
 DRAFT_LOCK = RLock()
 
@@ -385,6 +675,9 @@ def build_stats2_charts(stats: dict[str, Any]) -> dict[str, Any]:
         "scatter": build_scatter_points(workouts),
         "back_calendar": build_calendar_heatmap(workouts, "lower_back_pain"),
         "rpe_calendar": build_calendar_heatmap(workouts, "session_rpe"),
+        "load": build_line_chart_series(workouts, "load_score"),
+        "compound": build_line_chart_series(workouts, "compound_score"),
+        "back_stress": build_line_chart_series(workouts, "back_stress_score"),
         "sparkbars": {
             "volume": build_sparkbar(
                 [workout["total_volume"] for workout in workouts],
@@ -403,6 +696,18 @@ def build_stats2_charts(stats: dict[str, Any]) -> dict[str, Any]:
                 [workout["lower_back_pain"] for workout in workouts],
                 width=14,
                 max_value=10,
+            ),
+            "load": build_sparkbar(
+                [workout["load_score"] for workout in workouts],
+                width=14,
+            ),
+            "compound": build_sparkbar(
+                [workout["compound_score"] for workout in workouts],
+                width=14,
+            ),
+            "back_stress": build_sparkbar(
+                [workout["back_stress_score"] for workout in workouts],
+                width=14,
             ),
         },
         "best_strength": best_strength,
@@ -445,6 +750,12 @@ def build_stats(limit: int = 30) -> dict[str, Any]:
         if total_reps:
             avg_intensity = total_volume / total_reps
 
+        load_metrics = calculate_workout_load_metrics(
+            workout_exercises=details,
+            session_rpe=workout["session_rpe"],
+            current_workout_id=workout["id"],
+        )
+
         workout_items.append(
             {
                 "id": workout["id"],
@@ -456,6 +767,11 @@ def build_stats(limit: int = 30) -> dict[str, Any]:
                 "avg_intensity": avg_intensity,
                 "session_rpe": workout["session_rpe"],
                 "lower_back_pain": workout["lower_back_pain"],
+                "load_score": load_metrics["load_score"],
+                "load_label": load_metrics["load_label"],
+                "compound_score": load_metrics["compound_score"],
+                "intensity_score": load_metrics["intensity_score"],
+                "back_stress_score": load_metrics["back_stress_score"],
             }
         )
 
@@ -509,6 +825,16 @@ def build_stats(limit: int = 30) -> dict[str, Any]:
         if item["lower_back_pain"] is not None
     ]
 
+    total_load_score = sum(item["load_score"] for item in workout_items)
+    total_compound_score = sum(item["compound_score"] for item in workout_items)
+    total_back_stress_score = sum(item["back_stress_score"] for item in workout_items)
+
+    intensity_scores = [
+        float(item["intensity_score"])
+        for item in workout_items
+        if item["intensity_score"] is not None
+    ]
+
     return {
         "workouts": workout_items,
         "exercise_stats": sorted(
@@ -524,6 +850,17 @@ def build_stats(limit: int = 30) -> dict[str, Any]:
             "avg_intensity": total_volume / total_reps if total_reps else None,
             "avg_rpe": sum(rpe_values) / len(rpe_values) if rpe_values else None,
             "avg_back_pain": sum(back_values) / len(back_values) if back_values else None,
+            "total_load_score": total_load_score,
+            "avg_load_score": total_load_score / len(workout_items) if workout_items else None,
+            "total_compound_score": total_compound_score,
+            "avg_compound_score": total_compound_score / len(workout_items) if workout_items else None,
+            "total_back_stress_score": total_back_stress_score,
+            "avg_back_stress_score": total_back_stress_score / len(workout_items) if workout_items else None,
+            "avg_relative_intensity": (
+                sum(intensity_scores) / len(intensity_scores)
+                if intensity_scores
+                else None
+            ),
         },
     }
 
@@ -827,6 +1164,7 @@ templates.env.filters["datetime_local_value"] = datetime_local_value
 templates.env.filters["format_duration"] = format_duration
 templates.env.filters["rpe_option_label"] = rpe_option_label
 templates.env.filters["metric_status_class"] = metric_status_class
+templates.env.filters["load_label_class"] = load_label_class
 
 
 @app.middleware("http")
@@ -1454,6 +1792,7 @@ def index(request: Request):
                 "total_reps": 0,
                 "total_sets": 0,
                 "active_elapsed_seconds": 0,
+                "load_metrics": None,
             },
         )
 
@@ -1470,6 +1809,12 @@ def index(request: Request):
     total_volume = sum(item["total_volume"] for item in workout_exercises)
     total_reps = sum(item["total_reps"] for item in workout_exercises)
     total_sets = sum(len(item["sets"]) for item in workout_exercises)
+
+    load_metrics = calculate_workout_load_metrics(
+        workout_exercises=workout_exercises,
+        session_rpe=workout["session_rpe"],
+        current_workout_id=None,
+    )
 
     existing_weights: list[float] = []
     for item in workout_exercises:
@@ -1500,6 +1845,7 @@ def index(request: Request):
             "total_reps": total_reps,
             "total_sets": total_sets,
             "active_elapsed_seconds": active_elapsed_seconds,
+            "load_metrics": load_metrics,
         },
     )
 
@@ -1992,6 +2338,12 @@ def edit_workout_page(request: Request, workout_id: int):
     total_sets = sum(len(item["sets"]) for item in workout_exercises)
     analysis = build_workout_analysis(workout_id, workout_exercises)
 
+    load_metrics = calculate_workout_load_metrics(
+        workout_exercises=workout_exercises,
+        session_rpe=workout["session_rpe"],
+        current_workout_id=workout_id,
+    )
+
     existing_weights: list[float] = []
     for item in workout_exercises:
         for set_row in item["sets"]:
@@ -2017,6 +2369,7 @@ def edit_workout_page(request: Request, workout_id: int):
             "total_reps": total_reps,
             "total_sets": total_sets,
             "analysis": analysis,
+            "load_metrics": load_metrics,
         },
     )
 
@@ -2197,6 +2550,12 @@ def history(request: Request):
 
     for workout in workouts:
         details = get_workout_details(workout["id"])
+        load_metrics = calculate_workout_load_metrics(
+            workout_exercises=details,
+            session_rpe=workout["session_rpe"],
+            current_workout_id=workout["id"],
+        )
+
         enriched.append(
             {
                 "workout": workout,
@@ -2204,6 +2563,7 @@ def history(request: Request):
                 "total_reps": sum(item["total_reps"] for item in details),
                 "total_sets": sum(len(item["sets"]) for item in details),
                 "exercises_count": len(details),
+                "load_metrics": load_metrics,
             }
         )
 
@@ -2240,6 +2600,12 @@ def workout_detail(request: Request, workout_id: int):
     total_sets = sum(len(item["sets"]) for item in workout_exercises)
     analysis = build_workout_analysis(workout_id, workout_exercises)
 
+    load_metrics = calculate_workout_load_metrics(
+        workout_exercises=workout_exercises,
+        session_rpe=workout["session_rpe"],
+        current_workout_id=workout_id,
+    )
+
     logger.debug(
         "page.workout_detail workout_id=%s exercises=%s sets=%s",
         workout_id,
@@ -2257,6 +2623,7 @@ def workout_detail(request: Request, workout_id: int):
             "total_reps": total_reps,
             "total_sets": total_sets,
             "analysis": analysis,
+            "load_metrics": load_metrics,
         },
     )
 

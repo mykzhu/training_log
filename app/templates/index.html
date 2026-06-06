@@ -299,10 +299,21 @@
                 <strong>{{ "%.1f"|format(total_volume) }}</strong>
                 <span class="muted">kg volume</span>
             </div>
+            {% if load_metrics %}
+                <div class="stat {{ load_metrics.load_label | load_label_class }}">
+                    <strong>{{ load_metrics.load_label }}</strong>
+                    <span class="muted">{{ "%.1f"|format(load_metrics.load_score) }} load</span>
+                </div>
+
+                <div class="stat {{ load_metrics.back_stress_score | metric_status_class }}">
+                    <strong>{{ "%.1f"|format(load_metrics.back_stress_score) }}</strong>
+                    <span class="muted">back stress</span>
+                </div>
+            {% endif %}
         </div>
 
         {% if workout_exercises %}
-            {{ render_analysis(workout, workout_exercises, total_volume, total_reps, analysis) }}
+            {{ render_analysis(workout, workout_exercises, total_volume, total_reps, none, load_metrics) }}
         {% endif %}
 
         <div class="card">

@@ -150,6 +150,30 @@
             border: 1px solid rgba(255, 69, 58, 0.45);
         }
 
+        .status-badge.metric-green {
+            border: 1px solid rgba(48, 209, 88, 0.65);
+            background: rgba(48, 209, 88, 0.16);
+            color: #30d158;
+        }
+
+        .status-badge.metric-yellow {
+            border: 1px solid rgba(255, 214, 10, 0.70);
+            background: rgba(255, 214, 10, 0.14);
+            color: #ffd60a;
+        }
+
+        .status-badge.metric-orange {
+            border: 1px solid rgba(255, 159, 10, 0.70);
+            background: rgba(255, 159, 10, 0.16);
+            color: #ff9f0a;
+        }
+
+        .status-badge.metric-red {
+            border: 1px solid rgba(255, 69, 58, 0.75);
+            background: rgba(255, 69, 58, 0.18);
+            color: #ff453a;
+        }
+
         .stat.metric-neutral {
             border: 1px solid var(--border);
         }
@@ -240,6 +264,13 @@
                 {% else %}
                     <span class="status-badge status-active">active</span>
                 {% endif %}
+
+                {% if item.load_metrics %}
+                    <span class="status-badge {{ item.load_metrics.load_label | load_label_class }}">
+                        {{ item.load_metrics.load_label }} · {{ "%.1f"|format(item.load_metrics.load_score) }}
+                    </span>
+                {% endif %}
+
                 · Duration: {{ item.workout.duration_seconds | format_duration }}
             </div>
 

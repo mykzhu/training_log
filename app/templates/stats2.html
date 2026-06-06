@@ -602,6 +602,23 @@
     {% else %}
         <div class="dashboard-grid">
             <div class="dashboard-card">
+                <div class="dashboard-label">Avg load</div>
+                <div class="dashboard-value">
+                    {% if summary.avg_load_score is not none %}
+                        {{ "%.1f"|format(summary.avg_load_score) }}
+                    {% else %}
+                        —
+                    {% endif %}
+                </div>
+                <div class="dashboard-subvalue">difficulty score</div>
+
+                {% if charts.sparkbars.load %}
+                    <div class="dashboard-sparkbar blue" title="Load trend">
+                        {{ charts.sparkbars.load }}
+                    </div>
+                {% endif %}
+            </div>
+            <div class="dashboard-card">
                 <div class="dashboard-label">Volume</div>
                 <div class="dashboard-value">{{ "%.0f"|format(summary.total_volume) }} kg</div>
                 <div class="dashboard-subvalue">{{ summary.workout_count }} workouts</div>
@@ -718,7 +735,38 @@
                     </strong>
                     <span class="muted">kg / rep</span>
                 </div>
+                <div class="stat">
+                    <strong>
+                        {% if summary.avg_load_score is not none %}
+                            {{ "%.1f"|format(summary.avg_load_score) }}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </strong>
+                    <span class="muted">avg load</span>
+                </div>
 
+                <div class="stat">
+                    <strong>
+                        {% if summary.avg_compound_score is not none %}
+                            {{ "%.1f"|format(summary.avg_compound_score) }}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </strong>
+                    <span class="muted">avg compound</span>
+                </div>
+
+                <div class="stat">
+                    <strong>
+                        {% if summary.avg_back_stress_score is not none %}
+                            {{ "%.1f"|format(summary.avg_back_stress_score) }}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </strong>
+                    <span class="muted">avg back stress</span>
+                </div>
                 <div class="stat {{ summary.avg_rpe | metric_status_class }}">
                     <strong>
                         {% if summary.avg_rpe is not none %}
@@ -778,6 +826,39 @@
 
             <div class="note">
                 This shows total training volume per workout. Use it together with RPE and Back Pain.
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="chart-card-header">
+                <h2>Load score trend</h2>
+                <span class="muted small">line chart</span>
+            </div>
+
+            {% if charts.load.points %}
+                <svg class="svg-chart compact" viewBox="-4 -4 108 112" preserveAspectRatio="none">
+                    <line class="grid-line" x1="0" y1="25" x2="100" y2="25"></line>
+                    <line class="grid-line" x1="0" y1="50" x2="100" y2="50"></line>
+                    <line class="grid-line" x1="0" y1="75" x2="100" y2="75"></line>
+                    <line class="grid-line" x1="0" y1="100" x2="100" y2="100"></line>
+
+                    <polyline class="line-blue" points="{{ charts.load.points }}"></polyline>
+
+                    {% for marker in charts.load.markers %}
+                        <a href="/workouts/{{ marker.workout_id }}">
+                            <circle class="marker marker-blue" cx="{{ marker.x }}" cy="{{ marker.y }}" r="1.8">
+                                <title>{{ marker.date }} · load {{ "%.1f"|format(marker.value) }}</title>
+                            </circle>
+                        </a>
+                    {% endfor %}
+                </svg>
+            {% else %}
+                <div class="empty">No load score data.</div>
+            {% endif %}
+
+            <div class="note">
+                Load score combines exercise type, reps, relative intensity and RPE.
+                It is better than tonnage for comparing heavy compound work with accessory volume.
             </div>
         </div>
 
