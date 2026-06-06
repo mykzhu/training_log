@@ -312,14 +312,74 @@
             height: 170px;
         }
 
+        .chart-plot {
+            position: relative;
+            padding-left: 46px;
+            padding-bottom: 22px;
+        }
+
+        .chart-plot .svg-chart {
+            margin-top: 0;
+        }
+
         .grid-line {
             stroke: rgba(255, 255, 255, 0.08);
             stroke-width: 1;
             vector-effect: non-scaling-stroke;
         }
 
+        .grid-line-x {
+            stroke: rgba(255, 255, 255, 0.05);
+        }
+
         .axis-label {
             display: none;
+        }
+
+        .axis-values {
+            position: absolute;
+            color: var(--muted);
+            font-size: 11px;
+            line-height: 1;
+            pointer-events: none;
+            user-select: none;
+        }
+
+        .axis-tick {
+            position: absolute;
+            white-space: nowrap;
+        }
+
+        .y-axis-values {
+            top: 0;
+            bottom: 22px;
+            left: 0;
+            width: 42px;
+        }
+
+        .y-axis-values .axis-tick {
+            right: 8px;
+            transform: translateY(-50%);
+        }
+
+        .x-axis-values {
+            left: 46px;
+            right: 0;
+            bottom: 0;
+            height: 18px;
+        }
+
+        .x-axis-values .axis-tick {
+            top: 3px;
+            transform: translateX(-50%);
+        }
+
+        .x-axis-values .axis-tick.first {
+            transform: none;
+        }
+
+        .x-axis-values .axis-tick.last {
+            transform: translateX(-100%);
         }
 
         .line-blue,
@@ -575,6 +635,78 @@
 {% set workouts = stats.workouts %}
 {% set exercise_stats = stats.exercise_stats %}
 
+{% macro axis_number(value, integer=False) -%}
+    {%- if integer -%}
+        {{- "%.0f"|format(value) -}}
+    {%- elif value >= 1000 -%}
+        {{- "%.1fk"|format(value / 1000) -}}
+    {%- elif value >= 100 -%}
+        {{- "%.0f"|format(value) -}}
+    {%- else -%}
+        {{- "%.1f"|format(value) -}}
+    {%- endif -%}
+{%- endmacro %}
+
+{% macro chart_y_axis(chart, scale10=False) -%}
+    {% if scale10 %}
+        {% set y_ticks = [0, 20, 40, 60, 80, 100] %}
+    {% else %}
+        {% set y_ticks = [0, 25, 50, 75, 100] %}
+    {% endif %}
+
+    <div class="axis-values y-axis-values">
+        {% for y in y_ticks %}
+            {% set value = chart.max_value * (100 - y) / 100 %}
+            <span class="axis-tick" style="top: {{ y }}%;">
+                {{ axis_number(value, scale10) }}
+            </span>
+        {% endfor %}
+    </div>
+{%- endmacro %}
+
+{% macro chart_x_axis(chart, x_tick_step=3) -%}
+    <div class="axis-values x-axis-values">
+        {% for marker in chart.markers %}
+            {% set show_tick =
+                loop.first
+                or loop.last
+                or loop.index0 % x_tick_step == 0
+            %}
+            {% if show_tick %}
+                <span
+                    class="axis-tick{% if loop.first %} first{% elif loop.last %} last{% endif %}"
+                    style="left: {{ marker.x }}%;"
+                >
+                    {{ marker.date[5:] }}
+                </span>
+            {% endif %}
+        {% endfor %}
+    </div>
+{%- endmacro %}
+
+{% macro chart_grid(chart, scale10=False, x_tick_step=3) -%}
+    {% if scale10 %}
+        {% set y_ticks = [0, 20, 40, 60, 80, 100] %}
+    {% else %}
+        {% set y_ticks = [0, 25, 50, 75, 100] %}
+    {% endif %}
+
+    {% for y in y_ticks %}
+        <line class="grid-line" x1="0" y1="{{ y }}" x2="100" y2="{{ y }}"></line>
+    {% endfor %}
+
+    {% for marker in chart.markers %}
+        {% set show_tick =
+            loop.first
+            or loop.last
+            or loop.index0 % x_tick_step == 0
+        %}
+        {% if show_tick %}
+            <line class="grid-line grid-line-x" x1="{{ marker.x }}" y1="0" x2="{{ marker.x }}" y2="100"></line>
+        {% endif %}
+    {% endfor %}
+{%- endmacro %}
+
 <div class="page">
     <div class="topbar">
         <div>
@@ -787,23 +919,26 @@
             </div>
 
             {% if charts.volume.points %}
-                <svg class="svg-chart" viewBox="-4 -4 108 112" preserveAspectRatio="none">
-                    <line class="grid-line" x1="0" y1="25" x2="100" y2="25"></line>
-                    <line class="grid-line" x1="0" y1="50" x2="100" y2="50"></line>
-                    <line class="grid-line" x1="0" y1="75" x2="100" y2="75"></line>
-                    <line class="grid-line" x1="0" y1="100" x2="100" y2="100"></line>
+                <div class="chart-plot">
+                    {{ chart_y_axis(charts.volume) }}
 
-                    <polygon class="area-blue" points="{{ charts.volume.area_points }}"></polygon>
-                    <polyline class="line-blue" points="{{ charts.volume.points }}"></polyline>
+                    <svg class="svg-chart" viewBox="-1 -1 102 102" preserveAspectRatio="none">
+                        {{ chart_grid(charts.volume) }}
 
-                    {% for marker in charts.volume.markers %}
-                        <a href="/workouts/{{ marker.workout_id }}">
-                            <circle class="marker marker-blue" cx="{{ marker.x }}" cy="{{ marker.y }}" r="1.6">
-                                <title>{{ marker.date }} · {{ "%.1f"|format(marker.value) }} kg</title>
-                            </circle>
-                        </a>
-                    {% endfor %}
-                </svg>
+                        <polygon class="area-blue" points="{{ charts.volume.area_points }}"></polygon>
+                        <polyline class="line-blue" points="{{ charts.volume.points }}"></polyline>
+
+                        {% for marker in charts.volume.markers %}
+                            <a href="/workouts/{{ marker.workout_id }}">
+                                <circle class="marker marker-blue" cx="{{ marker.x }}" cy="{{ marker.y }}" r="1.6">
+                                    <title>{{ marker.date }} · {{ "%.1f"|format(marker.value) }} kg</title>
+                                </circle>
+                            </a>
+                        {% endfor %}
+                    </svg>
+
+                    {{ chart_x_axis(charts.volume) }}
+                </div>
             {% else %}
                 <div class="empty">No volume data.</div>
             {% endif %}
@@ -820,22 +955,25 @@
             </div>
 
             {% if charts.load.points %}
-                <svg class="svg-chart compact" viewBox="-4 -4 108 112" preserveAspectRatio="none">
-                    <line class="grid-line" x1="0" y1="25" x2="100" y2="25"></line>
-                    <line class="grid-line" x1="0" y1="50" x2="100" y2="50"></line>
-                    <line class="grid-line" x1="0" y1="75" x2="100" y2="75"></line>
-                    <line class="grid-line" x1="0" y1="100" x2="100" y2="100"></line>
+                <div class="chart-plot">
+                    {{ chart_y_axis(charts.load) }}
 
-                    <polyline class="line-blue" points="{{ charts.load.points }}"></polyline>
+                    <svg class="svg-chart compact" viewBox="-1 -1 102 102" preserveAspectRatio="none">
+                        {{ chart_grid(charts.load) }}
 
-                    {% for marker in charts.load.markers %}
-                        <a href="/workouts/{{ marker.workout_id }}">
-                            <circle class="marker marker-blue" cx="{{ marker.x }}" cy="{{ marker.y }}" r="1.8">
-                                <title>{{ marker.date }} · load {{ "%.1f"|format(marker.value) }}</title>
-                            </circle>
-                        </a>
-                    {% endfor %}
-                </svg>
+                        <polyline class="line-blue" points="{{ charts.load.points }}"></polyline>
+
+                        {% for marker in charts.load.markers %}
+                            <a href="/workouts/{{ marker.workout_id }}">
+                                <circle class="marker marker-blue" cx="{{ marker.x }}" cy="{{ marker.y }}" r="1.8">
+                                    <title>{{ marker.date }} · load {{ "%.1f"|format(marker.value) }}</title>
+                                </circle>
+                            </a>
+                        {% endfor %}
+                    </svg>
+
+                    {{ chart_x_axis(charts.load) }}
+                </div>
             {% else %}
                 <div class="empty">No load score data.</div>
             {% endif %}
@@ -853,22 +991,25 @@
             </div>
 
             {% if charts.intensity.points %}
-                <svg class="svg-chart compact" viewBox="-4 -4 108 112" preserveAspectRatio="none">
-                    <line class="grid-line" x1="0" y1="25" x2="100" y2="25"></line>
-                    <line class="grid-line" x1="0" y1="50" x2="100" y2="50"></line>
-                    <line class="grid-line" x1="0" y1="75" x2="100" y2="75"></line>
-                    <line class="grid-line" x1="0" y1="100" x2="100" y2="100"></line>
+                <div class="chart-plot">
+                    {{ chart_y_axis(charts.intensity) }}
 
-                    <polyline class="line-green" points="{{ charts.intensity.points }}"></polyline>
+                    <svg class="svg-chart compact" viewBox="-1 -1 102 102" preserveAspectRatio="none">
+                        {{ chart_grid(charts.intensity) }}
 
-                    {% for marker in charts.intensity.markers %}
-                        <a href="/workouts/{{ marker.workout_id }}">
-                            <circle class="marker marker-green" cx="{{ marker.x }}" cy="{{ marker.y }}" r="1.6">
-                                <title>{{ marker.date }} · {{ "%.1f"|format(marker.value) }} kg/rep</title>
-                            </circle>
-                        </a>
-                    {% endfor %}
-                </svg>
+                        <polyline class="line-green" points="{{ charts.intensity.points }}"></polyline>
+
+                        {% for marker in charts.intensity.markers %}
+                            <a href="/workouts/{{ marker.workout_id }}">
+                                <circle class="marker marker-green" cx="{{ marker.x }}" cy="{{ marker.y }}" r="1.6">
+                                    <title>{{ marker.date }} · {{ "%.1f"|format(marker.value) }} kg/rep</title>
+                                </circle>
+                            </a>
+                        {% endfor %}
+                    </svg>
+
+                    {{ chart_x_axis(charts.intensity) }}
+                </div>
             {% else %}
                 <div class="empty">No intensity data.</div>
             {% endif %}
@@ -886,23 +1027,25 @@
                 </div>
 
                 {% if charts.rpe.points %}
-                    <svg class="svg-chart compact" viewBox="-4 -4 108 112" preserveAspectRatio="none">
-                        <line class="grid-line" x1="0" y1="20" x2="100" y2="20"></line>
-                        <line class="grid-line" x1="0" y1="40" x2="100" y2="40"></line>
-                        <line class="grid-line" x1="0" y1="60" x2="100" y2="60"></line>
-                        <line class="grid-line" x1="0" y1="80" x2="100" y2="80"></line>
-                        <line class="grid-line" x1="0" y1="100" x2="100" y2="100"></line>
+                    <div class="chart-plot">
+                        {{ chart_y_axis(charts.rpe, scale10=True) }}
 
-                        <polyline class="line-orange" points="{{ charts.rpe.points }}"></polyline>
+                        <svg class="svg-chart compact" viewBox="-1 -1 102 102" preserveAspectRatio="none">
+                            {{ chart_grid(charts.rpe, scale10=True) }}
 
-                        {% for marker in charts.rpe.markers %}
-                            <a href="/workouts/{{ marker.workout_id }}">
-                                <circle class="marker marker-orange" cx="{{ marker.x }}" cy="{{ marker.y }}" r="1.8">
-                                    <title>{{ marker.date }} · RPE {{ "%.0f"|format(marker.value) }}/10</title>
-                                </circle>
-                            </a>
-                        {% endfor %}
-                    </svg>
+                            <polyline class="line-orange" points="{{ charts.rpe.points }}"></polyline>
+
+                            {% for marker in charts.rpe.markers %}
+                                <a href="/workouts/{{ marker.workout_id }}">
+                                    <circle class="marker marker-orange" cx="{{ marker.x }}" cy="{{ marker.y }}" r="1.8">
+                                        <title>{{ marker.date }} · RPE {{ "%.0f"|format(marker.value) }}/10</title>
+                                    </circle>
+                                </a>
+                            {% endfor %}
+                        </svg>
+
+                        {{ chart_x_axis(charts.rpe) }}
+                    </div>
                 {% else %}
                     <div class="empty">No RPE data.</div>
                 {% endif %}
@@ -915,23 +1058,25 @@
                 </div>
 
                 {% if charts.back.points %}
-                    <svg class="svg-chart compact" viewBox="-4 -4 108 112" preserveAspectRatio="none">
-                        <line class="grid-line" x1="0" y1="20" x2="100" y2="20"></line>
-                        <line class="grid-line" x1="0" y1="40" x2="100" y2="40"></line>
-                        <line class="grid-line" x1="0" y1="60" x2="100" y2="60"></line>
-                        <line class="grid-line" x1="0" y1="80" x2="100" y2="80"></line>
-                        <line class="grid-line" x1="0" y1="100" x2="100" y2="100"></line>
+                    <div class="chart-plot">
+                        {{ chart_y_axis(charts.back, scale10=True) }}
 
-                        <polyline class="line-red" points="{{ charts.back.points }}"></polyline>
+                        <svg class="svg-chart compact" viewBox="-1 -1 102 102" preserveAspectRatio="none">
+                            {{ chart_grid(charts.back, scale10=True) }}
 
-                        {% for marker in charts.back.markers %}
-                            <a href="/workouts/{{ marker.workout_id }}">
-                                <circle class="marker marker-red" cx="{{ marker.x }}" cy="{{ marker.y }}" r="1.8">
-                                    <title>{{ marker.date }} · Back Pain {{ "%.0f"|format(marker.value) }}/10</title>
-                                </circle>
-                            </a>
-                        {% endfor %}
-                    </svg>
+                            <polyline class="line-red" points="{{ charts.back.points }}"></polyline>
+
+                            {% for marker in charts.back.markers %}
+                                <a href="/workouts/{{ marker.workout_id }}">
+                                    <circle class="marker marker-red" cx="{{ marker.x }}" cy="{{ marker.y }}" r="1.8">
+                                        <title>{{ marker.date }} · Back Pain {{ "%.0f"|format(marker.value) }}/10</title>
+                                    </circle>
+                                </a>
+                            {% endfor %}
+                        </svg>
+
+                        {{ chart_x_axis(charts.back) }}
+                    </div>
                 {% else %}
                     <div class="empty">No back pain data.</div>
                 {% endif %}
