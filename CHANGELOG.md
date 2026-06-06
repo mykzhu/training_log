@@ -2,6 +2,18 @@
 
 All notable changes to this project.
 
+## 0.1.8 - 2026-06-06
+
+### Changed
+- Refine `stats2` layout and UI across templates; improve sparkbar and chart rendering, markers, and axis notes.
+- `app/main.py`: tweak server-side chart helpers and stats aggregation (e.g. `build_stats2_charts`, `build_line_chart_series`, `build_sparkbar`) and improve PR/e1RM calculations.
+- Template/UI tweaks across `app/templates/*` and local DB migration/seeding (`data/training.db`).
+
+### Notes
+- Bumped version in `config.yaml` to `0.1.8`.
+
+---
+
 ## 0.1.7 - 2026-06-05
 
 ### Added
