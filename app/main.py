@@ -2839,12 +2839,15 @@ def update_set(
 
 @app.get("/stats")
 def stats_page(request: Request):
-    stats = build_stats(limit=30)
+    limit = parse_limit(request.query_params.get("limit"), default=30)
+    stats = build_stats(limit=limit)
+    charts = build_stats2_charts(stats)
 
     logger.debug(
-        "page.stats workouts=%s exercises=%s",
+        "page.stats workouts=%s exercises=%s limit=%s",
         len(stats["workouts"]),
         len(stats["exercise_stats"]),
+        "all" if limit is None else limit,
     )
 
     return templates.TemplateResponse(
@@ -2852,6 +2855,8 @@ def stats_page(request: Request):
         {
             "request": request,
             "stats": stats,
+            "charts": charts,
+            "limit": limit,
         },
     )
 

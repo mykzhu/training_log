@@ -284,6 +284,102 @@
             border-radius: 999px;
         }
 
+        .dashboard-sparkbar {
+            margin-top: 14px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 18px;
+            line-height: 1;
+            letter-spacing: -1px;
+            white-space: nowrap;
+            overflow: hidden;
+            max-width: 100%;
+        }
+
+        .dashboard-sparkbar.blue {
+            color: var(--blue);
+        }
+
+        .dashboard-sparkbar.green {
+            color: var(--green);
+        }
+
+        .dashboard-sparkbar.orange {
+            color: var(--orange);
+        }
+
+        .dashboard-sparkbar.red {
+            color: var(--red);
+        }
+
+        .dashboard-sparkbar.purple {
+            color: #af52de;
+        }
+
+        @media (max-width: 420px) {
+            .dashboard-sparkbar {
+                font-size: 24px;
+                letter-spacing: 0;
+            }
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin: 14px 0;
+        }
+
+        .dashboard-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 14px;
+            min-height: 132px;
+        }
+
+        .dashboard-card.metric-green {
+            border-color: rgba(48, 209, 88, 0.65);
+            background: rgba(48, 209, 88, 0.10);
+        }
+
+        .dashboard-card.metric-lime {
+            border-color: rgba(126, 217, 87, 0.65);
+            background: rgba(126, 217, 87, 0.09);
+        }
+
+        .dashboard-card.metric-yellow {
+            border-color: rgba(255, 214, 10, 0.70);
+            background: rgba(255, 214, 10, 0.09);
+        }
+
+        .dashboard-card.metric-orange {
+            border-color: rgba(255, 159, 10, 0.70);
+            background: rgba(255, 159, 10, 0.10);
+        }
+
+        .dashboard-card.metric-red {
+            border-color: rgba(255, 69, 58, 0.75);
+            background: rgba(255, 69, 58, 0.11);
+        }
+
+        .dashboard-label {
+            color: var(--muted);
+            font-size: 13px;
+            margin-bottom: 6px;
+        }
+
+        .dashboard-value {
+            font-size: 24px;
+            font-weight: 800;
+            line-height: 1.1;
+        }
+
+        .dashboard-subvalue {
+            color: var(--muted);
+            font-size: 12px;
+            margin-top: 4px;
+        }
+
         .note {
             color: var(--muted);
             font-size: 13px;
@@ -359,10 +455,92 @@
     </div>
 
     {% if summary.workout_count == 0 %}
-        <div class="empty">
-            No workouts yet.
-        </div>
+        <div class="empty">No workouts yet.</div>
     {% else %}
+        <div class="dashboard-grid">
+            <div class="dashboard-card">
+                <div class="dashboard-label">Avg load</div>
+                <div class="dashboard-value">
+                    {% if summary.avg_load_score is not none %}
+                        {{ "%.1f"|format(summary.avg_load_score) }}
+                    {% else %}
+                        —
+                    {% endif %}
+                </div>
+                <div class="dashboard-subvalue">difficulty score</div>
+
+                {% if charts.sparkbars.load %}
+                    <div class="dashboard-sparkbar blue" title="Load trend">
+                        {{ charts.sparkbars.load }}
+                    </div>
+                {% endif %}
+            </div>
+            <div class="dashboard-card">
+                <div class="dashboard-label">Volume</div>
+                <div class="dashboard-value">{{ "%.0f"|format(summary.total_volume) }} kg</div>
+                <div class="dashboard-subvalue">{{ summary.workout_count }} workouts</div>
+
+                {% if charts.volume.points %}
+                    <div class="dashboard-sparkbar purple" title="Volume trend">
+                        {{ charts.sparkbars.volume }}
+                    </div>
+                {% endif %}
+            </div>
+
+            <div class="dashboard-card">
+                <div class="dashboard-label">Avg intensity</div>
+                <div class="dashboard-value">
+                    {% if summary.avg_intensity is not none %}
+                        {{ "%.1f"|format(summary.avg_intensity) }}
+                    {% else %}
+                        —
+                    {% endif %}
+                </div>
+                <div class="dashboard-subvalue">kg / rep</div>
+
+                {% if charts.intensity.points %}
+                    <div class="dashboard-sparkbar green" title="Average intensity trend">
+                        {{ charts.sparkbars.intensity }}
+                    </div>
+                {% endif %}
+            </div>
+
+            <div class="dashboard-card {{ summary.avg_rpe | metric_status_class }}">
+                <div class="dashboard-label">Avg RPE</div>
+                <div class="dashboard-value">
+                    {% if summary.avg_rpe is not none %}
+                        {{ "%.1f"|format(summary.avg_rpe) }}/10
+                    {% else %}
+                        —
+                    {% endif %}
+                </div>
+                <div class="dashboard-subvalue">session difficulty</div>
+
+                {% if charts.rpe.points %}
+                    <div class="dashboard-sparkbar orange" title="RPE trend">
+                        {{ charts.sparkbars.rpe }}
+                    </div>
+                {% endif %}
+            </div>
+
+            <div class="dashboard-card {{ summary.avg_back_pain | metric_status_class }}">
+                <div class="dashboard-label">Back Pain</div>
+                <div class="dashboard-value">
+                    {% if summary.avg_back_pain is not none %}
+                        {{ "%.1f"|format(summary.avg_back_pain) }}/10
+                    {% else %}
+                        —
+                    {% endif %}
+                </div>
+                <div class="dashboard-subvalue">average after sessions</div>
+
+                {% if charts.back.points %}
+                    <div class="dashboard-sparkbar red" title="Back pain trend">
+                        {{ charts.sparkbars.back }}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
 
         <div class="card">
             <h2>Summary</h2>

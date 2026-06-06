@@ -624,11 +624,6 @@
                 <div class="dashboard-subvalue">{{ summary.workout_count }} workouts</div>
 
                 {% if charts.volume.points %}
-                    <!-- <svg class="sparkline" viewBox="0 0 100 100" preserveAspectRatio="none">
-                        <line class="sparkline-grid" x1="0" y1="50" x2="100" y2="50"></line>
-                        <polygon class="sparkline-area-blue" points="{{ charts.volume.area_points }}"></polygon>
-                        <polyline class="sparkline-line blue" points="{{ charts.volume.points }}"></polyline>
-                    </svg> -->
                     <div class="dashboard-sparkbar blue" title="Volume trend">
                         {{ charts.sparkbars.volume }}
                     </div>
@@ -647,10 +642,6 @@
                 <div class="dashboard-subvalue">kg / rep</div>
 
                 {% if charts.intensity.points %}
-                    <!-- <svg class="sparkline" viewBox="0 0 100 100" preserveAspectRatio="none">
-                        <line class="sparkline-grid" x1="0" y1="50" x2="100" y2="50"></line>
-                        <polyline class="sparkline-line green" points="{{ charts.intensity.points }}"></polyline>
-                    </svg> -->
                     <div class="dashboard-sparkbar green" title="Average intensity trend">
                         {{ charts.sparkbars.intensity }}
                     </div>
@@ -669,10 +660,6 @@
                 <div class="dashboard-subvalue">session difficulty</div>
 
                 {% if charts.rpe.points %}
-                    <!-- <svg class="sparkline" viewBox="0 0 100 100" preserveAspectRatio="none">
-                        <line class="sparkline-grid" x1="0" y1="50" x2="100" y2="50"></line>
-                        <polyline class="sparkline-line orange" points="{{ charts.rpe.points }}"></polyline>
-                    </svg> -->
                     <div class="dashboard-sparkbar orange" title="RPE trend">
                         {{ charts.sparkbars.rpe }}
                     </div>
@@ -691,16 +678,13 @@
                 <div class="dashboard-subvalue">average after sessions</div>
 
                 {% if charts.back.points %}
-                    <!-- <svg class="sparkline" viewBox="0 0 100 100" preserveAspectRatio="none">
-                        <line class="sparkline-grid" x1="0" y1="50" x2="100" y2="50"></line>
-                        <polyline class="sparkline-line red" points="{{ charts.back.points }}"></polyline>
-                    </svg> -->
                     <div class="dashboard-sparkbar red" title="Back pain trend">
                         {{ charts.sparkbars.back }}
                     </div>
                 {% endif %}
             </div>
         </div>
+
         <div class="card">
             <h2>Summary</h2>
 
@@ -711,8 +695,8 @@
                 </div>
 
                 <div class="stat">
-                    <strong>{{ "%.1f"|format(summary.total_volume) }}</strong>
-                    <span class="muted">kg volume</span>
+                    <strong>{{ exercise_stats|length }}</strong>
+                    <span class="muted">exercises</span>
                 </div>
 
                 <div class="stat">
@@ -723,6 +707,11 @@
                 <div class="stat">
                     <strong>{{ summary.total_reps }}</strong>
                     <span class="muted">reps</span>
+                </div>
+
+                <div class="stat">
+                    <strong>{{ "%.1f"|format(summary.total_volume) }}</strong>
+                    <span class="muted">kg volume</span>
                 </div>
 
                 <div class="stat">
@@ -787,11 +776,6 @@
                         {% endif %}
                     </strong>
                     <span class="muted">avg back</span>
-                </div>
-
-                <div class="stat">
-                    <strong>{{ exercise_stats|length }}</strong>
-                    <span class="muted">exercises</span>
                 </div>
             </div>
         </div>
@@ -1074,7 +1058,7 @@
 
         <div class="card">
             <h2>Exercise volume</h2>
-            <div class="muted small">Horizontal bar chart</div>
+            <div class="muted small">Total volume by exercise in this period</div>
 
             {% for exercise in exercise_stats %}
                 {% set width = 0 %}
@@ -1097,42 +1081,6 @@
                     <div>{{ "%.1f"|format(exercise.total_volume) }} kg</div>
                 </div>
             {% endfor %}
-        </div>
-
-        <div class="card">
-            <h2>Best strength estimates</h2>
-            <div class="muted small">e1RM from weighted sets with 3–12 reps only</div>
-
-            {% if charts.best_strength %}
-                {% for exercise in charts.best_strength %}
-                    {% set width = 0 %}
-                    {% if charts.max_e1rm > 0 %}
-                        {% set width = exercise.best_e1rm / charts.max_e1rm * 100 %}
-                    {% endif %}
-
-                    <div class="progress-row">
-                        <div>
-                            <strong>{{ exercise.name }}</strong>
-                            <div class="muted small">
-                                {{ exercise.best_set.weight }} × {{ exercise.best_set.reps }}
-                                · {{ exercise.best_set.date }}
-                            </div>
-                        </div>
-
-                        <div class="progress-track">
-                            <div class="progress-fill green" style="width: {{ width }}%;"></div>
-                        </div>
-
-                        <div>{{ "%.1f"|format(exercise.best_e1rm) }} kg</div>
-                    </div>
-                {% endfor %}
-            {% else %}
-                <div class="empty">No reliable e1RM data yet.</div>
-            {% endif %}
-
-            <div class="note">
-                1–2 reps, 15+ reps and 0 kg exercises are intentionally excluded.
-            </div>
         </div>
 
         <div class="card">
