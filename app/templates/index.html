@@ -95,6 +95,54 @@
             line-height: 1.35;
         }
 
+        .recommendation-list {
+            display: grid;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .recommendation-item {
+            background: var(--card2);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 10px;
+        }
+
+        .recommendation-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 8px;
+            margin-bottom: 4px;
+        }
+
+        .recommendation-action {
+            color: var(--blue);
+            font-weight: 800;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+
+        .recommendation-target {
+            font-weight: 800;
+            margin-top: 4px;
+        }
+
+        .recommendation-reason {
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.35;
+            margin-top: 4px;
+        }
+
+        .recommendation-reasons {
+            margin: 10px 0 0;
+            padding-left: 18px;
+            color: var(--muted);
+            font-size: 14px;
+            line-height: 1.4;
+        }
+
         .recovery-item.metric-neutral {
             border: 1px solid var(--border);
         }
@@ -393,6 +441,75 @@
             <div class="recovery-hint">
                 {{ recovery_context.hint }}
             </div>
+        </div>
+    {% endif %}
+
+    {% if not active_workout and next_recommendation %}
+        <div class="card">
+            <div class="exercise-header">
+                <div>
+                    <h2>Next workout</h2>
+                    <div class="muted small">
+                        Rule-based recommendation from your latest workout
+                    </div>
+                </div>
+
+                {% if next_recommendation.last_workout_id %}
+                    <a class="small" href="/workouts/{{ next_recommendation.last_workout_id }}">
+                        Source
+                    </a>
+                {% endif %}
+            </div>
+
+            <div class="recovery-grid">
+                <div class="recovery-item {{ next_recommendation.status | recommendation_status_class }}">
+                    <strong>{{ next_recommendation.title }}</strong>
+                    <span class="muted">status</span>
+                </div>
+
+                <div class="recovery-item {{ next_recommendation.status | recommendation_status_class }}">
+                    <strong>{{ next_recommendation.score }}</strong>
+                    <span class="muted">readiness</span>
+                </div>
+
+                <div class="recovery-item">
+                    <strong>{{ next_recommendation.exercise_recommendations|length }}</strong>
+                    <span class="muted">exercises</span>
+                </div>
+            </div>
+
+            <p class="recovery-hint">
+                {{ next_recommendation.summary }}
+            </p>
+
+            {% if next_recommendation.reasons %}
+                <ul class="recommendation-reasons">
+                    {% for reason in next_recommendation.reasons %}
+                        <li>{{ reason }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+
+            {% if next_recommendation.exercise_recommendations %}
+                <div class="recommendation-list">
+                    {% for item in next_recommendation.exercise_recommendations %}
+                        <div class="recommendation-item">
+                            <div class="recommendation-item-header">
+                                <strong>{{ item.exercise_name }}</strong>
+                                <span class="recommendation-action">{{ item.action_label }}</span>
+                            </div>
+
+                            <div class="recommendation-target">
+                                {{ item.target }}
+                            </div>
+
+                            <div class="recommendation-reason">
+                                {{ item.reason }}
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
         </div>
     {% endif %}
 

@@ -211,6 +211,24 @@ def load_score_status_class(value: int | float | str | None) -> str:
 
     return load_label_class(workout_load_label(numeric_value))
 
+def recommendation_status_class(status: str | None) -> str:
+    if status == "progress":
+        return "metric-green"
+
+    if status == "progress_carefully":
+        return "metric-lime"
+
+    if status == "repeat":
+        return "metric-yellow"
+
+    if status == "deload":
+        return "metric-orange"
+
+    if status == "recovery":
+        return "metric-red"
+
+    return "metric-neutral"
+
 def get_best_e1rm_by_exercise(
     workout_exercises: list[dict[str, Any]],
     current_workout_id: int | None = None,
@@ -1178,6 +1196,7 @@ templates.env.filters["rpe_option_label"] = rpe_option_label
 templates.env.filters["metric_status_class"] = metric_status_class
 templates.env.filters["load_label_class"] = load_label_class
 templates.env.filters["load_score_status_class"] = load_score_status_class
+templates.env.filters["recommendation_status_class"] = recommendation_status_class
 
 
 @app.middleware("http")
@@ -1912,6 +1931,396 @@ def build_recovery_context(
         },
     }
 
+RECOMMENDATION_STATUS_TITLES: dict[str, str] = {
+    "progress": "Progress",
+    "progress_carefully": "Careful progress",
+    "repeat": "Repeat",
+    "deload": "Deload",
+    "recovery": "Recovery",
+}
+
+
+def format_weight(value: float) -> str:
+    if value == int(value):
+        return str(int(value))
+
+    return f"{value:.2f}".rstrip("0").rstrip(".")
+
+
+def format_training_target(weight: float, reps: int) -> str:
+    if weight <= 0:
+        return f"{reps} reps"
+
+    return f"{format_weight(weight)} kg × {reps}"
+
+
+def get_recommendation_top_set(sets: list[Any]) -> dict[str, Any] | None:
+    best_set: dict[str, Any] | None = None
+    best_score = -1.0
+
+    for set_row in sets:
+        weight = float(set_row["weight"])
+        reps = int(set_row["reps"])
+
+        if reps <= 0:
+            continue
+
+        e1rm = estimated_1rm(weight, reps)
+
+        if e1rm is not None:
+            score = e1rm
+        elif weight > 0:
+            score = weight * reps
+        else:
+            score = reps
+
+        if score > best_score:
+            best_score = score
+            best_set = {
+                "weight": weight,
+                "reps": reps,
+                "e1rm": e1rm,
+                "score": score,
+            }
+
+    return best_set
+
+
+def calculate_readiness_status(
+    recovery_context: dict[str, Any],
+    last_workout: sqlite3.Row,
+    last_load_metrics: dict[str, Any],
+) -> dict[str, Any]:
+    score = 50
+    reasons: list[str] = []
+
+    hours_since_previous = recovery_context.get("hours_since_previous_workout")
+    last_7d = recovery_context.get("last_7d", {})
+
+    if hours_since_previous is None:
+        reasons.append("No previous workout gap available yet.")
+    elif hours_since_previous < 24:
+        score -= 25
+        reasons.append("Last workout was less than 24h ago.")
+    elif hours_since_previous < 48:
+        score -= 10
+        reasons.append("Short gap since the last workout.")
+    elif hours_since_previous <= 120:
+        score += 15
+        reasons.append("Recovery gap is in a normal range.")
+    elif hours_since_previous <= 240:
+        score += 5
+        reasons.append("Longer gap, so progress should stay conservative.")
+    else:
+        score -= 5
+        reasons.append("Long gap since last workout; rebuild before chasing PRs.")
+
+    session_rpe = last_workout["session_rpe"]
+    if session_rpe is not None:
+        session_rpe = int(session_rpe)
+
+        if session_rpe <= 4:
+            score += 10
+            reasons.append("Last RPE was low.")
+        elif session_rpe <= 6:
+            score += 5
+            reasons.append("Last RPE was moderate.")
+        elif session_rpe >= 8:
+            score -= 20
+            reasons.append("Last RPE was high.")
+        elif session_rpe >= 7:
+            score -= 10
+            reasons.append("Last RPE was elevated.")
+
+    lower_back_pain = last_workout["lower_back_pain"]
+    if lower_back_pain is not None:
+        lower_back_pain = int(lower_back_pain)
+
+        if lower_back_pain <= 2:
+            score += 10
+            reasons.append("Lower back pain was low.")
+        elif lower_back_pain <= 4:
+            reasons.append("Lower back pain was present, so back-heavy work needs caution.")
+        elif lower_back_pain <= 6:
+            score -= 20
+            reasons.append("Lower back pain was elevated.")
+        else:
+            score -= 35
+            reasons.append("Lower back pain was high.")
+
+    load_7d = float(last_7d.get("load_score") or 0)
+    if load_7d >= 32:
+        score -= 15
+        reasons.append("7-day load is very high.")
+    elif load_7d >= 18:
+        score -= 7
+        reasons.append("7-day load is already significant.")
+    elif load_7d < 8:
+        score += 5
+        reasons.append("7-day load is low.")
+
+    back_stress_7d = float(last_7d.get("back_stress_score") or 0)
+    if back_stress_7d >= 12:
+        score -= 15
+        reasons.append("7-day back stress is high.")
+    elif back_stress_7d >= 8:
+        score -= 7
+        reasons.append("7-day back stress is moderate.")
+    elif back_stress_7d < 4:
+        score += 5
+        reasons.append("7-day back stress is low.")
+
+    # Safety caps.
+    if hours_since_previous is not None and hours_since_previous < 24:
+        score = min(score, 40)
+
+    if lower_back_pain is not None and lower_back_pain >= 4:
+        score = min(score, 55)
+
+    if lower_back_pain is not None and lower_back_pain >= 6:
+        score = min(score, 35)
+
+    score = max(0, min(100, score))
+
+    if score >= 75:
+        status = "progress"
+    elif score >= 60:
+        status = "progress_carefully"
+    elif score >= 45:
+        status = "repeat"
+    elif score >= 30:
+        status = "deload"
+    else:
+        status = "recovery"
+
+    return {
+        "score": score,
+        "status": status,
+        "title": RECOMMENDATION_STATUS_TITLES[status],
+        "reasons": reasons,
+    }
+
+
+def build_exercise_recommendation(
+    item: dict[str, Any],
+    overall_status: str,
+    last_back_pain: int | None,
+) -> dict[str, Any]:
+    exercise_name = str(item["exercise_name"])
+    profile = get_exercise_load_profile(exercise_name)
+    back_factor = float(profile["back_factor"])
+    top_set = get_recommendation_top_set(item["sets"])
+
+    if top_set is None:
+        return {
+            "exercise_name": exercise_name,
+            "action": "start_light",
+            "action_label": "Start light",
+            "target": "No previous set",
+            "reason": "No usable set history for this exercise yet.",
+        }
+
+    weight = float(top_set["weight"])
+    reps = int(top_set["reps"])
+    is_back_sensitive = back_factor >= 0.7
+    is_high_back = back_factor >= 1.0
+
+    current_target = format_training_target(weight, reps)
+
+    if last_back_pain is not None and last_back_pain >= 4 and is_back_sensitive:
+        if weight > 0:
+            deload_weight = round(weight * 0.9, 2)
+            target = format_training_target(deload_weight, reps)
+        else:
+            target = format_training_target(weight, max(1, int(reps * 0.8)))
+
+        return {
+            "exercise_name": exercise_name,
+            "action": "deload_or_skip",
+            "action_label": "Deload / skip",
+            "target": target,
+            "reason": "Back pain was elevated and this exercise loads the back.",
+        }
+
+    if overall_status == "progress":
+        if weight <= 0:
+            next_reps = reps + max(1, round(reps * 0.1))
+            return {
+                "exercise_name": exercise_name,
+                "action": "add_reps",
+                "action_label": "+ reps",
+                "target": format_training_target(weight, next_reps),
+                "reason": "Readiness is good; progress with reps.",
+            }
+
+        if reps < 12:
+            return {
+                "exercise_name": exercise_name,
+                "action": "add_reps",
+                "action_label": "+1 rep",
+                "target": format_training_target(weight, reps + 1),
+                "reason": "Readiness is good; add reps before increasing weight.",
+            }
+
+        return {
+            "exercise_name": exercise_name,
+            "action": "small_weight_increase",
+            "action_label": "Small weight increase",
+            "target": f"{current_target} + small weight increase",
+            "reason": "Reps are already high; a small weight increase is reasonable.",
+        }
+
+    if overall_status == "progress_carefully":
+        if is_high_back:
+            return {
+                "exercise_name": exercise_name,
+                "action": "repeat",
+                "action_label": "Repeat",
+                "target": current_target,
+                "reason": "Overall readiness allows progress, but this is back-heavy.",
+            }
+
+        if weight <= 0:
+            return {
+                "exercise_name": exercise_name,
+                "action": "add_reps",
+                "action_label": "+ reps",
+                "target": format_training_target(weight, reps + max(1, round(reps * 0.05))),
+                "reason": "Careful progress: use a small rep increase.",
+            }
+
+        return {
+            "exercise_name": exercise_name,
+            "action": "add_reps",
+            "action_label": "+1 rep",
+            "target": format_training_target(weight, reps + 1),
+            "reason": "Careful progress: add only one rep.",
+        }
+
+    if overall_status == "repeat":
+        return {
+            "exercise_name": exercise_name,
+            "action": "repeat",
+            "action_label": "Repeat",
+            "target": current_target,
+            "reason": "Current readiness favors repeating the last useful target.",
+        }
+
+    if overall_status == "deload":
+        if weight > 0:
+            target = format_training_target(round(weight * 0.9, 2), reps)
+        else:
+            target = format_training_target(weight, max(1, int(reps * 0.85)))
+
+        return {
+            "exercise_name": exercise_name,
+            "action": "deload",
+            "action_label": "Deload",
+            "target": target,
+            "reason": "Recent recovery/load signals suggest reducing stress.",
+        }
+
+    return {
+        "exercise_name": exercise_name,
+        "action": "recovery",
+        "action_label": "Recovery",
+        "target": "Skip or very light technique work",
+        "reason": "Readiness is low; avoid chasing progression.",
+    }
+
+
+def build_next_workout_recommendation(
+    recovery_context: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    recovery_context = recovery_context or build_recovery_context()
+
+    with get_db() as conn:
+        last_workout = conn.execute(
+            """
+            SELECT *
+            FROM workouts
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1
+            """
+        ).fetchone()
+
+    if not last_workout:
+        return {
+            "status": "repeat",
+            "title": "Start baseline",
+            "score": 50,
+            "summary": "No workout history yet. Start with a comfortable baseline session.",
+            "reasons": [
+                "No completed workouts found.",
+            ],
+            "last_workout_id": None,
+            "exercise_recommendations": [],
+        }
+
+    details = get_workout_details(int(last_workout["id"]))
+
+    if not details:
+        return {
+            "status": "repeat",
+            "title": "Repeat",
+            "score": 50,
+            "summary": "Last workout has no exercise data, so no exercise-level recommendation is available.",
+            "reasons": [
+                "Last workout has no logged sets.",
+            ],
+            "last_workout_id": int(last_workout["id"]),
+            "exercise_recommendations": [],
+        }
+
+    last_load_metrics = calculate_workout_load_metrics(
+        workout_exercises=details,
+        session_rpe=last_workout["session_rpe"],
+        current_workout_id=int(last_workout["id"]),
+    )
+
+    readiness = calculate_readiness_status(
+        recovery_context=recovery_context,
+        last_workout=last_workout,
+        last_load_metrics=last_load_metrics,
+    )
+
+    last_back_pain = (
+        int(last_workout["lower_back_pain"])
+        if last_workout["lower_back_pain"] is not None
+        else None
+    )
+
+    exercise_recommendations = [
+        build_exercise_recommendation(
+            item=item,
+            overall_status=readiness["status"],
+            last_back_pain=last_back_pain,
+        )
+        for item in details
+    ]
+
+    if readiness["status"] == "progress":
+        summary = "Readiness looks good. Prefer small, controlled progression."
+    elif readiness["status"] == "progress_carefully":
+        summary = "Some progression is possible, but keep back-heavy work conservative."
+    elif readiness["status"] == "repeat":
+        summary = "Best next step is to repeat the previous useful targets."
+    elif readiness["status"] == "deload":
+        summary = "Reduce load or volume to control fatigue and back stress."
+    else:
+        summary = "Use recovery or very light technique work instead of progression."
+
+    return {
+        "status": readiness["status"],
+        "title": readiness["title"],
+        "score": readiness["score"],
+        "summary": summary,
+        "reasons": readiness["reasons"][:5],
+        "last_workout_id": int(last_workout["id"]),
+        "last_workout_at": last_workout["created_at"],
+        "exercise_recommendations": exercise_recommendations,
+    }
+
 def get_weight_options(extra_weights: list[float] | None = None) -> list[float]:
     options: set[float] = set()
 
@@ -1965,6 +2374,12 @@ def index(request: Request):
 
     if draft is None:
         logger.debug("page.index no_active_workout")
+
+        recovery_context = build_recovery_context()
+        next_recommendation = build_next_workout_recommendation(
+            recovery_context=recovery_context,
+        )
+
         return templates.TemplateResponse(
             "index.html",
             {
@@ -1981,6 +2396,7 @@ def index(request: Request):
                 "active_elapsed_seconds": 0,
                 "load_metrics": None,
                 "recovery_context": build_recovery_context(),
+                "next_recommendation": next_recommendation,
             },
         )
 
@@ -2036,6 +2452,7 @@ def index(request: Request):
             "active_elapsed_seconds": active_elapsed_seconds,
             "load_metrics": load_metrics,
             "recovery_context": recovery_context,
+            "next_recommendation": None,
         },
     )
 
