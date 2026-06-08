@@ -2,6 +2,20 @@
 
 All notable changes to this project.
 
+## 0.2.0 - 2026-06-09
+
+### Added
+- Recommendation engine: next-workout recommendations and recovery context (`dee9d5d`, `1f83d80`).
+- History-based readiness scoring to inform recommendations (`80f91b3`).
+
+### Changed
+- Improved recommendation engine algorithms and tuning (`26b0b3b`).
+
+### Notes
+- Bumped version in `config.yaml` to `0.2.0`.
+
+---
+
 ## 0.1.9 - 2026-06-08
 
 ### Added
