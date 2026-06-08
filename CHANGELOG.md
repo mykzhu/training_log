@@ -2,6 +2,23 @@
 
 All notable changes to this project.
 
+## 0.1.9 - 2026-06-08
+
+### Added
+- Load calendar data and calendar heatmap support (`fdad62d`).
+
+### Changed
+- Add X/Y values to line charts to improve plotting (`5809f2e`).
+- Improve scatter-plot rendering and data processing (`9836f88`).
+
+### Fixed
+- Fix heatmap loading bug (`e16367a`).
+
+### Notes
+- Bumped version in `config.yaml` to `0.1.9`.
+
+---
+
 ## 0.1.8 - 2026-06-06
 
 ### Changed
