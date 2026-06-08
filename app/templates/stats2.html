@@ -411,6 +411,32 @@
         .marker-orange { stroke: var(--orange); }
         .marker-red { stroke: var(--red); }
 
+        .scatter-plot {
+            position: relative;
+            height: 170px;
+            margin-left: 46px;
+            margin-bottom: 22px;
+            border-left: 1px solid rgba(255, 255, 255, 0.08);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .scatter-grid-line {
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .scatter-dot {
+            position: absolute;
+            width: 7px;
+            height: 7px;
+            border-radius: 999px;
+            background: var(--orange);
+            transform: translate(-50%, -50%);
+        }
+
         .chart-axis-note {
             display: flex;
             justify-content: space-between;
@@ -1235,25 +1261,35 @@
             </div>
 
             {% if charts.scatter.points %}
-                <svg class="svg-chart compact" viewBox="-6 -6 112 112" preserveAspectRatio="none">
-                    <line class="grid-line" x1="0" y1="25" x2="100" y2="25"></line>
-                    <line class="grid-line" x1="0" y1="50" x2="100" y2="50"></line>
-                    <line class="grid-line" x1="0" y1="75" x2="100" y2="75"></line>
-                    <line class="grid-line" x1="0" y1="100" x2="100" y2="100"></line>
-                    <line class="grid-line" x1="0" y1="0" x2="0" y2="100"></line>
+                <div class="chart-plot">
+                    <div class="axis-values y-axis-values">
+                        {% for value in [10, 8, 6, 4, 2, 0] %}
+                            <span class="axis-tick" style="top: {{ (10 - value) * 10 }}%;">
+                                {{ value }}
+                            </span>
+                        {% endfor %}
+                    </div>
 
-                    {% for point in charts.scatter.points %}
-                        <a href="/workouts/{{ point.workout_id }}">
-                            <circle class="scatter-point" cx="{{ point.x }}" cy="{{ point.y }}" r="1.4">
-                                <title>{{ point.date }} · {{ "%.1f"|format(point.volume) }} kg · Back {{ "%.0f"|format(point.back) }}/10</title>
-                            </circle>
-                        </a>
-                    {% endfor %}
+                    <div class="scatter-plot">
+                        {% for y in [0, 20, 40, 60, 80, 100] %}
+                            <div class="scatter-grid-line" style="top: {{ y }}%;"></div>
+                        {% endfor %}
 
-                    <!-- <text class="axis-label" x="0" y="108">low volume</text>
-                    <text class="axis-label" x="75" y="108">high volume</text>
-                    <text class="axis-label" x="-5" y="5">more pain</text> -->
-                </svg>
+                        {% for point in charts.scatter.points %}
+                            <a
+                                href="/workouts/{{ point.workout_id }}"
+                                class="scatter-dot"
+                                style="left: {{ point.x }}%; top: {{ point.y }}%;"
+                                title="{{ point.date }} · {{ "%.1f"|format(point.volume) }} kg · Back {{ "%.0f"|format(point.back) }}/10"
+                            ></a>
+                        {% endfor %}
+                    </div>
+
+                    <div class="axis-values x-axis-values">
+                        <span class="axis-tick first" style="left: 0%;">low</span>
+                        <span class="axis-tick last" style="left: 100%;">high</span>
+                    </div>
+                </div>
                 <div class="chart-axis-note">
                     <span>low volume</span>
                     <span>higher volume</span>
