@@ -1228,6 +1228,65 @@
         </div>
 
         <div class="card">
+            <h2>Load calendar</h2>
+            <div class="muted small">Calendar heatmap · one square per day</div>
+
+            {% if charts.load_calendar.weeks %}
+                <div class="calendar-scroll">
+                    <div class="calendar-shell">
+                        <div></div>
+
+                        <div
+                            class="calendar-months"
+                            style="grid-template-columns: repeat({{ charts.load_calendar.weeks|length }}, 14px);"
+                        >
+                            {% for week in charts.load_calendar.weeks %}
+                                <div class="calendar-month">{{ week.month_label }}</div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="calendar-weekdays">
+                            <div>Mon</div>
+                            <div></div>
+                            <div>Wed</div>
+                            <div></div>
+                            <div>Fri</div>
+                            <div></div>
+                            <div>Sun</div>
+                        </div>
+
+                        <div class="calendar-weeks">
+                            {% for week in charts.load_calendar.weeks %}
+                                <div class="calendar-week">
+                                    {% for day in week.days %}
+                                        {% if day.has_workout %}
+                                            <a
+                                                href="/workouts/{{ day.workout_id }}"
+                                                class="calendar-cell {{ day.value | metric_status_class }}"
+                                                title="{{ day.date }} · Load {% if day.value is not none %}{{ '%.0f'|format(day.value) }}/14{% else %}—{% endif %} · {{ day.count }} workout(s)"
+                                            ></a>
+                                        {% else %}
+                                            <span
+                                                class="calendar-cell metric-neutral"
+                                                title="{{ day.date }} · no workout"
+                                            ></span>
+                                        {% endif %}
+                                    {% endfor %}
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            {% else %}
+                <div class="empty">No calendar data.</div>
+            {% endif %}
+
+            <div class="note">
+                This shows hard training clusters and helps avoid stacking too many hard days.
+            </div>
+        </div>
+
+        <div class="card">
             <h2>Exercise volume</h2>
             <div class="muted small">Total volume by exercise in this period</div>
 

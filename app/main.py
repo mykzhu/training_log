@@ -676,6 +676,7 @@ def build_stats2_charts(stats: dict[str, Any]) -> dict[str, Any]:
         "back_calendar": build_calendar_heatmap(workouts, "lower_back_pain"),
         "rpe_calendar": build_calendar_heatmap(workouts, "session_rpe"),
         "load": build_line_chart_series(workouts, "load_score"),
+        "load_calendar": build_calendar_heatmap(workouts, "load_score"),
         "compound": build_line_chart_series(workouts, "compound_score"),
         "back_stress": build_line_chart_series(workouts, "back_stress_score"),
         "sparkbars": {
