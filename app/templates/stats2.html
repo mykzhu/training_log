@@ -1262,8 +1262,8 @@
                                         {% if day.has_workout %}
                                             <a
                                                 href="/workouts/{{ day.workout_id }}"
-                                                class="calendar-cell {{ day.value | metric_status_class }}"
-                                                title="{{ day.date }} · Load {% if day.value is not none %}{{ '%.0f'|format(day.value) }}/14{% else %}—{% endif %} · {{ day.count }} workout(s)"
+                                                class="calendar-cell {{ day.value | load_score_status_class }}"
+                                                title="{{ day.date }} · Load {% if day.value is not none %}{{ '%.1f'|format(day.value) }}{% else %}—{% endif %} · {{ day.count }} workout(s)"
                                             ></a>
                                         {% else %}
                                             <span
@@ -1282,7 +1282,7 @@
             {% endif %}
 
             <div class="note">
-                This shows hard training clusters and helps avoid stacking too many hard days.
+                This shows load score clusters and helps avoid stacking too many high-load days.
             </div>
         </div>
 

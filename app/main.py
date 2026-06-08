@@ -200,6 +200,17 @@ def load_label_class(load_label: str | None) -> str:
 
     return "metric-neutral"
 
+def load_score_status_class(value: int | float | str | None) -> str:
+    if value is None or value == "":
+        return "metric-neutral"
+
+    try:
+        numeric_value = float(value)
+    except (TypeError, ValueError):
+        return "metric-neutral"
+
+    return load_label_class(workout_load_label(numeric_value))
+
 def get_best_e1rm_by_exercise(
     workout_exercises: list[dict[str, Any]],
     current_workout_id: int | None = None,
@@ -1166,6 +1177,7 @@ templates.env.filters["format_duration"] = format_duration
 templates.env.filters["rpe_option_label"] = rpe_option_label
 templates.env.filters["metric_status_class"] = metric_status_class
 templates.env.filters["load_label_class"] = load_label_class
+templates.env.filters["load_score_status_class"] = load_score_status_class
 
 
 @app.middleware("http")
