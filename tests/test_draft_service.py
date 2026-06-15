@@ -31,8 +31,8 @@ class DraftServiceTests(unittest.TestCase):
         self.original_db_path = config.DB_PATH
         self.original_active_draft = draft_service.ACTIVE_WORKOUT_DRAFT
         config.DB_PATH = Path(self.temp_dir.name) / "training.db"
-        clear_active_workout_draft()
         init_db()
+        clear_active_workout_draft()
 
     def tearDown(self) -> None:
         draft_service.ACTIVE_WORKOUT_DRAFT = self.original_active_draft
@@ -235,6 +235,28 @@ class DraftServiceTests(unittest.TestCase):
         self.assertEqual(workout["session_rpe"], 6)
         self.assertEqual(workout["lower_back_pain"], 2)
         self.assertEqual(set_count, 1)
+
+    def test_active_draft_recovers_from_persistent_storage(self) -> None:
+        deadlift_id = self.exercise_id("Deadlift")
+
+        start_active_workout_draft()
+        draft_exercise = add_exercise_to_active_draft(
+            exercise_id=deadlift_id,
+            exercise_name="Deadlift",
+        )
+        add_set_to_active_draft(
+            draft_exercise_id=int(draft_exercise["id"]),
+            weight=100.0,
+            reps=5,
+        )
+
+        draft_service.ACTIVE_WORKOUT_DRAFT = None
+
+        recovered = get_active_workout_draft()
+
+        self.assertIsNotNone(recovered)
+        self.assertEqual(recovered["workout_exercises"][0]["exercise_name"], "Deadlift")
+        self.assertEqual(recovered["workout_exercises"][0]["sets"][0]["weight"], 100.0)
 
 
 if __name__ == "__main__":

@@ -16,8 +16,8 @@ class MainDatabaseBehaviorTests(unittest.TestCase):
         self.original_active_draft = draft_service.ACTIVE_WORKOUT_DRAFT
 
         config.DB_PATH = Path(self.temp_dir.name) / "training.db"
-        draft_service.clear_active_workout_draft()
         main.init_db()
+        draft_service.clear_active_workout_draft()
 
     def tearDown(self) -> None:
         config.DB_PATH = self.original_db_path
