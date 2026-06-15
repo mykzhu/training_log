@@ -1,4 +1,5 @@
 .env
+.gpt/
 .venv/
 venv/
 __pycache__/
