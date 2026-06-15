@@ -3,18 +3,33 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 
+from app.repositories.exercises import get_exercise
 from app.repositories.workouts import (
+    add_set_to_workout_exercise,
+    add_workout_exercise,
+    delete_set_entry,
     delete_workout,
+    delete_workout_exercise,
+    duplicate_set_for_workout_exercise,
+    get_set_entry,
     get_workout,
     get_workout_details,
+    get_workout_exercise,
     list_recent_workouts,
+    update_set_entry,
     update_workout,
 )
-from app.schemas import WorkoutUpdateRequest
+from app.schemas import (
+    AddExerciseRequest,
+    AddSetRequest,
+    UpdateSetRequest,
+    WorkoutUpdateRequest,
+)
 from app.services.stats_service import calculate_workout_load_metrics
 
 
 router = APIRouter(prefix="/api/v1/workouts", tags=["workouts"])
+workout_items_router = APIRouter(prefix="/api/v1", tags=["workouts"])
 
 
 def serialize_set(set_row: Any) -> dict[str, Any]:
@@ -218,3 +233,103 @@ def delete_workout_endpoint(workout_id: int) -> dict[str, Any]:
         "deleted": True,
         "workout_id": workout_id,
     }
+
+
+@router.post("/{workout_id}/exercises")
+def add_workout_exercise_endpoint(
+    workout_id: int,
+    payload: AddExerciseRequest,
+) -> dict[str, Any]:
+    if get_workout(workout_id) is None:
+        raise HTTPException(status_code=404, detail="Workout not found.")
+
+    if get_exercise(payload.exercise_id) is None:
+        raise HTTPException(status_code=404, detail="Exercise not found.")
+
+    add_workout_exercise(workout_id, payload.exercise_id)
+    return get_workout_detail(workout_id)
+
+
+@router.delete("/{workout_id}/exercises/{workout_exercise_id}")
+def delete_workout_exercise_endpoint(
+    workout_id: int,
+    workout_exercise_id: int,
+) -> dict[str, Any]:
+    if get_workout(workout_id) is None:
+        raise HTTPException(status_code=404, detail="Workout not found.")
+
+    if not delete_workout_exercise(workout_id, workout_exercise_id):
+        raise HTTPException(status_code=404, detail="Workout exercise not found.")
+
+    return get_workout_detail(workout_id)
+
+
+@workout_items_router.post("/workout-exercises/{workout_exercise_id}/sets")
+def add_workout_exercise_set_endpoint(
+    workout_exercise_id: int,
+    payload: AddSetRequest,
+) -> dict[str, Any]:
+    workout_exercise = get_workout_exercise(workout_exercise_id)
+    if workout_exercise is None:
+        raise HTTPException(status_code=404, detail="Workout exercise not found.")
+
+    set_entry = add_set_to_workout_exercise(
+        workout_exercise_id,
+        weight=payload.weight,
+        reps=payload.reps,
+        created_at=datetime.now().isoformat(timespec="seconds"),
+    )
+    if set_entry is None:
+        raise HTTPException(status_code=404, detail="Workout exercise not found.")
+
+    return get_workout_detail(int(workout_exercise["workout_id"]))
+
+
+@workout_items_router.post("/workout-exercises/{workout_exercise_id}/sets/duplicate")
+def duplicate_workout_exercise_set_endpoint(
+    workout_exercise_id: int,
+) -> dict[str, Any]:
+    workout_exercise = get_workout_exercise(workout_exercise_id)
+    if workout_exercise is None:
+        raise HTTPException(status_code=404, detail="Workout exercise not found.")
+
+    set_entry = duplicate_set_for_workout_exercise(
+        workout_exercise_id,
+        created_at=datetime.now().isoformat(timespec="seconds"),
+    )
+    if set_entry is None:
+        raise HTTPException(status_code=404, detail="No set source found.")
+
+    return get_workout_detail(int(workout_exercise["workout_id"]))
+
+
+@workout_items_router.patch("/sets/{set_id}")
+def update_set_endpoint(
+    set_id: int,
+    payload: UpdateSetRequest,
+) -> dict[str, Any]:
+    if payload.weight is None and payload.reps is None:
+        raise HTTPException(status_code=400, detail="No set fields provided.")
+
+    current_set = get_set_entry(set_id)
+    if current_set is None:
+        raise HTTPException(status_code=404, detail="Set not found.")
+
+    updated_set = update_set_entry(
+        set_id,
+        weight=payload.weight,
+        reps=payload.reps,
+    )
+    if updated_set is None:
+        raise HTTPException(status_code=404, detail="Set not found.")
+
+    return get_workout_detail(int(current_set["workout_id"]))
+
+
+@workout_items_router.delete("/sets/{set_id}")
+def delete_set_endpoint(set_id: int) -> dict[str, Any]:
+    current_set = delete_set_entry(set_id)
+    if current_set is None:
+        raise HTTPException(status_code=404, detail="Set not found.")
+
+    return get_workout_detail(int(current_set["workout_id"]))

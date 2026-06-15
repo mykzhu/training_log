@@ -9,12 +9,23 @@ from app import config
 from app.db import get_db, init_db
 import app.main as main
 from app.routes.api_workouts import (
+    add_workout_exercise_endpoint,
+    add_workout_exercise_set_endpoint,
     delete_workout_endpoint,
+    delete_set_endpoint,
+    delete_workout_exercise_endpoint,
+    duplicate_workout_exercise_set_endpoint,
     get_workout_detail,
     get_workouts,
+    update_set_endpoint,
     update_workout_endpoint,
 )
-from app.schemas import WorkoutUpdateRequest
+from app.schemas import (
+    AddExerciseRequest,
+    AddSetRequest,
+    UpdateSetRequest,
+    WorkoutUpdateRequest,
+)
 
 
 class WorkoutsApiTests(unittest.TestCase):
@@ -113,6 +124,17 @@ class WorkoutsApiTests(unittest.TestCase):
 
         return workout_id
 
+    def get_workout_exercise_id(
+        self,
+        response: dict[str, Any],
+        exercise_name: str,
+    ) -> int:
+        for exercise in response["exercises"]:
+            if exercise["exercise_name"] == exercise_name:
+                return int(exercise["workout_exercise_id"])
+
+        raise AssertionError(f"Workout exercise not found: {exercise_name}")
+
     def test_workout_routes_are_registered(self) -> None:
         routes = {
             (route.path, tuple(sorted(route.methods)))
@@ -124,6 +146,27 @@ class WorkoutsApiTests(unittest.TestCase):
         self.assertIn(("/api/v1/workouts/{workout_id}", ("GET",)), routes)
         self.assertIn(("/api/v1/workouts/{workout_id}", ("PATCH",)), routes)
         self.assertIn(("/api/v1/workouts/{workout_id}", ("DELETE",)), routes)
+        self.assertIn(("/api/v1/workouts/{workout_id}/exercises", ("POST",)), routes)
+        self.assertIn(
+            (
+                "/api/v1/workouts/{workout_id}/exercises/{workout_exercise_id}",
+                ("DELETE",),
+            ),
+            routes,
+        )
+        self.assertIn(
+            ("/api/v1/workout-exercises/{workout_exercise_id}/sets", ("POST",)),
+            routes,
+        )
+        self.assertIn(
+            (
+                "/api/v1/workout-exercises/{workout_exercise_id}/sets/duplicate",
+                ("POST",),
+            ),
+            routes,
+        )
+        self.assertIn(("/api/v1/sets/{set_id}", ("PATCH",)), routes)
+        self.assertIn(("/api/v1/sets/{set_id}", ("DELETE",)), routes)
 
     def test_get_workouts_returns_recent_summaries(self) -> None:
         first_id = self.insert_workout(
@@ -306,6 +349,262 @@ class WorkoutsApiTests(unittest.TestCase):
     def test_delete_workout_endpoint_returns_404_for_missing_workout(self) -> None:
         with self.assertRaises(HTTPException) as exc:
             delete_workout_endpoint(9999)
+
+        self.assertEqual(exc.exception.status_code, 404)
+
+    def test_add_workout_exercise_endpoint_appends_exercise(self) -> None:
+        workout_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            exercises=[],
+        )
+
+        response = add_workout_exercise_endpoint(
+            workout_id,
+            AddExerciseRequest(exercise_id=self.exercise_id("Deadlift")),
+        )
+
+        self.assertEqual(len(response["exercises"]), 1)
+        self.assertEqual(response["exercises"][0]["exercise_name"], "Deadlift")
+        self.assertEqual(response["exercises"][0]["position"], 1)
+        self.assertEqual(response["exercises"][0]["sets"], [])
+
+    def test_add_workout_exercise_endpoint_returns_404_for_missing_workout(
+        self,
+    ) -> None:
+        with self.assertRaises(HTTPException) as exc:
+            add_workout_exercise_endpoint(
+                9999,
+                AddExerciseRequest(exercise_id=self.exercise_id("Deadlift")),
+            )
+
+        self.assertEqual(exc.exception.status_code, 404)
+
+    def test_add_workout_exercise_endpoint_returns_404_for_missing_exercise(
+        self,
+    ) -> None:
+        workout_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            exercises=[],
+        )
+
+        with self.assertRaises(HTTPException) as exc:
+            add_workout_exercise_endpoint(
+                workout_id,
+                AddExerciseRequest(exercise_id=9999),
+            )
+
+        self.assertEqual(exc.exception.status_code, 404)
+
+    def test_delete_workout_exercise_endpoint_removes_exercise_and_sets(self) -> None:
+        workout_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [{"weight": 100, "reps": 5}],
+                },
+                {
+                    "name": "Goblet Squat",
+                    "sets": [{"weight": 32, "reps": 10}],
+                },
+            ],
+        )
+        detail = get_workout_detail(workout_id)
+        workout_exercise_id = self.get_workout_exercise_id(detail, "Deadlift")
+
+        response = delete_workout_exercise_endpoint(workout_id, workout_exercise_id)
+
+        self.assertEqual(len(response["exercises"]), 1)
+        self.assertEqual(response["exercises"][0]["exercise_name"], "Goblet Squat")
+        self.assertEqual(response["total_volume"], 320.0)
+
+        with get_db() as conn:
+            set_count = conn.execute("SELECT COUNT(*) FROM set_entries").fetchone()[0]
+
+        self.assertEqual(set_count, 1)
+
+    def test_add_workout_exercise_set_endpoint_appends_set(self) -> None:
+        workout_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [],
+                },
+            ],
+        )
+        detail = get_workout_detail(workout_id)
+        workout_exercise_id = self.get_workout_exercise_id(detail, "Deadlift")
+
+        response = add_workout_exercise_set_endpoint(
+            workout_exercise_id,
+            AddSetRequest(weight=100, reps=5),
+        )
+
+        sets = response["exercises"][0]["sets"]
+        self.assertEqual(len(sets), 1)
+        self.assertEqual(sets[0]["set_number"], 1)
+        self.assertEqual(sets[0]["weight"], 100.0)
+        self.assertEqual(sets[0]["reps"], 5)
+        self.assertEqual(response["total_volume"], 500.0)
+
+    def test_add_workout_exercise_set_endpoint_returns_404_for_missing_exercise(
+        self,
+    ) -> None:
+        with self.assertRaises(HTTPException) as exc:
+            add_workout_exercise_set_endpoint(
+                9999,
+                AddSetRequest(weight=100, reps=5),
+            )
+
+        self.assertEqual(exc.exception.status_code, 404)
+
+    def test_duplicate_workout_exercise_set_endpoint_duplicates_latest_set(
+        self,
+    ) -> None:
+        workout_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [{"weight": 100, "reps": 5}],
+                },
+            ],
+        )
+        detail = get_workout_detail(workout_id)
+        workout_exercise_id = self.get_workout_exercise_id(detail, "Deadlift")
+
+        response = duplicate_workout_exercise_set_endpoint(workout_exercise_id)
+
+        sets = response["exercises"][0]["sets"]
+        self.assertEqual(len(sets), 2)
+        self.assertEqual([set_entry["set_number"] for set_entry in sets], [1, 2])
+        self.assertEqual(sets[1]["weight"], 100.0)
+        self.assertEqual(sets[1]["reps"], 5)
+
+    def test_duplicate_workout_exercise_set_endpoint_uses_previous_workout_source(
+        self,
+    ) -> None:
+        self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [{"weight": 90, "reps": 6}],
+                },
+            ],
+        )
+        workout_id = self.insert_workout(
+            created_at="2026-06-08T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [],
+                },
+            ],
+        )
+        detail = get_workout_detail(workout_id)
+        workout_exercise_id = self.get_workout_exercise_id(detail, "Deadlift")
+
+        response = duplicate_workout_exercise_set_endpoint(workout_exercise_id)
+
+        sets = response["exercises"][0]["sets"]
+        self.assertEqual(len(sets), 1)
+        self.assertEqual(sets[0]["weight"], 90.0)
+        self.assertEqual(sets[0]["reps"], 6)
+
+    def test_duplicate_workout_exercise_set_endpoint_returns_404_without_source(
+        self,
+    ) -> None:
+        workout_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [],
+                },
+            ],
+        )
+        detail = get_workout_detail(workout_id)
+        workout_exercise_id = self.get_workout_exercise_id(detail, "Deadlift")
+
+        with self.assertRaises(HTTPException) as exc:
+            duplicate_workout_exercise_set_endpoint(workout_exercise_id)
+
+        self.assertEqual(exc.exception.status_code, 404)
+
+    def test_update_set_endpoint_updates_partial_set_fields(self) -> None:
+        workout_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [{"weight": 100, "reps": 5}],
+                },
+            ],
+        )
+        detail = get_workout_detail(workout_id)
+        set_id = int(detail["exercises"][0]["sets"][0]["id"])
+
+        response = update_set_endpoint(set_id, UpdateSetRequest(weight=105))
+
+        set_entry = response["exercises"][0]["sets"][0]
+        self.assertEqual(set_entry["weight"], 105.0)
+        self.assertEqual(set_entry["reps"], 5)
+        self.assertEqual(response["total_volume"], 525.0)
+
+    def test_update_set_endpoint_returns_400_when_no_fields_provided(self) -> None:
+        workout_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [{"weight": 100, "reps": 5}],
+                },
+            ],
+        )
+        detail = get_workout_detail(workout_id)
+        set_id = int(detail["exercises"][0]["sets"][0]["id"])
+
+        with self.assertRaises(HTTPException) as exc:
+            update_set_endpoint(set_id, UpdateSetRequest())
+
+        self.assertEqual(exc.exception.status_code, 400)
+
+    def test_update_set_endpoint_returns_404_for_missing_set(self) -> None:
+        with self.assertRaises(HTTPException) as exc:
+            update_set_endpoint(9999, UpdateSetRequest(weight=105))
+
+        self.assertEqual(exc.exception.status_code, 404)
+
+    def test_delete_set_endpoint_removes_set_and_renumbers_remaining_sets(self) -> None:
+        workout_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [
+                        {"weight": 100, "reps": 5},
+                        {"weight": 90, "reps": 8},
+                        {"weight": 80, "reps": 10},
+                    ],
+                },
+            ],
+        )
+        detail = get_workout_detail(workout_id)
+        deleted_set_id = int(detail["exercises"][0]["sets"][1]["id"])
+
+        response = delete_set_endpoint(deleted_set_id)
+
+        sets = response["exercises"][0]["sets"]
+        self.assertEqual(len(sets), 2)
+        self.assertEqual([set_entry["set_number"] for set_entry in sets], [1, 2])
+        self.assertEqual([set_entry["weight"] for set_entry in sets], [100.0, 80.0])
+        self.assertEqual(response["total_volume"], 1300.0)
+
+    def test_delete_set_endpoint_returns_404_for_missing_set(self) -> None:
+        with self.assertRaises(HTTPException) as exc:
+            delete_set_endpoint(9999)
 
         self.assertEqual(exc.exception.status_code, 404)
 

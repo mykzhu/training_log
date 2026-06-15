@@ -16,7 +16,10 @@ from app.routes.api_backup import router as backup_api_router
 from app.routes.api_current_workout import router as current_workout_api_router
 from app.routes.api_exercises import router as exercises_api_router
 from app.routes.api_stats import router as stats_api_router
-from app.routes.api_workouts import router as workouts_api_router
+from app.routes.api_workouts import (
+    router as workouts_api_router,
+    workout_items_router as workout_items_api_router,
+)
 from app.repositories.workouts import (
     get_previous_set_for_exercise,
     get_workout_details,
@@ -77,6 +80,7 @@ app.include_router(backup_api_router)
 app.include_router(current_workout_api_router)
 app.include_router(exercises_api_router)
 app.include_router(stats_api_router)
+app.include_router(workout_items_api_router)
 app.include_router(workouts_api_router)
 templates = Jinja2Templates(directory="app/templates")
 
