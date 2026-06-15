@@ -1,8 +1,14 @@
 import math
+import tempfile
 import unittest
+from pathlib import Path
 
+from app import config
+from app.db import get_db, init_db
+from app.services.recovery_service import build_recovery_context
 from app.services.recommendation_service import (
     build_exercise_progression_trend,
+    build_next_workout_recommendation,
     exercise_gap_label,
     exercise_gap_status,
     format_percent_change,
@@ -85,6 +91,104 @@ class RecommendationServiceTests(unittest.TestCase):
             },
         )
         self.assertEqual(regression["status"], "regression")
+
+
+class RecommendationDatabaseTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.original_db_path = config.DB_PATH
+        config.DB_PATH = Path(self.temp_dir.name) / "training.db"
+        init_db()
+
+    def tearDown(self) -> None:
+        config.DB_PATH = self.original_db_path
+        self.temp_dir.cleanup()
+
+    def insert_deadlift_workout(self) -> int:
+        with get_db() as conn:
+            exercise = conn.execute(
+                "SELECT id FROM exercises WHERE name = ?",
+                ("Deadlift",),
+            ).fetchone()
+
+            workout_cursor = conn.execute(
+                """
+                INSERT INTO workouts (
+                    workout_date,
+                    created_at,
+                    finished_at,
+                    session_rpe,
+                    lower_back_pain,
+                    duration_seconds
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "2026-06-01",
+                    "2026-06-01T10:00:00",
+                    "2026-06-01T11:00:00",
+                    6,
+                    2,
+                    3600,
+                ),
+            )
+            workout_id = int(workout_cursor.lastrowid)
+
+            workout_exercise_cursor = conn.execute(
+                """
+                INSERT INTO workout_exercises (workout_id, exercise_id, position)
+                VALUES (?, ?, ?)
+                """,
+                (workout_id, int(exercise["id"]), 1),
+            )
+            workout_exercise_id = int(workout_exercise_cursor.lastrowid)
+
+            conn.execute(
+                """
+                INSERT INTO set_entries (
+                    workout_exercise_id,
+                    set_number,
+                    weight,
+                    reps,
+                    created_at
+                )
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    workout_exercise_id,
+                    1,
+                    100.0,
+                    5,
+                    "2026-06-01T10:10:00",
+                ),
+            )
+
+        return workout_id
+
+    def test_next_workout_recommendation_handles_empty_history(self) -> None:
+        recommendation = build_next_workout_recommendation()
+
+        self.assertEqual(recommendation["status"], "repeat")
+        self.assertEqual(recommendation["title"], "Start baseline")
+        self.assertIsNone(recommendation["last_workout_id"])
+        self.assertEqual(recommendation["exercise_recommendations"], [])
+
+    def test_next_workout_recommendation_uses_last_workout_and_recovery_context(self) -> None:
+        workout_id = self.insert_deadlift_workout()
+        recovery_context = build_recovery_context(as_of="2026-06-08T10:00:00")
+
+        recommendation = build_next_workout_recommendation(
+            recovery_context=recovery_context,
+        )
+
+        self.assertEqual(recommendation["last_workout_id"], workout_id)
+        self.assertEqual(recommendation["status"], "progress")
+        self.assertEqual(len(recommendation["exercise_recommendations"]), 1)
+
+        exercise_recommendation = recommendation["exercise_recommendations"][0]
+        self.assertEqual(exercise_recommendation["exercise_name"], "Deadlift")
+        self.assertEqual(exercise_recommendation["action"], "add_reps")
+        self.assertEqual(exercise_recommendation["target"], "100 kg × 6")
 
 
 if __name__ == "__main__":
