@@ -1,0 +1,47 @@
+import { useState } from "react";
+
+import BackupPage from "./pages/BackupPage";
+import CurrentWorkoutPage from "./pages/CurrentWorkoutPage";
+import HistoryPage from "./pages/HistoryPage";
+import StatsPage from "./pages/StatsPage";
+
+type PageKey = "current" | "history" | "stats" | "backup";
+
+const pages: Array<{ key: PageKey; label: string }> = [
+  { key: "current", label: "Current" },
+  { key: "history", label: "History" },
+  { key: "stats", label: "Stats" },
+  { key: "backup", label: "Backup" },
+];
+
+export default function App() {
+  const [activePage, setActivePage] = useState<PageKey>("current");
+
+  return (
+    <main className="app-shell">
+      <header className="app-header">
+        <div>
+          <p className="eyebrow">Training Log</p>
+          <h1>{pages.find((page) => page.key === activePage)?.label}</h1>
+        </div>
+        <nav className="tabs" aria-label="Main navigation">
+          {pages.map((page) => (
+            <button
+              className={page.key === activePage ? "tab tab-active" : "tab"}
+              key={page.key}
+              onClick={() => setActivePage(page.key)}
+              type="button"
+            >
+              {page.label}
+            </button>
+          ))}
+        </nav>
+      </header>
+
+      {activePage === "current" && <CurrentWorkoutPage />}
+      {activePage === "history" && <HistoryPage />}
+      {activePage === "stats" && <StatsPage />}
+      {activePage === "backup" && <BackupPage />}
+    </main>
+  );
+}
