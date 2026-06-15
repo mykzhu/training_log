@@ -4,6 +4,35 @@ from typing import Any
 from app.db import get_db
 
 
+def list_recent_workouts(limit: int = 30) -> list[dict[str, Any]]:
+    with get_db() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM workouts
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+
+    return [dict(row) for row in rows]
+
+
+def get_workout(workout_id: int) -> dict[str, Any] | None:
+    with get_db() as conn:
+        row = conn.execute(
+            """
+            SELECT *
+            FROM workouts
+            WHERE id = ?
+            """,
+            (workout_id,),
+        ).fetchone()
+
+    return dict(row) if row is not None else None
+
+
 def get_previous_set_for_exercise(
     exercise_id: int,
     current_workout_id: int,
