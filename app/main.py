@@ -1,11 +1,9 @@
 import json
 import logging
-import os
 import sqlite3
 import time
 from copy import deepcopy
 from datetime import datetime, date, timedelta
-from pathlib import Path
 from threading import RLock
 from typing import Any
 from uuid import uuid4
@@ -14,6 +12,8 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
+from app import config
+from app.db import get_db, init_db, seed_default_exercises
 from app.services.analysis_service import (
     calculate_workout_load_metrics as calculate_load_metrics,
     estimated_1rm,
@@ -22,13 +22,9 @@ from app.services.analysis_service import (
 )
 
 
-DB_PATH = Path(os.getenv("DB_PATH", "data/training.db"))
-LOG_LEVEL = os.getenv("LOG_LEVEL", "DEBUG").upper()
-
-
 def configure_logging() -> None:
     logging.basicConfig(
-        level=getattr(logging, LOG_LEVEL, logging.DEBUG),
+        level=getattr(logging, config.LOG_LEVEL, logging.DEBUG),
         format=(
             "%(asctime)s "
             "%(levelname)s "
@@ -69,17 +65,6 @@ BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
     ),
 }
 BACKUP_TABLES = tuple(BACKUP_TABLE_COLUMNS)
-
-DEFAULT_EXERCISES = (
-    "Deadlift",
-    "Goblet Squat",
-    "DB Bench Press",
-    "DB Row",
-    "EZ Curl",
-    "Triceps Extension",
-    "Lateral Raise",
-    "Crunches",
-)
 
 def load_label_class(load_label: str | None) -> str:
     if load_label == "Light":
@@ -1035,14 +1020,6 @@ async def log_requests(request: Request, call_next):
     return response
 
 
-def get_db() -> sqlite3.Connection:
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
-
-
 def get_table_counts(conn: sqlite3.Connection) -> dict[str, int]:
     counts = {
         table_name: conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
@@ -1178,14 +1155,6 @@ def restore_backup_payload(payload: Any) -> None:
     )
 
 
-def seed_default_exercises(conn: sqlite3.Connection) -> None:
-    for exercise in DEFAULT_EXERCISES:
-        conn.execute(
-            "INSERT OR IGNORE INTO exercises (name) VALUES (?)",
-            (exercise,),
-        )
-
-
 def reset_database_data() -> None:
     global ACTIVE_WORKOUT_DRAFT
 
@@ -1208,80 +1177,13 @@ def reset_database_data() -> None:
 
         logger.warning("db.reset.done")
 
-def ensure_column(
-    conn: sqlite3.Connection,
-    table_name: str,
-    column_name: str,
-    column_definition: str,
-) -> None:
-    columns = {
-        row["name"]
-        for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()
-    }
-
-    if column_name not in columns:
-        logger.info(
-            "db.migration.add_column table=%s column=%s definition=%s",
-            table_name,
-            column_name,
-            column_definition,
-        )
-        conn.execute(
-            f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_definition}"
-        )
-
-def init_db() -> None:
-    logger.info("db.init.start db_path=%s", DB_PATH)
-
-    with get_db() as conn:
-        conn.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS exercises (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL UNIQUE
-            );
-
-            CREATE TABLE IF NOT EXISTS workouts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                workout_date TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                finished_at TEXT,
-                duration_seconds INTEGER
-            );
-
-            CREATE TABLE IF NOT EXISTS workout_exercises (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                workout_id INTEGER NOT NULL,
-                exercise_id INTEGER NOT NULL,
-                position INTEGER NOT NULL,
-                FOREIGN KEY (workout_id) REFERENCES workouts(id) ON DELETE CASCADE,
-                FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE CASCADE
-            );
-
-            CREATE TABLE IF NOT EXISTS set_entries (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                workout_exercise_id INTEGER NOT NULL,
-                set_number INTEGER NOT NULL,
-                weight REAL NOT NULL DEFAULT 0,
-                reps INTEGER NOT NULL,
-                created_at TEXT NOT NULL,
-                FOREIGN KEY (workout_exercise_id) REFERENCES workout_exercises(id) ON DELETE CASCADE
-            );
-            """
-        )
-
-        ensure_column(conn, "workouts", "session_rpe", "INTEGER")
-        ensure_column(conn, "workouts", "lower_back_pain", "INTEGER")
-        ensure_column(conn, "workouts", "duration_seconds", "INTEGER")
-
-        seed_default_exercises(conn)
-
-        logger.info("db.init.done")
-
-
 @app.on_event("startup")
 def on_startup() -> None:
-    logger.info("app.startup db_path=%s log_level=%s", DB_PATH, LOG_LEVEL)
+    logger.info(
+        "app.startup db_path=%s log_level=%s",
+        config.DB_PATH,
+        config.LOG_LEVEL,
+    )
     init_db()
     logger.info("app.ready")
 

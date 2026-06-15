@@ -4,21 +4,22 @@ import unittest
 from pathlib import Path
 from typing import Any
 
+from app import config
 import app.main as main
 
 
 class MainDatabaseBehaviorTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
-        self.original_db_path = main.DB_PATH
+        self.original_db_path = config.DB_PATH
         self.original_active_draft = main.ACTIVE_WORKOUT_DRAFT
 
-        main.DB_PATH = Path(self.temp_dir.name) / "training.db"
+        config.DB_PATH = Path(self.temp_dir.name) / "training.db"
         main.ACTIVE_WORKOUT_DRAFT = None
         main.init_db()
 
     def tearDown(self) -> None:
-        main.DB_PATH = self.original_db_path
+        config.DB_PATH = self.original_db_path
         main.ACTIVE_WORKOUT_DRAFT = self.original_active_draft
         self.temp_dir.cleanup()
 
