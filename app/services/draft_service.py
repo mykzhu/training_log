@@ -220,6 +220,41 @@ def duplicate_active_draft_set(draft_exercise_id: int) -> dict[str, Any] | None:
     return set_entry
 
 
+def update_active_draft_set(
+    draft_set_id: int,
+    weight: float | None = None,
+    reps: int | None = None,
+) -> dict[str, Any] | None:
+    with DRAFT_LOCK:
+        draft = _get_active_workout_draft_locked()
+        if draft is None:
+            logger.warning("workout.draft.set.update.no_active set_id=%s", draft_set_id)
+            return None
+
+        found = get_draft_set(draft, draft_set_id)
+        if not found:
+            logger.warning("workout.draft.set.update.not_found set_id=%s", draft_set_id)
+            return None
+
+        _, set_entry = found
+
+        if weight is not None:
+            set_entry["weight"] = weight
+
+        if reps is not None:
+            set_entry["reps"] = reps
+
+        draft_repository.replace_active_draft(draft)
+
+    logger.info(
+        "workout.draft.set.update set_id=%s weight=%s reps=%s",
+        draft_set_id,
+        weight,
+        reps,
+    )
+    return set_entry
+
+
 def delete_active_draft_set(draft_set_id: int) -> bool:
     with DRAFT_LOCK:
         draft = _get_active_workout_draft_locked()
