@@ -272,6 +272,7 @@ frontend/
 * FastAPI remains the source of truth.
 * API endpoints should be versioned under `/api/v1`.
 * The built frontend should eventually be served by FastAPI from the same origin.
+* The app must work without internet access after installation. Runtime behavior must not depend on CDNs, remote fonts, remote scripts, hosted images, or online API services.
 
 ---
 
@@ -936,6 +937,17 @@ Start with:
 * TanStack Query for server state
 
 Do not introduce Redux unless the application later requires complex client-only state.
+
+### Offline operation
+
+The deployed app must remain fully usable on a local network without internet access.
+
+Frontend implementation rules:
+
+* Bundle all JavaScript and CSS assets into the application build.
+* Do not load scripts, styles, fonts, icons, charts, maps, or images from CDNs or other remote hosts at runtime.
+* Do not require online services for workout logging, history, backup/restore, or analytics.
+* Any future optional online feature must fail gracefully and must not block the core training log.
 
 ---
 
