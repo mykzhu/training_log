@@ -1,0 +1,152 @@
+from datetime import datetime
+from typing import Any
+
+from app.db import get_db
+
+
+def get_active_draft() -> dict[str, Any] | None:
+    with get_db() as conn:
+        draft = conn.execute(
+            """
+            SELECT *
+            FROM active_workout_draft
+            WHERE id = 1
+            """
+        ).fetchone()
+
+        if draft is None:
+            return None
+
+        exercise_rows = conn.execute(
+            """
+            SELECT
+                ade.id,
+                ade.exercise_id,
+                e.name AS exercise_name,
+                ade.position
+            FROM active_draft_exercises ade
+            JOIN exercises e ON e.id = ade.exercise_id
+            WHERE ade.draft_id = 1
+            ORDER BY ade.position ASC, ade.id ASC
+            """
+        ).fetchall()
+
+        set_rows = conn.execute(
+            """
+            SELECT *
+            FROM active_draft_sets
+            ORDER BY set_number ASC, id ASC
+            """
+        ).fetchall()
+
+    sets_by_exercise: dict[int, list[dict[str, Any]]] = {}
+    for row in set_rows:
+        draft_exercise_id = int(row["draft_exercise_id"])
+        sets_by_exercise.setdefault(draft_exercise_id, []).append(
+            {
+                "id": int(row["id"]),
+                "set_number": int(row["set_number"]),
+                "weight": float(row["weight"]),
+                "reps": int(row["reps"]),
+                "created_at": row["created_at"],
+            }
+        )
+
+    return {
+        "started_at": draft["started_at"],
+        "session_rpe": draft["session_rpe"],
+        "lower_back_pain": draft["lower_back_pain"],
+        "workout_exercises": [
+            {
+                "id": int(row["id"]),
+                "exercise_id": int(row["exercise_id"]),
+                "exercise_name": row["exercise_name"],
+                "position": int(row["position"]),
+                "sets": sets_by_exercise.get(int(row["id"]), []),
+            }
+            for row in exercise_rows
+        ],
+        "next_workout_exercise_id": int(draft["next_workout_exercise_id"]),
+        "next_set_id": int(draft["next_set_id"]),
+    }
+
+
+def replace_active_draft(draft: dict[str, Any]) -> None:
+    updated_at = datetime.now().isoformat(timespec="seconds")
+
+    with get_db() as conn:
+        conn.execute("DELETE FROM active_workout_draft WHERE id = 1")
+        conn.execute(
+            """
+            INSERT INTO active_workout_draft (
+                id,
+                started_at,
+                session_rpe,
+                lower_back_pain,
+                next_workout_exercise_id,
+                next_set_id,
+                updated_at
+            )
+            VALUES (1, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(draft["started_at"]),
+                draft.get("session_rpe"),
+                draft.get("lower_back_pain"),
+                int(draft["next_workout_exercise_id"]),
+                int(draft["next_set_id"]),
+                updated_at,
+            ),
+        )
+
+        for draft_exercise in sorted(
+            draft["workout_exercises"],
+            key=lambda item: (item["position"], item["id"]),
+        ):
+            conn.execute(
+                """
+                INSERT INTO active_draft_exercises (
+                    id,
+                    draft_id,
+                    exercise_id,
+                    position
+                )
+                VALUES (?, 1, ?, ?)
+                """,
+                (
+                    int(draft_exercise["id"]),
+                    int(draft_exercise["exercise_id"]),
+                    int(draft_exercise["position"]),
+                ),
+            )
+
+            for set_entry in sorted(
+                draft_exercise["sets"],
+                key=lambda item: (item["set_number"], item["id"]),
+            ):
+                conn.execute(
+                    """
+                    INSERT INTO active_draft_sets (
+                        id,
+                        draft_exercise_id,
+                        set_number,
+                        weight,
+                        reps,
+                        created_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        int(set_entry["id"]),
+                        int(draft_exercise["id"]),
+                        int(set_entry["set_number"]),
+                        float(set_entry["weight"]),
+                        int(set_entry["reps"]),
+                        str(set_entry["created_at"]),
+                    ),
+                )
+
+
+def clear_active_draft() -> None:
+    with get_db() as conn:
+        conn.execute("DELETE FROM active_workout_draft WHERE id = 1")

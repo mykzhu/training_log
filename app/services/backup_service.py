@@ -31,6 +31,16 @@ BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
     ),
 }
 BACKUP_TABLES = tuple(BACKUP_TABLE_COLUMNS)
+DRAFT_TABLES = (
+    "active_draft_sets",
+    "active_draft_exercises",
+    "active_workout_draft",
+)
+
+
+def clear_draft_tables(conn: sqlite3.Connection) -> None:
+    for table_name in DRAFT_TABLES:
+        conn.execute(f"DELETE FROM {table_name}")
 
 
 def get_table_counts(conn: sqlite3.Connection) -> dict[str, int]:
@@ -151,6 +161,8 @@ def restore_backup_payload(payload: Any) -> None:
     )
 
     with get_db() as conn:
+        clear_draft_tables(conn)
+
         for table_name in reversed(BACKUP_TABLES):
             conn.execute(f"DELETE FROM {table_name}")
 
@@ -176,6 +188,8 @@ def restore_backup_payload(payload: Any) -> None:
 def reset_database_data() -> None:
     with get_db() as conn:
         logger.warning("db.reset.start")
+
+        clear_draft_tables(conn)
 
         for table_name in reversed(BACKUP_TABLES):
             conn.execute(f"DELETE FROM {table_name}")
