@@ -435,17 +435,26 @@ def build_stats2_charts(stats: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def build_stats(limit: int = 30) -> dict[str, Any]:
+def build_stats(limit: int | None = 30) -> dict[str, Any]:
     with get_db() as conn:
-        workouts = conn.execute(
-            """
-            SELECT *
-            FROM workouts
-            ORDER BY id DESC
-            LIMIT ?
-            """,
-            (limit,),
-        ).fetchall()
+        if limit is None:
+            workouts = conn.execute(
+                """
+                SELECT *
+                FROM workouts
+                ORDER BY id DESC
+                """
+            ).fetchall()
+        else:
+            workouts = conn.execute(
+                """
+                SELECT *
+                FROM workouts
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
 
     workout_items = []
     exercise_stats: dict[str, dict[str, Any]] = {}

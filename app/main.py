@@ -14,6 +14,7 @@ from app import config
 from app.db import get_db, init_db
 from app.routes.api_current_workout import router as current_workout_api_router
 from app.routes.api_exercises import router as exercises_api_router
+from app.routes.api_stats import router as stats_api_router
 from app.routes.api_workouts import router as workouts_api_router
 from app.repositories.workouts import (
     get_previous_set_for_exercise,
@@ -73,6 +74,7 @@ access_logger = logging.getLogger("training_log.access")
 app = FastAPI(title="Training Log")
 app.include_router(current_workout_api_router)
 app.include_router(exercises_api_router)
+app.include_router(stats_api_router)
 app.include_router(workouts_api_router)
 templates = Jinja2Templates(directory="app/templates")
 
