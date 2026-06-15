@@ -6,6 +6,12 @@ class WorkoutMetadataUpdate(BaseModel):
     lower_back_pain: int | None = Field(default=None, ge=0, le=10)
 
 
+class WorkoutUpdateRequest(BaseModel):
+    created_at: str | None = Field(default=None, min_length=16, max_length=19)
+    session_rpe: int | None = Field(default=None, ge=1, le=10)
+    lower_back_pain: int | None = Field(default=None, ge=0, le=10)
+
+
 class AddExerciseRequest(BaseModel):
     exercise_id: int = Field(ge=1)
 

@@ -8,7 +8,13 @@ from fastapi import HTTPException
 from app import config
 from app.db import get_db, init_db
 import app.main as main
-from app.routes.api_workouts import get_workout_detail, get_workouts
+from app.routes.api_workouts import (
+    delete_workout_endpoint,
+    get_workout_detail,
+    get_workouts,
+    update_workout_endpoint,
+)
+from app.schemas import WorkoutUpdateRequest
 
 
 class WorkoutsApiTests(unittest.TestCase):
@@ -116,6 +122,8 @@ class WorkoutsApiTests(unittest.TestCase):
 
         self.assertIn(("/api/v1/workouts", ("GET",)), routes)
         self.assertIn(("/api/v1/workouts/{workout_id}", ("GET",)), routes)
+        self.assertIn(("/api/v1/workouts/{workout_id}", ("PATCH",)), routes)
+        self.assertIn(("/api/v1/workouts/{workout_id}", ("DELETE",)), routes)
 
     def test_get_workouts_returns_recent_summaries(self) -> None:
         first_id = self.insert_workout(
@@ -185,6 +193,119 @@ class WorkoutsApiTests(unittest.TestCase):
     def test_get_workout_detail_returns_404_for_missing_workout(self) -> None:
         with self.assertRaises(HTTPException) as exc:
             get_workout_detail(9999)
+
+        self.assertEqual(exc.exception.status_code, 404)
+
+    def test_update_workout_endpoint_updates_datetime_metadata_and_duration(
+        self,
+    ) -> None:
+        workout_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            session_rpe=6,
+            lower_back_pain=1,
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [{"weight": 100, "reps": 5}],
+                },
+            ],
+        )
+
+        response = update_workout_endpoint(
+            workout_id,
+            WorkoutUpdateRequest(
+                created_at="2026-06-01T09:30",
+                session_rpe=8,
+                lower_back_pain=3,
+            ),
+        )
+
+        self.assertEqual(response["workout"]["created_at"], "2026-06-01T09:30:00")
+        self.assertEqual(response["workout"]["workout_date"], "2026-06-01")
+        self.assertEqual(response["workout"]["session_rpe"], 8)
+        self.assertEqual(response["workout"]["lower_back_pain"], 3)
+        self.assertEqual(response["workout"]["duration_seconds"], 5400)
+
+    def test_update_workout_endpoint_can_clear_optional_metadata(self) -> None:
+        workout_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            session_rpe=6,
+            lower_back_pain=1,
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [{"weight": 100, "reps": 5}],
+                },
+            ],
+        )
+
+        response = update_workout_endpoint(
+            workout_id,
+            WorkoutUpdateRequest(session_rpe=None, lower_back_pain=None),
+        )
+
+        self.assertIsNone(response["workout"]["session_rpe"])
+        self.assertIsNone(response["workout"]["lower_back_pain"])
+
+    def test_update_workout_endpoint_returns_400_when_no_fields_provided(self) -> None:
+        workout_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [{"weight": 100, "reps": 5}],
+                },
+            ],
+        )
+
+        with self.assertRaises(HTTPException) as exc:
+            update_workout_endpoint(workout_id, WorkoutUpdateRequest())
+
+        self.assertEqual(exc.exception.status_code, 400)
+
+    def test_update_workout_endpoint_returns_404_for_missing_workout(self) -> None:
+        with self.assertRaises(HTTPException) as exc:
+            update_workout_endpoint(
+                9999,
+                WorkoutUpdateRequest(session_rpe=5),
+            )
+
+        self.assertEqual(exc.exception.status_code, 404)
+
+    def test_delete_workout_endpoint_deletes_workout_and_child_rows(self) -> None:
+        workout_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            session_rpe=6,
+            lower_back_pain=1,
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [
+                        {"weight": 100, "reps": 5},
+                        {"weight": 90, "reps": 8},
+                    ],
+                },
+            ],
+        )
+
+        response = delete_workout_endpoint(workout_id)
+
+        with get_db() as conn:
+            workout_count = conn.execute("SELECT COUNT(*) FROM workouts").fetchone()[0]
+            workout_exercise_count = conn.execute(
+                "SELECT COUNT(*) FROM workout_exercises"
+            ).fetchone()[0]
+            set_count = conn.execute("SELECT COUNT(*) FROM set_entries").fetchone()[0]
+
+        self.assertTrue(response["deleted"])
+        self.assertEqual(response["workout_id"], workout_id)
+        self.assertEqual(workout_count, 0)
+        self.assertEqual(workout_exercise_count, 0)
+        self.assertEqual(set_count, 0)
+
+    def test_delete_workout_endpoint_returns_404_for_missing_workout(self) -> None:
+        with self.assertRaises(HTTPException) as exc:
+            delete_workout_endpoint(9999)
 
         self.assertEqual(exc.exception.status_code, 404)
 

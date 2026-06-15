@@ -33,6 +33,55 @@ def get_workout(workout_id: int) -> dict[str, Any] | None:
     return dict(row) if row is not None else None
 
 
+def update_workout(
+    workout_id: int,
+    *,
+    workout_date: str,
+    created_at: str,
+    session_rpe: int | None,
+    lower_back_pain: int | None,
+    duration_seconds: int | None,
+) -> dict[str, Any] | None:
+    with get_db() as conn:
+        cursor = conn.execute(
+            """
+            UPDATE workouts
+            SET workout_date = ?,
+                created_at = ?,
+                session_rpe = ?,
+                lower_back_pain = ?,
+                duration_seconds = ?
+            WHERE id = ?
+            """,
+            (
+                workout_date,
+                created_at,
+                session_rpe,
+                lower_back_pain,
+                duration_seconds,
+                workout_id,
+            ),
+        )
+
+    if cursor.rowcount == 0:
+        return None
+
+    return get_workout(workout_id)
+
+
+def delete_workout(workout_id: int) -> bool:
+    with get_db() as conn:
+        cursor = conn.execute(
+            """
+            DELETE FROM workouts
+            WHERE id = ?
+            """,
+            (workout_id,),
+        )
+
+    return cursor.rowcount > 0
+
+
 def get_previous_set_for_exercise(
     exercise_id: int,
     current_workout_id: int,
