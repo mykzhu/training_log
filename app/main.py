@@ -12,6 +12,7 @@ from fastapi.templating import Jinja2Templates
 
 from app import config
 from app.db import get_db, init_db
+from app.routes.api_backup import router as backup_api_router
 from app.routes.api_current_workout import router as current_workout_api_router
 from app.routes.api_exercises import router as exercises_api_router
 from app.routes.api_stats import router as stats_api_router
@@ -72,6 +73,7 @@ logger = logging.getLogger("training_log")
 access_logger = logging.getLogger("training_log.access")
 
 app = FastAPI(title="Training Log")
+app.include_router(backup_api_router)
 app.include_router(current_workout_api_router)
 app.include_router(exercises_api_router)
 app.include_router(stats_api_router)
@@ -1108,6 +1110,7 @@ async def import_backup(backup_file: UploadFile = File(...)):
     try:
         payload = json.loads(raw_content.decode("utf-8-sig"))
         restore_backup_payload(payload)
+        clear_active_workout_draft()
     except UnicodeDecodeError as exc:
         logger.exception("backup.import.error reason=utf8_decode filename=%s", backup_file.filename)
         raise HTTPException(
