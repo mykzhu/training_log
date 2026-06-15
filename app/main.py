@@ -2,9 +2,7 @@ import json
 import logging
 import sqlite3
 import time
-from copy import deepcopy
 from datetime import datetime
-from threading import RLock
 from typing import Any
 from uuid import uuid4
 
@@ -35,13 +33,18 @@ from app.services.stats_service import (
     parse_limit,
 )
 from app.services.draft_service import (
+    add_exercise_to_active_draft,
+    add_set_to_active_draft,
     calculate_draft_elapsed_seconds,
-    create_workout_draft,
-    get_draft_set,
+    clear_active_workout_draft,
+    delete_active_draft_exercise,
+    delete_active_draft_set,
+    duplicate_active_draft_set,
+    finish_active_workout,
+    get_active_workout_draft,
     get_draft_workout_details,
-    get_draft_workout_exercise,
-    renumber_draft_sets,
-    save_workout_draft_to_db,
+    start_active_workout_draft,
+    update_active_draft_metadata,
 )
 from app.services.recovery_service import build_recovery_context
 from app.services.recommendation_service import build_next_workout_recommendation
@@ -107,9 +110,6 @@ def recommendation_status_class(status: str | None) -> str:
         return "metric-red"
 
     return "metric-neutral"
-
-ACTIVE_WORKOUT_DRAFT: dict[str, Any] | None = None
-DRAFT_LOCK = RLock()
 
 def build_workout_analysis(
     workout_id: int,
@@ -472,11 +472,6 @@ def on_startup() -> None:
     logger.info("app.ready")
 
 
-def get_active_workout_draft() -> dict[str, Any] | None:
-    with DRAFT_LOCK:
-        return ACTIVE_WORKOUT_DRAFT
-
-
 def get_weight_options(extra_weights: list[float] | None = None) -> list[float]:
     options: set[float] = {0.0}
 
@@ -639,21 +634,7 @@ def add_exercise(name: str = Form(...)):
 
 @app.post("/workouts/start")
 def start_workout():
-    global ACTIVE_WORKOUT_DRAFT
-
-    with DRAFT_LOCK:
-        if ACTIVE_WORKOUT_DRAFT is None:
-            ACTIVE_WORKOUT_DRAFT = create_workout_draft()
-            logger.info(
-                "workout.draft.start started_at=%s",
-                ACTIVE_WORKOUT_DRAFT["started_at"],
-            )
-        else:
-            logger.info(
-                "workout.draft.start.ignored reason=already_active started_at=%s",
-                ACTIVE_WORKOUT_DRAFT["started_at"],
-            )
-
+    start_active_workout_draft()
     return RedirectResponse("/", status_code=303)
 
 
@@ -665,19 +646,9 @@ def update_draft_metadata(
     parsed_session_rpe = parse_optional_int(session_rpe)
     parsed_lower_back_pain = parse_optional_int(lower_back_pain)
 
-    with DRAFT_LOCK:
-        draft = ACTIVE_WORKOUT_DRAFT
-        if draft is None:
-            logger.warning("workout.draft.metadata.no_active")
-            return RedirectResponse("/", status_code=303)
-
-        draft["session_rpe"] = parsed_session_rpe
-        draft["lower_back_pain"] = parsed_lower_back_pain
-
-    logger.info(
-        "workout.draft.metadata.update session_rpe=%s lower_back_pain=%s",
-        session_rpe,
-        lower_back_pain,
+    update_active_draft_metadata(
+        session_rpe=parsed_session_rpe,
+        lower_back_pain=parsed_lower_back_pain,
     )
     return RedirectResponse("/", status_code=303)
 
@@ -694,31 +665,9 @@ def add_exercise_to_draft(exercise_id: int = Form(...)):
         logger.warning("workout.draft.exercise.add.not_found exercise_id=%s", exercise_id)
         return RedirectResponse("/", status_code=303)
 
-    with DRAFT_LOCK:
-        draft = ACTIVE_WORKOUT_DRAFT
-        if draft is None:
-            logger.warning("workout.draft.exercise.add.no_active exercise_id=%s", exercise_id)
-            return RedirectResponse("/", status_code=303)
-
-        draft_exercise_id = int(draft["next_workout_exercise_id"])
-        draft["next_workout_exercise_id"] = draft_exercise_id + 1
-        position = len(draft["workout_exercises"]) + 1
-
-        draft["workout_exercises"].append(
-            {
-                "id": draft_exercise_id,
-                "exercise_id": int(exercise["id"]),
-                "exercise_name": str(exercise["name"]),
-                "position": position,
-                "sets": [],
-            }
-        )
-
-    logger.info(
-        "workout.draft.exercise.add draft_exercise_id=%s exercise_id=%s position=%s",
-        draft_exercise_id,
-        exercise_id,
-        position,
+    add_exercise_to_active_draft(
+        exercise_id=int(exercise["id"]),
+        exercise_name=str(exercise["name"]),
     )
     return RedirectResponse("/", status_code=303)
 
@@ -729,142 +678,29 @@ def add_set_to_draft(
     weight: float = Form(...),
     reps: int = Form(...),
 ):
-    with DRAFT_LOCK:
-        draft = ACTIVE_WORKOUT_DRAFT
-        if draft is None:
-            logger.warning("workout.draft.set.add.no_active draft_exercise_id=%s", draft_exercise_id)
-            return RedirectResponse("/", status_code=303)
-
-        draft_exercise = get_draft_workout_exercise(draft, draft_exercise_id)
-        if not draft_exercise:
-            logger.warning("workout.draft.set.add.exercise_not_found draft_exercise_id=%s", draft_exercise_id)
-            return RedirectResponse("/", status_code=303)
-
-        set_id = int(draft["next_set_id"])
-        draft["next_set_id"] = set_id + 1
-        set_number = len(draft_exercise["sets"]) + 1
-
-        draft_exercise["sets"].append(
-            {
-                "id": set_id,
-                "set_number": set_number,
-                "weight": weight,
-                "reps": reps,
-                "created_at": datetime.now().isoformat(timespec="seconds"),
-            }
-        )
-
-    logger.info(
-        "workout.draft.set.add set_id=%s draft_exercise_id=%s set_number=%s weight=%s reps=%s",
-        set_id,
-        draft_exercise_id,
-        set_number,
-        weight,
-        reps,
+    add_set_to_active_draft(
+        draft_exercise_id=draft_exercise_id,
+        weight=weight,
+        reps=reps,
     )
     return RedirectResponse("/", status_code=303)
 
 
 @app.post("/draft-exercises/{draft_exercise_id}/sets/duplicate")
 def duplicate_draft_set(draft_exercise_id: int):
-    with DRAFT_LOCK:
-        draft = ACTIVE_WORKOUT_DRAFT
-        if draft is None:
-            logger.warning("workout.draft.set.duplicate.no_active draft_exercise_id=%s", draft_exercise_id)
-            return RedirectResponse("/", status_code=303)
-
-        draft_exercise = get_draft_workout_exercise(draft, draft_exercise_id)
-        if not draft_exercise:
-            logger.warning("workout.draft.set.duplicate.exercise_not_found draft_exercise_id=%s", draft_exercise_id)
-            return RedirectResponse("/", status_code=303)
-
-        if draft_exercise["sets"]:
-            source_set = draft_exercise["sets"][-1]
-            weight = float(source_set["weight"])
-            reps = int(source_set["reps"])
-        else:
-            previous_set = get_previous_set_for_exercise(
-                exercise_id=int(draft_exercise["exercise_id"]),
-                current_workout_id=0,
-            )
-            if not previous_set:
-                logger.warning("workout.draft.set.duplicate.no_source draft_exercise_id=%s", draft_exercise_id)
-                return RedirectResponse("/", status_code=303)
-
-            weight = float(previous_set["weight"])
-            reps = int(previous_set["reps"])
-
-        set_id = int(draft["next_set_id"])
-        draft["next_set_id"] = set_id + 1
-        set_number = len(draft_exercise["sets"]) + 1
-
-        draft_exercise["sets"].append(
-            {
-                "id": set_id,
-                "set_number": set_number,
-                "weight": weight,
-                "reps": reps,
-                "created_at": datetime.now().isoformat(timespec="seconds"),
-            }
-        )
-
-    logger.info(
-        "workout.draft.set.duplicate set_id=%s draft_exercise_id=%s set_number=%s weight=%s reps=%s",
-        set_id,
-        draft_exercise_id,
-        set_number,
-        weight,
-        reps,
-    )
+    duplicate_active_draft_set(draft_exercise_id)
     return RedirectResponse("/", status_code=303)
 
 
 @app.post("/draft-sets/{draft_set_id}/delete")
 def delete_draft_set(draft_set_id: int):
-    with DRAFT_LOCK:
-        draft = ACTIVE_WORKOUT_DRAFT
-        if draft is None:
-            logger.warning("workout.draft.set.delete.no_active set_id=%s", draft_set_id)
-            return RedirectResponse("/", status_code=303)
-
-        found = get_draft_set(draft, draft_set_id)
-        if not found:
-            logger.warning("workout.draft.set.delete.not_found set_id=%s", draft_set_id)
-            return RedirectResponse("/", status_code=303)
-
-        draft_exercise, _ = found
-        draft_exercise["sets"] = [
-            set_entry for set_entry in draft_exercise["sets"]
-            if int(set_entry["id"]) != draft_set_id
-        ]
-        renumber_draft_sets(draft_exercise)
-
-    logger.info("workout.draft.set.delete set_id=%s", draft_set_id)
+    delete_active_draft_set(draft_set_id)
     return RedirectResponse("/", status_code=303)
 
 
 @app.post("/draft-exercises/{draft_exercise_id}/delete")
 def delete_draft_exercise(draft_exercise_id: int):
-    with DRAFT_LOCK:
-        draft = ACTIVE_WORKOUT_DRAFT
-        if draft is None:
-            logger.warning("workout.draft.exercise.delete.no_active draft_exercise_id=%s", draft_exercise_id)
-            return RedirectResponse("/", status_code=303)
-
-        before_count = len(draft["workout_exercises"])
-        draft["workout_exercises"] = [
-            item for item in draft["workout_exercises"]
-            if int(item["id"]) != draft_exercise_id
-        ]
-
-        for index, item in enumerate(draft["workout_exercises"], start=1):
-            item["position"] = index
-
-    logger.info(
-        "workout.draft.exercise.delete draft_exercise_id=%s deleted=%s",
-        draft_exercise_id,
-        before_count != len(draft["workout_exercises"]),
-    )
+    delete_active_draft_exercise(draft_exercise_id)
     return RedirectResponse("/", status_code=303)
 
 @app.post("/workouts/{workout_id}/exercise")
@@ -1059,21 +895,10 @@ def delete_workout_exercise(
 
 @app.post("/workouts/finish")
 def finish_workout():
-    global ACTIVE_WORKOUT_DRAFT
+    workout_id = finish_active_workout()
+    if workout_id is None:
+        return RedirectResponse("/", status_code=303)
 
-    with DRAFT_LOCK:
-        if ACTIVE_WORKOUT_DRAFT is None:
-            logger.warning("workout.draft.finish.no_active")
-            return RedirectResponse("/", status_code=303)
-
-        draft = deepcopy(ACTIVE_WORKOUT_DRAFT)
-
-    workout_id = save_workout_draft_to_db(draft)
-
-    with DRAFT_LOCK:
-        ACTIVE_WORKOUT_DRAFT = None
-
-    logger.info("workout.draft.finish workout_id=%s", workout_id)
     return RedirectResponse(f"/workouts/{workout_id}", status_code=303)
 
 
@@ -1299,11 +1124,7 @@ async def import_backup(backup_file: UploadFile = File(...)):
 
 @app.post("/backup/reset")
 def reset_database():
-    global ACTIVE_WORKOUT_DRAFT
-
-    with DRAFT_LOCK:
-        ACTIVE_WORKOUT_DRAFT = None
-
+    clear_active_workout_draft()
     reset_database_data()
     logger.warning("backup.reset.success")
     return RedirectResponse("/backup?reset=1", status_code=303)

@@ -4,13 +4,24 @@ from pathlib import Path
 
 from app import config
 from app.db import get_db, init_db
+from app.services import draft_service
 from app.services.draft_service import (
+    add_exercise_to_active_draft,
+    add_set_to_active_draft,
+    clear_active_workout_draft,
     create_workout_draft,
+    delete_active_draft_exercise,
+    delete_active_draft_set,
+    duplicate_active_draft_set,
+    finish_active_workout,
+    get_active_workout_draft,
     get_draft_set,
     get_draft_workout_details,
     get_draft_workout_exercise,
     renumber_draft_sets,
     save_workout_draft_to_db,
+    start_active_workout_draft,
+    update_active_draft_metadata,
 )
 
 
@@ -18,10 +29,13 @@ class DraftServiceTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.original_db_path = config.DB_PATH
+        self.original_active_draft = draft_service.ACTIVE_WORKOUT_DRAFT
         config.DB_PATH = Path(self.temp_dir.name) / "training.db"
+        clear_active_workout_draft()
         init_db()
 
     def tearDown(self) -> None:
+        draft_service.ACTIVE_WORKOUT_DRAFT = self.original_active_draft
         config.DB_PATH = self.original_db_path
         self.temp_dir.cleanup()
 
@@ -143,6 +157,84 @@ class DraftServiceTests(unittest.TestCase):
             [(row["weight"], row["reps"]) for row in sets],
             [(100.0, 5), (90.0, 8)],
         )
+
+    def test_active_draft_operations_manage_single_in_memory_draft(self) -> None:
+        deadlift_id = self.exercise_id("Deadlift")
+
+        draft, created = start_active_workout_draft()
+        same_draft, created_again = start_active_workout_draft()
+
+        self.assertTrue(created)
+        self.assertFalse(created_again)
+        self.assertIs(same_draft, draft)
+
+        self.assertTrue(update_active_draft_metadata(session_rpe=7, lower_back_pain=3))
+        draft_exercise = add_exercise_to_active_draft(
+            exercise_id=deadlift_id,
+            exercise_name="Deadlift",
+        )
+        first_set = add_set_to_active_draft(
+            draft_exercise_id=int(draft_exercise["id"]),
+            weight=100.0,
+            reps=5,
+        )
+        duplicate_set = duplicate_active_draft_set(
+            draft_exercise_id=int(draft_exercise["id"]),
+        )
+
+        self.assertEqual(get_active_workout_draft()["session_rpe"], 7)
+        self.assertEqual(first_set["set_number"], 1)
+        self.assertEqual(duplicate_set["weight"], 100.0)
+        self.assertEqual(duplicate_set["reps"], 5)
+
+        self.assertTrue(delete_active_draft_set(int(first_set["id"])))
+        self.assertEqual(draft_exercise["sets"][0]["set_number"], 1)
+
+        self.assertTrue(delete_active_draft_exercise(int(draft_exercise["id"])))
+        self.assertEqual(get_active_workout_draft()["workout_exercises"], [])
+
+    def test_finish_active_workout_persists_and_clears_draft(self) -> None:
+        deadlift_id = self.exercise_id("Deadlift")
+
+        start_active_workout_draft()
+        update_active_draft_metadata(session_rpe=6, lower_back_pain=2)
+        draft_exercise = add_exercise_to_active_draft(
+            exercise_id=deadlift_id,
+            exercise_name="Deadlift",
+        )
+        add_set_to_active_draft(
+            draft_exercise_id=int(draft_exercise["id"]),
+            weight=100.0,
+            reps=5,
+        )
+
+        workout_id = finish_active_workout()
+
+        self.assertIsNotNone(workout_id)
+        self.assertIsNone(get_active_workout_draft())
+
+        with get_db() as conn:
+            workout = conn.execute(
+                """
+                SELECT session_rpe, lower_back_pain
+                FROM workouts
+                WHERE id = ?
+                """,
+                (workout_id,),
+            ).fetchone()
+            set_count = conn.execute(
+                """
+                SELECT COUNT(*)
+                FROM set_entries se
+                JOIN workout_exercises we ON we.id = se.workout_exercise_id
+                WHERE we.workout_id = ?
+                """,
+                (workout_id,),
+            ).fetchone()[0]
+
+        self.assertEqual(workout["session_rpe"], 6)
+        self.assertEqual(workout["lower_back_pain"], 2)
+        self.assertEqual(set_count, 1)
 
 
 if __name__ == "__main__":

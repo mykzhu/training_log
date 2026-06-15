@@ -6,21 +6,22 @@ from typing import Any
 
 from app import config
 import app.main as main
+from app.services import draft_service
 
 
 class MainDatabaseBehaviorTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.original_db_path = config.DB_PATH
-        self.original_active_draft = main.ACTIVE_WORKOUT_DRAFT
+        self.original_active_draft = draft_service.ACTIVE_WORKOUT_DRAFT
 
         config.DB_PATH = Path(self.temp_dir.name) / "training.db"
-        main.ACTIVE_WORKOUT_DRAFT = None
+        draft_service.clear_active_workout_draft()
         main.init_db()
 
     def tearDown(self) -> None:
         config.DB_PATH = self.original_db_path
-        main.ACTIVE_WORKOUT_DRAFT = self.original_active_draft
+        draft_service.ACTIVE_WORKOUT_DRAFT = self.original_active_draft
         self.temp_dir.cleanup()
 
     def exercise_id(self, exercise_name: str) -> int:
