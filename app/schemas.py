@@ -10,6 +10,14 @@ class AddExerciseRequest(BaseModel):
     exercise_id: int = Field(ge=1)
 
 
+class ExerciseCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
+class ExerciseUpdateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
 class AddSetRequest(BaseModel):
     weight: float = Field(ge=0)
     reps: int = Field(ge=1, le=100)
