@@ -169,6 +169,7 @@ export type StatsWorkout = {
 };
 
 export type ExerciseStats = {
+  exercise_id: number;
   name: string;
   total_volume: number;
   total_reps: number;

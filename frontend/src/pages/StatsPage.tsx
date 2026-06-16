@@ -69,8 +69,42 @@ function readStatsLimitFromUrl() {
   return parseStatsLimit(new URLSearchParams(window.location.search).get("limit"));
 }
 
+function statsBasePath() {
+  const exerciseStatsMatch = window.location.pathname.match(/^\/exercises\/\d+\/stats/);
+  return exerciseStatsMatch ? exerciseStatsMatch[0] : "/stats";
+}
+
 function statsLimitPath(limit: StatsLimit) {
-  return `/stats?limit=${limit}`;
+  return `${statsBasePath()}?limit=${limit}`;
+}
+
+type WorkoutChartClickState = {
+  activePayload?: Array<{
+    payload?: {
+      id?: unknown;
+    };
+  }>;
+};
+
+type ExerciseBarClickData = {
+  exercise_id?: unknown;
+  payload?: {
+    exercise_id?: unknown;
+  };
+};
+
+function numericId(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function workoutIdFromChartClick(state: unknown) {
+  const payload = (state as WorkoutChartClickState | null)?.activePayload?.[0]?.payload;
+  return numericId(payload?.id);
+}
+
+function exerciseIdFromBarClick(data: unknown) {
+  const barData = data as ExerciseBarClickData | null;
+  return numericId(barData?.exercise_id) ?? numericId(barData?.payload?.exercise_id);
 }
 
 function formatNumber(value: number | null | undefined, digits = 0) {
@@ -263,6 +297,30 @@ export default function StatsPage() {
     window.history.pushState(null, "", statsLimitPath(limit));
   }
 
+  function navigateToWorkout(workoutId: number) {
+    window.history.pushState(null, "", `/workouts/${workoutId}`);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }
+
+  function navigateToExerciseStats(exerciseId: number) {
+    window.history.pushState(null, "", `/exercises/${exerciseId}/stats?limit=${statsLimit}`);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }
+
+  function openWorkoutFromChart(state: unknown) {
+    const workoutId = workoutIdFromChartClick(state);
+    if (workoutId !== null) {
+      navigateToWorkout(workoutId);
+    }
+  }
+
+  function openExerciseFromBar(data: unknown) {
+    const exerciseId = exerciseIdFromBarClick(data);
+    if (exerciseId !== null) {
+      navigateToExerciseStats(exerciseId);
+    }
+  }
+
   const workoutData = useMemo(
     () => buildWorkoutData(stats?.stats.workouts ?? []),
     [stats],
@@ -360,7 +418,11 @@ export default function StatsPage() {
               title="Volume trend"
             >
               <ResponsiveContainer height={240} width="100%">
-                <AreaChart data={workoutData}>
+                <AreaChart
+                  className="clickable-chart"
+                  data={workoutData}
+                  onClick={openWorkoutFromChart}
+                >
                   <defs>
                     <linearGradient id="volumeGradient" x1="0" x2="0" y1="0" y2="1">
                       <stop offset="5%" stopColor={chartColors.blue} stopOpacity={0.55} />
@@ -387,7 +449,11 @@ export default function StatsPage() {
               title="Session load"
             >
               <ResponsiveContainer height={240} width="100%">
-                <LineChart data={workoutData}>
+                <LineChart
+                  className="clickable-chart"
+                  data={workoutData}
+                  onClick={openWorkoutFromChart}
+                >
                   <CartesianGrid stroke={chartColors.grid} strokeDasharray="3 3" />
                   <XAxis dataKey="date" stroke={chartColors.muted} tick={{ fontSize: 12 }} />
                   <YAxis stroke={chartColors.muted} tick={{ fontSize: 12 }} />
@@ -423,7 +489,11 @@ export default function StatsPage() {
               title="Recovery markers"
             >
               <ResponsiveContainer height={240} width="100%">
-                <LineChart data={workoutData}>
+                <LineChart
+                  className="clickable-chart"
+                  data={workoutData}
+                  onClick={openWorkoutFromChart}
+                >
                   <CartesianGrid stroke={chartColors.grid} strokeDasharray="3 3" />
                   <XAxis dataKey="date" stroke={chartColors.muted} tick={{ fontSize: 12 }} />
                   <YAxis domain={[0, 10]} stroke={chartColors.muted} tick={{ fontSize: 12 }} />
@@ -452,7 +522,12 @@ export default function StatsPage() {
               title="Exercise volume"
             >
               <ResponsiveContainer height={260} width="100%">
-                <BarChart data={topExercises} layout="vertical" margin={{ left: 18 }}>
+                <BarChart
+                  className="clickable-bar-chart"
+                  data={topExercises}
+                  layout="vertical"
+                  margin={{ left: 18 }}
+                >
                   <CartesianGrid stroke={chartColors.grid} strokeDasharray="3 3" />
                   <XAxis stroke={chartColors.muted} tick={{ fontSize: 12 }} type="number" />
                   <YAxis
@@ -463,7 +538,12 @@ export default function StatsPage() {
                     width={116}
                   />
                   <Tooltip {...commonTooltipProps()} />
-                  <Bar dataKey="total_volume" fill={chartColors.blue} radius={[0, 8, 8, 0]} />
+                  <Bar
+                    dataKey="total_volume"
+                    fill={chartColors.blue}
+                    onClick={(data: unknown) => openExerciseFromBar(data)}
+                    radius={[0, 8, 8, 0]}
+                  />
                 </BarChart>
               </ResponsiveContainer>
             </ChartCard>
@@ -473,7 +553,12 @@ export default function StatsPage() {
               title="Strength leaders"
             >
               <ResponsiveContainer height={260} width="100%">
-                <BarChart data={bestStrength} layout="vertical" margin={{ left: 18 }}>
+                <BarChart
+                  className="clickable-bar-chart"
+                  data={bestStrength}
+                  layout="vertical"
+                  margin={{ left: 18 }}
+                >
                   <CartesianGrid stroke={chartColors.grid} strokeDasharray="3 3" />
                   <XAxis stroke={chartColors.muted} tick={{ fontSize: 12 }} type="number" />
                   <YAxis
@@ -484,7 +569,12 @@ export default function StatsPage() {
                     width={116}
                   />
                   <Tooltip {...commonTooltipProps()} />
-                  <Bar dataKey="best_e1rm" fill={chartColors.green} radius={[0, 8, 8, 0]} />
+                  <Bar
+                    dataKey="best_e1rm"
+                    fill={chartColors.green}
+                    onClick={(data: unknown) => openExerciseFromBar(data)}
+                    radius={[0, 8, 8, 0]}
+                  />
                 </BarChart>
               </ResponsiveContainer>
             </ChartCard>

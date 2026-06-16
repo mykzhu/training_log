@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   addCurrentWorkoutExercise,
   addCurrentWorkoutSet,
+  clearCurrentWorkout,
   deleteCurrentWorkoutExercise,
   deleteCurrentWorkoutSet,
   duplicateCurrentWorkoutSet,
@@ -213,6 +214,14 @@ export default function CurrentWorkoutPage() {
     }
   }
 
+  async function cancelWorkout() {
+    if (!window.confirm("Discard this active workout and all logged sets?")) {
+      return;
+    }
+
+    await runAction(clearCurrentWorkout);
+  }
+
   if (!currentWorkout) {
     return <section className="panel">Loading</section>;
   }
@@ -257,6 +266,14 @@ export default function CurrentWorkoutPage() {
           <WorkoutTimer elapsedSeconds={elapsedSeconds} />
         </div>
         <div className="summary-actions">
+          <button
+            className="ghost-button cancel-workout-button"
+            disabled={pending}
+            onClick={cancelWorkout}
+            type="button"
+          >
+            Cancel
+          </button>
           <button
             className="primary-button finish-button"
             disabled={pending}

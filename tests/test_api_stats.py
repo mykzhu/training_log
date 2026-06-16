@@ -156,6 +156,9 @@ class StatsApiTests(unittest.TestCase):
         self.assertEqual(response["stats"]["summary"]["total_sets"], 2)
         self.assertEqual(response["stats"]["summary"]["avg_rpe"], 6.0)
         self.assertEqual(response["stats"]["summary"]["avg_back_pain"], 3.0)
+        deadlift_stats = response["stats"]["exercise_stats"][0]
+        self.assertEqual(deadlift_stats["exercise_id"], self.exercise_id("Deadlift"))
+        self.assertEqual(deadlift_stats["name"], "Deadlift")
         self.assertIn("volume", response["charts"])
         self.assertIn("load", response["charts"])
         self.assertIn("sparkbars", response["charts"])

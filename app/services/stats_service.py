@@ -696,7 +696,7 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
             ).fetchall()
 
     workout_items = []
-    exercise_stats: dict[str, dict[str, Any]] = {}
+    exercise_stats: dict[int, dict[str, Any]] = {}
 
     for workout in workouts:
         details = get_workout_details(workout["id"])
@@ -736,10 +736,12 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
         )
 
         for item in details:
+            exercise_id = int(item["exercise_id"])
             exercise_name = item["exercise_name"]
 
-            if exercise_name not in exercise_stats:
-                exercise_stats[exercise_name] = {
+            if exercise_id not in exercise_stats:
+                exercise_stats[exercise_id] = {
+                    "exercise_id": exercise_id,
                     "name": exercise_name,
                     "total_volume": 0.0,
                     "total_reps": 0,
@@ -748,7 +750,7 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
                     "best_set": None,
                 }
 
-            stats = exercise_stats[exercise_name]
+            stats = exercise_stats[exercise_id]
             stats["total_volume"] += item["total_volume"]
             stats["total_reps"] += item["total_reps"]
             stats["total_sets"] += len(item["sets"])

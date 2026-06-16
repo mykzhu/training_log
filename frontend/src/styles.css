@@ -201,7 +201,9 @@ label {
 
 .summary-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: 8px;
 }
 
 .timer {
@@ -482,7 +484,8 @@ label {
 }
 
 .finish-button {
-  width: 100%;
+  width: auto;
+  min-width: 170px;
   min-height: 54px;
   background: var(--green);
   font-size: 18px;
@@ -491,6 +494,10 @@ label {
 .ghost-button {
   background: var(--card2);
   color: var(--text);
+}
+
+.cancel-workout-button {
+  color: var(--muted);
 }
 
 .danger-text {
@@ -684,6 +691,11 @@ label {
 
 .chart-frame {
   min-height: 240px;
+}
+
+.clickable-chart,
+.clickable-bar-chart .recharts-bar-rectangle {
+  cursor: pointer;
 }
 
 .analysis-card {
@@ -951,6 +963,7 @@ label {
   }
 
   .summary-actions {
+    flex-direction: column;
     justify-content: stretch;
   }
 

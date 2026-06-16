@@ -166,6 +166,7 @@ class MainDatabaseBehaviorTests(unittest.TestCase):
         self.assertTrue(math.isclose(second["intensity_score"], 110.0))
 
         deadlift_stats = stats["exercise_stats"][0]
+        self.assertEqual(deadlift_stats["exercise_id"], self.exercise_id("Deadlift"))
         self.assertEqual(deadlift_stats["name"], "Deadlift")
         self.assertEqual(deadlift_stats["total_volume"], 1050)
         self.assertEqual(deadlift_stats["total_reps"], 10)

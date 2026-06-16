@@ -31,7 +31,7 @@ function pageFromPath(pathname: string): PageKey {
   if (pathname.startsWith("/history") || pathname.startsWith("/workouts/")) {
     return "history";
   }
-  if (pathname.startsWith("/stats")) {
+  if (pathname.startsWith("/stats") || pathname.startsWith("/exercises/")) {
     return "stats";
   }
   if (pathname.startsWith("/backup")) {
