@@ -106,6 +106,17 @@ export default function HistoryPage({ initialWorkoutId }: HistoryPageProps) {
     () => exercises.map((exercise) => ({ value: String(exercise.id), label: exercise.name })),
     [exercises],
   );
+  const prFlagsByExercise = useMemo(() => {
+    const flags = new Map<number, string[]>();
+
+    for (const exercise of detail?.analysis.exercises ?? []) {
+      if (exercise.pr_flags.length > 0) {
+        flags.set(exercise.exercise_id, exercise.pr_flags);
+      }
+    }
+
+    return flags;
+  }, [detail]);
 
   function hydrateDetail(response: WorkoutDetail) {
     setDetail(response);
@@ -581,6 +592,7 @@ export default function HistoryPage({ initialWorkoutId }: HistoryPageProps) {
           <div className="exercise-list">
             {detail.exercises.map((exercise) => (
               <ExerciseCard
+                badges={prFlagsByExercise.get(exercise.exercise_id) ?? []}
                 disabled={pending}
                 exercise={exercise}
                 key={exercise.workout_exercise_id}

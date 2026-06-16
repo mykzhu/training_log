@@ -277,6 +277,38 @@ label {
   letter-spacing: 0;
 }
 
+.exercise-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+.exercise-title-row h2 {
+  margin-bottom: 0;
+}
+
+.exercise-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.pr-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border: 1px solid rgba(48, 209, 88, 0.55);
+  border-radius: 6px;
+  padding: 3px 7px;
+  background: rgba(48, 209, 88, 0.12);
+  color: #34c759;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
 .exercise-header p,
 .list-row p {
   margin: 0;

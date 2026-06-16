@@ -13,6 +13,7 @@ type ExerciseLike = CurrentWorkoutExercise | WorkoutExercise;
 type ExerciseCardProps = {
   exercise: ExerciseLike;
   disabled: boolean;
+  badges?: string[];
   setEditorMode?: "input" | "select";
   onAddSet: (exerciseId: number, weight: number, reps: number) => void;
   onDeleteExercise: (exerciseId: number) => void;
@@ -22,6 +23,7 @@ type ExerciseCardProps = {
 };
 
 export default function ExerciseCard({
+  badges = [],
   exercise,
   disabled,
   onAddSet,
@@ -51,7 +53,18 @@ export default function ExerciseCard({
     <section className="exercise-card">
       <div className="exercise-header">
         <div>
-          <h2>{exercise.exercise_name}</h2>
+          <div className="exercise-title-row">
+            <h2>{exercise.exercise_name}</h2>
+            {badges.length > 0 && (
+              <div className="exercise-badges" aria-label="Exercise PRs">
+                {badges.map((badge) => (
+                  <span className="pr-badge" key={badge}>
+                    {badge}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
           <p>
             {exercise.total_sets} sets · {exercise.total_reps} reps ·{" "}
             {exercise.total_volume.toFixed(0)} kg
