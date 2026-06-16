@@ -81,6 +81,10 @@ label {
   margin: 0 auto;
 }
 
+.app-shell-stats {
+  width: min(100%, 820px);
+}
+
 .app-header {
   display: flex;
   align-items: center;
@@ -377,6 +381,124 @@ label {
   background: var(--card2);
 }
 
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin: 0 0 14px;
+}
+
+.dashboard-card {
+  min-height: 132px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 14px;
+  background: var(--card);
+}
+
+.dashboard-card.metric-green {
+  border-color: rgba(48, 209, 88, 0.65);
+  background: rgba(48, 209, 88, 0.1);
+}
+
+.dashboard-card.metric-yellow {
+  border-color: rgba(255, 214, 10, 0.7);
+  background: rgba(255, 214, 10, 0.09);
+}
+
+.dashboard-card.metric-orange {
+  border-color: rgba(255, 159, 10, 0.7);
+  background: rgba(255, 159, 10, 0.1);
+}
+
+.dashboard-card.metric-red {
+  border-color: rgba(255, 69, 58, 0.75);
+  background: rgba(255, 69, 58, 0.11);
+}
+
+.dashboard-label {
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.dashboard-value {
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.dashboard-subvalue {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.dashboard-sparkbar {
+  max-width: 100%;
+  margin-top: 14px;
+  overflow: hidden;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 18px;
+  letter-spacing: -1px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.dashboard-sparkbar.blue {
+  color: var(--blue);
+}
+
+.dashboard-sparkbar.green {
+  color: #30d158;
+}
+
+.dashboard-sparkbar.orange {
+  color: var(--orange);
+}
+
+.dashboard-sparkbar.red {
+  color: var(--red);
+}
+
+.dashboard-sparkbar.purple {
+  color: #af52de;
+}
+
+.stats-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.chart-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 14px;
+  background: var(--card);
+}
+
+.chart-card:first-child {
+  grid-column: 1 / -1;
+}
+
+.chart-heading h2 {
+  margin: 0 0 4px;
+  color: var(--blue);
+  font-size: 21px;
+}
+
+.chart-heading p {
+  margin: 0;
+  font-size: 13px;
+}
+
+.chart-frame {
+  min-height: 240px;
+}
+
 .status-badge {
   display: inline-flex;
   align-items: center;
@@ -471,6 +593,11 @@ label {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .dashboard-grid,
+  .stats-chart-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .controls-grid {
     grid-template-columns: 1fr 1fr auto;
   }
@@ -507,7 +634,18 @@ label {
 
   .controls-grid,
   .add-exercise,
-  .set-actions {
+  .set-actions,
+  .dashboard-grid,
+  .stats-chart-grid {
     grid-template-columns: 1fr;
+  }
+
+  .chart-card:first-child {
+    grid-column: auto;
+  }
+
+  .dashboard-sparkbar {
+    font-size: 24px;
+    letter-spacing: 0;
   }
 }

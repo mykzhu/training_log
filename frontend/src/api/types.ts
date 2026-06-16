@@ -86,12 +86,60 @@ export type Exercise = {
   name: string;
 };
 
+export type StatsWorkout = {
+  id: number;
+  date: string;
+  created_at: string;
+  total_volume: number;
+  total_reps: number;
+  total_sets: number;
+  avg_intensity: number | null;
+  session_rpe: number | null;
+  lower_back_pain: number | null;
+  load_score: number;
+  load_label: string;
+  compound_score: number;
+  intensity_score: number | null;
+  back_stress_score: number;
+};
+
+export type ExerciseStats = {
+  name: string;
+  total_volume: number;
+  total_reps: number;
+  total_sets: number;
+  best_e1rm: number | null;
+  best_set: {
+    weight: number;
+    reps: number;
+    workout_id: number;
+    date: string;
+  } | null;
+};
+
+export type StatsSummary = {
+  workout_count: number;
+  total_volume: number;
+  total_reps: number;
+  total_sets: number;
+  avg_intensity: number | null;
+  avg_rpe: number | null;
+  avg_back_pain: number | null;
+  total_load_score: number;
+  avg_load_score: number | null;
+  total_compound_score: number;
+  avg_compound_score: number | null;
+  total_back_stress_score: number;
+  avg_back_stress_score: number | null;
+  avg_relative_intensity: number | null;
+};
+
 export type StatsResponse = {
   limit: number | "all";
   stats: {
-    summary: Record<string, number | null>;
-    workouts: WorkoutSummary[];
-    exercise_stats: Array<Record<string, unknown>>;
+    summary: StatsSummary;
+    workouts: StatsWorkout[];
+    exercise_stats: ExerciseStats[];
   };
   charts: Record<string, unknown>;
 };

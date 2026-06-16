@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 
 import BackupPage from "./pages/BackupPage";
 import CurrentWorkoutPage from "./pages/CurrentWorkoutPage";
 import HistoryPage from "./pages/HistoryPage";
-import StatsPage from "./pages/StatsPage";
+
+const StatsPage = lazy(() => import("./pages/StatsPage"));
 
 type PageKey = "current" | "history" | "stats" | "backup";
 
@@ -66,7 +67,7 @@ export default function App() {
   }
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell app-shell-${activePage}`}>
       <header className="app-header">
         <div>
           <h1>Training Log</h1>
@@ -90,7 +91,11 @@ export default function App() {
 
       {activePage === "current" && <CurrentWorkoutPage />}
       {activePage === "history" && <HistoryPage initialWorkoutId={initialWorkoutId} />}
-      {activePage === "stats" && <StatsPage />}
+      {activePage === "stats" && (
+        <Suspense fallback={<section className="panel">Loading</section>}>
+          <StatsPage />
+        </Suspense>
+      )}
       {activePage === "backup" && <BackupPage />}
     </main>
   );
