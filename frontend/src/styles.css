@@ -470,6 +470,11 @@ label {
   color: #ffffff;
 }
 
+.danger-button {
+  background: var(--red);
+  color: #ffffff;
+}
+
 .start-button {
   width: 100%;
   min-height: 54px;
@@ -495,6 +500,14 @@ label {
 .compact-button {
   min-height: 36px;
   padding: 6px 8px;
+}
+
+.compact-action {
+  min-width: 76px;
+  min-height: 34px;
+  border-radius: 14px;
+  padding: 8px 12px;
+  font-size: 14px;
 }
 
 .file-control {
@@ -754,6 +767,26 @@ label {
   color: var(--red);
 }
 
+.status-badge.metric-green {
+  color: #30d158;
+}
+
+.status-badge.metric-lime {
+  color: #7ed957;
+}
+
+.status-badge.metric-yellow {
+  color: var(--yellow);
+}
+
+.status-badge.metric-orange {
+  color: var(--orange);
+}
+
+.status-badge.metric-red {
+  color: var(--red);
+}
+
 .error-banner,
 .success-banner {
   border-radius: 14px;
@@ -778,6 +811,81 @@ label {
   padding: 14px;
 }
 
+.history-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 14px;
+  background: var(--card);
+}
+
+.history-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.history-title-button {
+  min-height: auto;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 800;
+  text-align: left;
+}
+
+.history-title-button:hover {
+  color: var(--blue);
+}
+
+.history-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.history-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.history-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.history-stat {
+  min-height: 66px;
+  display: grid;
+  align-content: center;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  padding: 10px;
+  background: var(--card2);
+  text-align: center;
+}
+
+.history-stat strong {
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1.1;
+}
+
+.history-stat span {
+  margin-top: 4px;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
 @media (max-width: 760px) {
   body {
     padding: 14px;
@@ -798,6 +906,7 @@ label {
 
   .summary-band,
   .panel-header,
+  .history-card-header,
   .exercise-header,
   .list-row {
     align-items: stretch;
@@ -819,6 +928,7 @@ label {
   }
 
   .recovery-grid,
+  .history-stat-grid,
   .dashboard-grid,
   .stats-chart-grid,
   .analysis-grid {
@@ -847,6 +957,10 @@ label {
 
   .row-actions {
     justify-content: stretch;
+  }
+
+  .history-actions {
+    justify-content: flex-start;
   }
 }
 

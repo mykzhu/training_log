@@ -49,8 +49,35 @@ function formatDuration(seconds: number | null | undefined) {
   return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`;
 }
 
+function formatClockDuration(seconds: number | null | undefined) {
+  if (seconds === null || seconds === undefined) {
+    return "—";
+  }
+
+  const totalSeconds = Math.max(0, seconds);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const remainingSeconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}:${minutes.toString().padStart(2, "0")}:${remainingSeconds
+      .toString()
+      .padStart(2, "0")}`;
+  }
+
+  return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
+}
+
+function formatDateTime(value: string) {
+  return value.slice(0, 16).replace("T", " ");
+}
+
 function formatOptionalScore(value: number | null | undefined) {
   return value === null || value === undefined ? "—" : String(value);
+}
+
+function formatScoreOutOfTen(value: number | null | undefined) {
+  return value === null || value === undefined ? "—" : `${value}/10`;
 }
 
 function loadMetricClass(loadLabel: string | null | undefined) {
@@ -80,6 +107,26 @@ function formatBestSet(setEntry: { weight: number; reps: number } | null) {
   }
 
   return `${setEntry.reps} reps`;
+}
+
+function scoreMetricClass(value: number | null | undefined) {
+  if (value === null || value === undefined) {
+    return "metric-neutral";
+  }
+  if (value <= 2) {
+    return "metric-green";
+  }
+  if (value <= 4) {
+    return "metric-lime";
+  }
+  if (value <= 6) {
+    return "metric-yellow";
+  }
+  if (value <= 8) {
+    return "metric-orange";
+  }
+
+  return "metric-red";
 }
 
 type HistoryPageProps = {
@@ -227,6 +274,27 @@ export default function HistoryPage({ initialWorkoutId }: HistoryPageProps) {
     window.history.pushState(null, "", "/history");
   }
 
+  async function deleteWorkoutFromList(workout: WorkoutSummary) {
+    if (
+      !window.confirm(`Delete workout #${workout.id} and all its sets?`)
+    ) {
+      return;
+    }
+
+    setPending(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await deleteWorkout(workout.id);
+      await loadWorkouts();
+      setMessage("Workout deleted");
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : "Action failed.");
+    } finally {
+      setPending(false);
+    }
+  }
+
   async function addSelectedExercise() {
     if (!detail) {
       return;
@@ -280,24 +348,68 @@ export default function HistoryPage({ initialWorkoutId }: HistoryPageProps) {
       {selectedWorkoutId === null && (
         <div className="table-list">
           {workouts.map((workout) => (
-            <article className="list-row" key={workout.id}>
-              <div>
-                <h2>{workout.workout_date}</h2>
-                <p>
-                  {workout.exercises_count} exercises · {workout.total_sets} sets ·{" "}
-                  {workout.total_volume.toFixed(0)} kg
-                </p>
-              </div>
-              <div className="row-actions">
-                <StatusBadge>{workout.load_metrics.load_label}</StatusBadge>
+            <article className="history-card" key={workout.id}>
+              <div className="history-card-header">
                 <button
-                  className="ghost-button"
+                  className="history-title-button"
                   disabled={pending}
                   onClick={() => openWorkout(workout.id)}
                   type="button"
                 >
-                  Open
+                  Workout #{workout.id}
                 </button>
+                <div className="history-actions">
+                  <button
+                    className="primary-button compact-action"
+                    disabled={pending}
+                    onClick={() => openWorkout(workout.id)}
+                    type="button"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    className="danger-button compact-action"
+                    disabled={pending}
+                    onClick={() => deleteWorkoutFromList(workout)}
+                    type="button"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+
+              <div className="history-meta">
+                <span>{formatDateTime(workout.created_at)}</span>
+                <StatusBadge tone="good">finished</StatusBadge>
+                <span
+                  className={`status-badge ${loadMetricClass(
+                    workout.load_metrics.load_label,
+                  )}`}
+                >
+                  {workout.load_metrics.load_label} ·{" "}
+                  {formatNumber(workout.load_metrics.load_score)}
+                </span>
+                <span>· Duration: {formatClockDuration(workout.duration_seconds)}</span>
+              </div>
+
+              <div className="history-stat-grid">
+                <HistoryStat value={workout.exercises_count} label="exercises" />
+                <HistoryStat value={workout.total_sets} label="sets" />
+                <HistoryStat value={workout.total_reps} label="reps" />
+                <HistoryStat
+                  value={workout.total_volume.toFixed(1)}
+                  label="kg"
+                />
+                <HistoryStat
+                  className={scoreMetricClass(workout.session_rpe)}
+                  value={formatScoreOutOfTen(workout.session_rpe)}
+                  label="RPE"
+                />
+                <HistoryStat
+                  className={scoreMetricClass(workout.lower_back_pain)}
+                  value={formatScoreOutOfTen(workout.lower_back_pain)}
+                  label="Back Pain"
+                />
               </div>
             </article>
           ))}
@@ -637,5 +749,24 @@ export default function HistoryPage({ initialWorkoutId }: HistoryPageProps) {
         </section>
       )}
     </section>
+  );
+}
+
+type HistoryStatProps = {
+  className?: string;
+  label: string;
+  value: number | string;
+};
+
+function HistoryStat({
+  className = "metric-neutral",
+  label,
+  value,
+}: HistoryStatProps) {
+  return (
+    <div className={`history-stat ${className}`}>
+      <strong>{value}</strong>
+      <span className="muted">{label}</span>
+    </div>
   );
 }
