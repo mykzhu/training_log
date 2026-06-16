@@ -1,6 +1,8 @@
 # Training Log Frontend
 
-React + TypeScript + Vite shell for the incremental migration.
+React + TypeScript + Vite frontend for the Training Log app. This is the only
+product UI; FastAPI serves the compiled bundle for non-API routes and exposes
+the JSON API under `/api/v1`.
 
 Runtime offline rules:
 
@@ -16,3 +18,13 @@ npm run dev
 ```
 
 FastAPI should run on `http://localhost:8000`; Vite proxies `/api` to that origin.
+
+Production build:
+
+```bash
+npm run build
+```
+
+The Docker build runs this step in a Node stage and copies `dist/` into the
+Python image at `app/static`. At runtime the container only needs the local
+bundle, FastAPI, and SQLite data volume.
