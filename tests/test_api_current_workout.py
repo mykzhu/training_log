@@ -74,6 +74,11 @@ class CurrentWorkoutApiTests(unittest.TestCase):
         self.assertIsNone(response["started_at"])
         self.assertEqual(response["total_sets"], 0)
         self.assertEqual(response["exercises"], [])
+        self.assertFalse(response["recovery_context"]["has_history"])
+        self.assertEqual(
+            response["next_workout_recommendation"]["title"],
+            "Start baseline",
+        )
 
     def test_current_workout_mutation_flow_returns_updated_state(self) -> None:
         deadlift_id = self.exercise_id("Deadlift")

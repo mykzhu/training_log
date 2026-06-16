@@ -179,6 +179,26 @@ label {
   line-height: 1.35;
 }
 
+.small {
+  font-size: 13px;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.card-link {
+  flex-shrink: 0;
+  color: var(--blue);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
 .summary-actions {
   display: flex;
   justify-content: flex-end;
@@ -197,6 +217,91 @@ label {
 
 .ready-card .start-button {
   margin-top: 12px;
+}
+
+.context-card {
+  display: grid;
+  gap: 10px;
+}
+
+.recovery-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.recovery-item {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--card2);
+  text-align: center;
+}
+
+.recovery-item strong {
+  display: block;
+  font-size: 18px;
+  line-height: 1.15;
+}
+
+.recovery-item span {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.recovery-hint {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.recommendation-reasons {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.recommendation-list {
+  display: grid;
+  gap: 8px;
+}
+
+.recommendation-item {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--card2);
+}
+
+.recommendation-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.recommendation-action {
+  flex-shrink: 0;
+  color: var(--blue);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.recommendation-target {
+  margin-top: 4px;
+  font-weight: 800;
+}
+
+.recommendation-reason {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
 }
 
 .stat-grid {
@@ -598,6 +703,11 @@ label {
   background: rgba(48, 209, 88, 0.12);
 }
 
+.metric-lime {
+  border-color: rgba(126, 217, 87, 0.65);
+  background: rgba(126, 217, 87, 0.12);
+}
+
 .metric-yellow {
   border-color: rgba(255, 214, 10, 0.7);
   background: rgba(255, 214, 10, 0.11);
@@ -687,6 +797,7 @@ label {
   }
 
   .summary-band,
+  .panel-header,
   .exercise-header,
   .list-row {
     align-items: stretch;
@@ -707,6 +818,7 @@ label {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .recovery-grid,
   .dashboard-grid,
   .stats-chart-grid,
   .analysis-grid {
@@ -750,6 +862,7 @@ label {
   .controls-grid,
   .add-exercise,
   .set-actions,
+  .recovery-grid,
   .dashboard-grid,
   .stats-chart-grid,
   .analysis-grid {

@@ -41,6 +41,53 @@ export type LoadMetrics = {
   back_stress_score: number;
 };
 
+export type RecoveryContext = {
+  as_of: string;
+  has_history: boolean;
+  previous_workout_id: number | null;
+  previous_workout_at: string | null;
+  hours_since_previous_workout: number | null;
+  days_since_previous_workout: number | null;
+  previous_gap_label: string;
+  hint: string;
+  last_7d: {
+    workout_count: number;
+    load_score: number;
+    load_label: string;
+    compound_score: number;
+    back_stress_score: number;
+    avg_rpe: number | null;
+    avg_back_pain: number | null;
+  };
+};
+
+export type ExerciseRecommendation = {
+  exercise_name: string;
+  action: string;
+  action_label: string;
+  target: string;
+  reason: string;
+  gap_label: string;
+  usual_gap_label: string;
+  gap_status_label: string;
+  progression_status: string;
+  progression_label: string;
+  progression_summary: string;
+  e1rm_change_label: string;
+  volume_change_label: string;
+};
+
+export type NextWorkoutRecommendation = {
+  status: string;
+  title: string;
+  score: number;
+  summary: string;
+  reasons: string[];
+  last_workout_id: number | null;
+  last_workout_at?: string;
+  exercise_recommendations: ExerciseRecommendation[];
+};
+
 export type CurrentWorkout = {
   active: boolean;
   started_at: string | null;
@@ -52,6 +99,8 @@ export type CurrentWorkout = {
   total_volume: number;
   exercises: CurrentWorkoutExercise[];
   load_metrics: LoadMetrics | null;
+  recovery_context: RecoveryContext | null;
+  next_workout_recommendation: NextWorkoutRecommendation | null;
 };
 
 export type WorkoutCore = {
