@@ -84,14 +84,16 @@ class BackupServiceTests(unittest.TestCase):
 
         return workout_id
 
-    def test_build_and_restore_backup_payload_round_trips_schema_v2(self) -> None:
+    def test_build_and_restore_backup_payload_round_trips_schema_v3(self) -> None:
         workout_id = self.insert_workout()
 
         payload = build_backup_payload()
-        self.assertEqual(payload["schema_version"], 2)
+        self.assertEqual(payload["schema_version"], 3)
+        self.assertIn("exercise_weight_options", payload["tables"])
         self.assertEqual(len(payload["tables"]["workouts"]), 1)
         self.assertEqual(len(payload["tables"]["workout_exercises"]), 1)
         self.assertEqual(len(payload["tables"]["set_entries"]), 1)
+        self.assertEqual(payload["tables"]["exercises"][0]["is_active"], 1)
 
         reset_database_data()
         restore_backup_payload(payload)
@@ -106,11 +108,15 @@ class BackupServiceTests(unittest.TestCase):
                 (workout_id,),
             ).fetchone()
             set_count = conn.execute("SELECT COUNT(*) FROM set_entries").fetchone()[0]
+            weight_count = conn.execute(
+                "SELECT COUNT(*) FROM exercise_weight_options"
+            ).fetchone()[0]
 
         self.assertEqual(workout["session_rpe"], 7)
         self.assertEqual(workout["lower_back_pain"], 2)
         self.assertEqual(workout["duration_seconds"], 3600)
         self.assertEqual(set_count, 1)
+        self.assertGreater(weight_count, 0)
 
     def test_restore_backup_payload_accepts_schema_v1_without_duration(self) -> None:
         payload = {
@@ -160,10 +166,19 @@ class BackupServiceTests(unittest.TestCase):
                 WHERE id = 1
                 """
             ).fetchone()
+            weights = conn.execute(
+                """
+                SELECT weight
+                FROM exercise_weight_options
+                WHERE exercise_id = 1
+                ORDER BY weight ASC
+                """
+            ).fetchall()
 
         self.assertEqual(workout["session_rpe"], 6)
         self.assertIsNone(workout["lower_back_pain"])
         self.assertIsNone(workout["duration_seconds"])
+        self.assertIn(80.0, [row["weight"] for row in weights])
 
     def test_reset_database_data_clears_workouts_and_reseeds_defaults(self) -> None:
         self.insert_workout()

@@ -96,6 +96,7 @@ class CurrentWorkoutApiTests(unittest.TestCase):
             AddExerciseRequest(exercise_id=deadlift_id)
         )
         draft_exercise_id = response["exercises"][0]["draft_exercise_id"]
+        self.assertIn(100.0, response["exercises"][0]["configured_weights"])
 
         response = add_current_workout_set(
             draft_exercise_id,
@@ -119,6 +120,41 @@ class CurrentWorkoutApiTests(unittest.TestCase):
 
         response = delete_current_workout_exercise(draft_exercise_id)
         self.assertEqual(response["exercises"], [])
+
+    def test_inactive_exercise_cannot_be_added_to_current_workout(self) -> None:
+        deadlift_id = self.exercise_id("Deadlift")
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE exercises SET is_active = 0 WHERE id = ?",
+                (deadlift_id,),
+            )
+
+        start_current_workout()
+
+        with self.assertRaises(HTTPException) as exc:
+            add_current_workout_exercise(AddExerciseRequest(exercise_id=deadlift_id))
+
+        self.assertEqual(exc.exception.status_code, 409)
+
+    def test_deactivated_exercise_already_in_draft_remains_visible(self) -> None:
+        deadlift_id = self.exercise_id("Deadlift")
+
+        start_current_workout()
+        response = add_current_workout_exercise(
+            AddExerciseRequest(exercise_id=deadlift_id)
+        )
+        self.assertEqual(response["exercises"][0]["exercise_name"], "Deadlift")
+
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE exercises SET is_active = 0 WHERE id = ?",
+                (deadlift_id,),
+            )
+
+        response = get_current_workout()
+
+        self.assertTrue(response["active"])
+        self.assertEqual(response["exercises"][0]["exercise_name"], "Deadlift")
 
     def test_finish_current_workout_persists_workout_and_clears_draft(self) -> None:
         deadlift_id = self.exercise_id("Deadlift")

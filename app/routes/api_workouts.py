@@ -53,6 +53,7 @@ def serialize_workout_exercise(item: dict[str, Any]) -> dict[str, Any]:
         "workout_exercise_id": int(item["workout_exercise_id"]),
         "exercise_id": int(item["exercise_id"]),
         "exercise_name": item["exercise_name"],
+        "profile_key": item["profile_key"],
         "position": int(item["position"]),
         "sets": sets,
         "total_sets": len(sets),
@@ -60,6 +61,7 @@ def serialize_workout_exercise(item: dict[str, Any]) -> dict[str, Any]:
         "total_volume": float(item["total_volume"]),
         "default_weight": float(item["default_weight"]),
         "default_reps": int(item["default_reps"]),
+        "configured_weights": item["configured_weights"],
     }
 
 
@@ -250,8 +252,11 @@ def add_workout_exercise_endpoint(
     if get_workout(workout_id) is None:
         raise HTTPException(status_code=404, detail="Workout not found.")
 
-    if get_exercise(payload.exercise_id) is None:
+    exercise = get_exercise(payload.exercise_id)
+    if exercise is None:
         raise HTTPException(status_code=404, detail="Exercise not found.")
+    if not exercise["is_active"]:
+        raise HTTPException(status_code=409, detail="Exercise is inactive.")
 
     add_workout_exercise(workout_id, payload.exercise_id)
     return get_workout_detail(workout_id)

@@ -1,16 +1,23 @@
 import logging
+import math
 import sqlite3
 from datetime import datetime
 from typing import Any
 
-from app.db import get_db, seed_default_exercises
+from app.db import (
+    get_db,
+    initialize_exercise_settings,
+    seed_default_exercises,
+)
+from app.services.analysis_service import profile_key_for_exercise_name
 
 
 logger = logging.getLogger("training_log")
 
-BACKUP_SCHEMA_VERSION = 2
+BACKUP_SCHEMA_VERSION = 3
 BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
-    "exercises": ("id", "name"),
+    "exercises": ("id", "name", "is_active", "sort_order", "profile_key"),
+    "exercise_weight_options": ("id", "exercise_id", "weight", "sort_order"),
     "workouts": (
         "id",
         "workout_date",
@@ -31,6 +38,12 @@ BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
     ),
 }
 BACKUP_TABLES = tuple(BACKUP_TABLE_COLUMNS)
+LEGACY_BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
+    "exercises": ("id", "name"),
+    "workouts": BACKUP_TABLE_COLUMNS["workouts"],
+    "workout_exercises": BACKUP_TABLE_COLUMNS["workout_exercises"],
+    "set_entries": BACKUP_TABLE_COLUMNS["set_entries"],
+}
 DRAFT_TABLES = (
     "active_draft_sets",
     "active_draft_exercises",
@@ -82,9 +95,9 @@ def validate_backup_payload(payload: Any) -> dict[str, list[dict[str, Any]]]:
         raise ValueError("Backup file must contain a JSON object.")
 
     schema_version = payload.get("schema_version")
-    if schema_version not in (1, BACKUP_SCHEMA_VERSION):
+    if schema_version not in (1, 2, BACKUP_SCHEMA_VERSION):
         raise ValueError(
-            f"Unsupported backup schema version. Expected 1 or {BACKUP_SCHEMA_VERSION}."
+            f"Unsupported backup schema version. Expected 1, 2 or {BACKUP_SCHEMA_VERSION}."
         )
 
     tables = payload.get("tables")
@@ -93,7 +106,13 @@ def validate_backup_payload(payload: Any) -> dict[str, list[dict[str, Any]]]:
 
     validated: dict[str, list[dict[str, Any]]] = {}
 
-    for table_name, columns in BACKUP_TABLE_COLUMNS.items():
+    table_columns = (
+        BACKUP_TABLE_COLUMNS
+        if schema_version == BACKUP_SCHEMA_VERSION
+        else LEGACY_BACKUP_TABLE_COLUMNS
+    )
+
+    for table_name, columns in table_columns.items():
         rows = tables.get(table_name)
         if not isinstance(rows, list):
             raise ValueError(f"Backup table {table_name} must be a list.")
@@ -122,6 +141,16 @@ def validate_backup_payload(payload: Any) -> dict[str, list[dict[str, Any]]]:
 
         validated[table_name] = validated_rows
 
+    if schema_version != BACKUP_SCHEMA_VERSION:
+        for index, row in enumerate(validated["exercises"], start=1):
+            row["is_active"] = 1
+            row["sort_order"] = index * 10
+            row["profile_key"] = profile_key_for_exercise_name(str(row["name"]))
+
+        validated["exercise_weight_options"] = []
+
+    validate_exercise_weight_options(validated["exercise_weight_options"], validated)
+
     logger.info(
         "backup.validate.success schema_version=%s target_schema_version=%s counts=%s",
         schema_version,
@@ -129,6 +158,34 @@ def validate_backup_payload(payload: Any) -> dict[str, list[dict[str, Any]]]:
         {table_name: len(rows) for table_name, rows in validated.items()},
     )
     return validated
+
+
+def validate_exercise_weight_options(
+    rows: list[dict[str, Any]],
+    tables: dict[str, list[dict[str, Any]]],
+) -> None:
+    exercise_ids = {int(row["id"]) for row in tables["exercises"]}
+    seen_pairs: set[tuple[int, float]] = set()
+
+    for index, row in enumerate(rows, start=1):
+        exercise_id = int(row["exercise_id"])
+        if exercise_id not in exercise_ids:
+            raise ValueError(
+                f"Row {index} in exercise_weight_options references an unknown exercise."
+            )
+
+        weight = float(row["weight"])
+        if not math.isfinite(weight) or weight < 0:
+            raise ValueError(
+                f"Row {index} in exercise_weight_options has an invalid weight."
+            )
+
+        pair = (exercise_id, round(weight, 4))
+        if pair in seen_pairs:
+            raise ValueError(
+                f"Row {index} in exercise_weight_options duplicates a weight."
+            )
+        seen_pairs.add(pair)
 
 
 def reset_sqlite_sequences(conn: sqlite3.Connection) -> None:
@@ -154,6 +211,7 @@ def reset_sqlite_sequences(conn: sqlite3.Connection) -> None:
 
 
 def restore_backup_payload(payload: Any) -> None:
+    schema_version = payload.get("schema_version") if isinstance(payload, dict) else None
     tables = validate_backup_payload(payload)
     logger.warning(
         "backup.restore.start counts=%s",
@@ -178,6 +236,10 @@ def restore_backup_payload(payload: Any) -> None:
                 conn.execute(insert_sql, tuple(row[column] for column in columns))
 
         reset_sqlite_sequences(conn)
+        initialize_exercise_settings(
+            conn,
+            force_weight_migration=schema_version != BACKUP_SCHEMA_VERSION,
+        )
 
     logger.warning(
         "backup.restore.done counts=%s",
@@ -201,5 +263,6 @@ def reset_database_data() -> None:
         )
 
         seed_default_exercises(conn)
+        initialize_exercise_settings(conn, force_weight_migration=True)
 
         logger.warning("db.reset.done")

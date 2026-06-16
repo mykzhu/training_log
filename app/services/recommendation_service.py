@@ -606,7 +606,10 @@ def build_exercise_recommendation(
     exercise_context: dict[str, Any],
 ) -> dict[str, Any]:
     exercise_name = str(item["exercise_name"])
-    profile = get_exercise_load_profile(exercise_name)
+    profile = get_exercise_load_profile(
+        exercise_name,
+        profile_key=item.get("profile_key"),
+    )
     back_factor = float(profile["back_factor"])
     top_set = get_recommendation_top_set(item["sets"])
 

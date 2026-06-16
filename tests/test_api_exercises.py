@@ -10,9 +10,16 @@ import app.main as main
 from app.routes.api_exercises import (
     create_exercise_endpoint,
     get_exercises,
+    reorder_exercises_endpoint,
+    replace_exercise_weights_endpoint,
     update_exercise_endpoint,
 )
-from app.schemas import ExerciseCreateRequest, ExerciseUpdateRequest
+from app.schemas import (
+    ExerciseCreateRequest,
+    ExerciseOrderUpdateRequest,
+    ExerciseUpdateRequest,
+    ExerciseWeightsUpdateRequest,
+)
 
 
 class ExercisesApiTests(unittest.TestCase):
@@ -48,31 +55,32 @@ class ExercisesApiTests(unittest.TestCase):
         self.assertIn(("/api/v1/exercises", ("GET",)), routes)
         self.assertIn(("/api/v1/exercises", ("POST",)), routes)
         self.assertIn(("/api/v1/exercises/{exercise_id}", ("PATCH",)), routes)
+        self.assertIn(("/api/v1/exercises/{exercise_id}/weights", ("PUT",)), routes)
+        self.assertIn(("/api/v1/exercises/order", ("PUT",)), routes)
 
-    def test_get_exercises_returns_seeded_exercises_by_name(self) -> None:
+    def test_get_exercises_returns_seeded_exercises_by_settings_order(self) -> None:
         response = get_exercises()
         names = [exercise["name"] for exercise in response["exercises"]]
 
-        self.assertEqual(names, sorted(names))
+        self.assertEqual(names, list(config.DEFAULT_EXERCISES))
         self.assertIn("Deadlift", names)
+        self.assertEqual(response["exercises"][0]["profile_key"], "deadlift")
+        self.assertTrue(response["exercises"][0]["is_active"])
+        self.assertIn(100.0, response["exercises"][0]["weights"])
 
     def test_create_exercise_strips_name_and_reports_created(self) -> None:
         response = create_exercise_endpoint(
-            ExerciseCreateRequest(name="  Incline   Row  ")
+            ExerciseCreateRequest(name="  Incline   Row  ", weights=[17.75, 15, 15])
         )
 
         self.assertTrue(response["created"])
         self.assertEqual(response["exercise"]["name"], "Incline Row")
+        self.assertEqual(response["exercise"]["weights"], [15.0, 17.75])
 
-        duplicate_response = create_exercise_endpoint(
-            ExerciseCreateRequest(name="Incline Row")
-        )
+        with self.assertRaises(HTTPException) as exc:
+            create_exercise_endpoint(ExerciseCreateRequest(name="Incline Row"))
 
-        self.assertFalse(duplicate_response["created"])
-        self.assertEqual(
-            duplicate_response["exercise"]["id"],
-            response["exercise"]["id"],
-        )
+        self.assertEqual(exc.exception.status_code, 409)
 
     def test_create_exercise_rejects_blank_name_after_stripping(self) -> None:
         with self.assertRaises(HTTPException) as exc:
@@ -90,6 +98,67 @@ class ExercisesApiTests(unittest.TestCase):
 
         self.assertEqual(response["exercise"]["id"], deadlift_id)
         self.assertEqual(response["exercise"]["name"], "Trap Bar Deadlift")
+
+    def test_update_exercise_can_toggle_activity(self) -> None:
+        deadlift_id = self.exercise_id("Deadlift")
+
+        response = update_exercise_endpoint(
+            deadlift_id,
+            ExerciseUpdateRequest(is_active=False),
+        )
+
+        self.assertFalse(response["exercise"]["is_active"])
+        active_names = [exercise["name"] for exercise in get_exercises()["exercises"]]
+        all_names = [
+            exercise["name"]
+            for exercise in get_exercises(include_inactive=True)["exercises"]
+        ]
+        self.assertNotIn("Deadlift", active_names)
+        self.assertIn("Deadlift", all_names)
+
+    def test_replace_exercise_weights_normalizes_values(self) -> None:
+        deadlift_id = self.exercise_id("Deadlift")
+
+        response = replace_exercise_weights_endpoint(
+            deadlift_id,
+            ExerciseWeightsUpdateRequest(weights=[52.5, 50, 50, 0]),
+        )
+
+        self.assertEqual(response["weights"], [0.0, 50.0, 52.5])
+
+    def test_replace_exercise_weights_rejects_negative_values(self) -> None:
+        with self.assertRaises(HTTPException) as exc:
+            replace_exercise_weights_endpoint(
+                self.exercise_id("Deadlift"),
+                ExerciseWeightsUpdateRequest(weights=[-1]),
+            )
+
+        self.assertEqual(exc.exception.status_code, 400)
+
+    def test_reorder_exercises_updates_sort_order(self) -> None:
+        exercises = get_exercises(include_inactive=True)["exercises"]
+        exercise_ids = [exercise["id"] for exercise in exercises]
+
+        response = reorder_exercises_endpoint(
+            ExerciseOrderUpdateRequest(exercise_ids=list(reversed(exercise_ids)))
+        )
+
+        self.assertEqual(
+            [exercise["id"] for exercise in response["exercises"]],
+            list(reversed(exercise_ids)),
+        )
+
+    def test_reorder_exercises_rejects_missing_ids(self) -> None:
+        exercises = get_exercises(include_inactive=True)["exercises"]
+
+        with self.assertRaises(HTTPException) as exc:
+            reorder_exercises_endpoint(
+                ExerciseOrderUpdateRequest(
+                    exercise_ids=[exercise["id"] for exercise in exercises[:-1]]
+                )
+            )
+
+        self.assertEqual(exc.exception.status_code, 400)
 
     def test_update_exercise_returns_404_for_missing_row(self) -> None:
         with self.assertRaises(HTTPException) as exc:

@@ -1,4 +1,5 @@
 import math
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -181,6 +182,65 @@ class MainDatabaseBehaviorTests(unittest.TestCase):
                 "date": "2026-06-08",
             },
         )
+
+    def test_old_exercise_schema_migrates_without_reseeding_renamed_defaults(self) -> None:
+        config.DB_PATH.unlink()
+        with sqlite3.connect(config.DB_PATH) as conn:
+            conn.execute(
+                """
+                CREATE TABLE exercises (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL UNIQUE
+                )
+                """
+            )
+            conn.execute(
+                "INSERT INTO exercises (id, name) VALUES (?, ?)",
+                (1, "Romanian Deadlift"),
+            )
+
+        init_db()
+
+        with get_db() as conn:
+            columns = {
+                row["name"]
+                for row in conn.execute("PRAGMA table_info(exercises)").fetchall()
+            }
+            exercise = conn.execute(
+                """
+                SELECT name, is_active, sort_order, profile_key
+                FROM exercises
+                WHERE id = 1
+                """
+            ).fetchone()
+            deadlift_count = conn.execute(
+                "SELECT COUNT(*) FROM exercises WHERE name = ?",
+                ("Deadlift",),
+            ).fetchone()[0]
+
+            conn.execute("UPDATE exercises SET is_active = 0 WHERE id = 1")
+
+        self.assertIn("is_active", columns)
+        self.assertIn("sort_order", columns)
+        self.assertIn("profile_key", columns)
+        self.assertEqual(exercise["name"], "Romanian Deadlift")
+        self.assertEqual(exercise["is_active"], 1)
+        self.assertGreater(exercise["sort_order"], 0)
+        self.assertEqual(exercise["profile_key"], "deadlift")
+        self.assertEqual(deadlift_count, 0)
+
+        init_db()
+
+        with get_db() as conn:
+            exercise_count = conn.execute(
+                "SELECT COUNT(*) FROM exercises"
+            ).fetchone()[0]
+            is_active = conn.execute(
+                "SELECT is_active FROM exercises WHERE id = 1"
+            ).fetchone()[0]
+
+        self.assertEqual(exercise_count, 1)
+        self.assertEqual(is_active, 0)
 
     def test_build_workout_analysis_detects_prs_against_previous_workouts(self) -> None:
         self.insert_workout(

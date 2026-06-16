@@ -2,6 +2,7 @@ import sqlite3
 from typing import Any
 
 from app.db import get_db
+from app.repositories.exercises import get_weight_options_by_exercise_ids
 
 
 def list_recent_workouts(limit: int = 30) -> list[dict[str, Any]]:
@@ -91,7 +92,8 @@ def get_workout_exercise(workout_exercise_id: int) -> dict[str, Any] | None:
                 we.workout_id,
                 we.exercise_id,
                 we.position,
-                e.name AS exercise_name
+                e.name AS exercise_name,
+                e.profile_key
             FROM workout_exercises we
             JOIN exercises e ON e.id = we.exercise_id
             WHERE we.id = ?
@@ -395,7 +397,8 @@ def get_workout_details(workout_id: int) -> list[dict[str, Any]]:
                 we.id AS workout_exercise_id,
                 we.position,
                 e.id AS exercise_id,
-                e.name AS exercise_name
+                e.name AS exercise_name,
+                e.profile_key
             FROM workout_exercises we
             JOIN exercises e ON e.id = we.exercise_id
             WHERE we.workout_id = ?
@@ -442,6 +445,7 @@ def get_workout_details(workout_id: int) -> list[dict[str, Any]]:
                     "workout_exercise_id": row["workout_exercise_id"],
                     "exercise_id": row["exercise_id"],
                     "exercise_name": row["exercise_name"],
+                    "profile_key": row["profile_key"] or "accessory",
                     "position": row["position"],
                     "sets": sets,
                     "total_volume": total_volume,
@@ -449,6 +453,15 @@ def get_workout_details(workout_id: int) -> list[dict[str, Any]]:
                     "default_weight": default_weight,
                     "default_reps": default_reps,
                 }
+            )
+
+        weights_by_exercise = get_weight_options_by_exercise_ids(
+            [int(item["exercise_id"]) for item in result]
+        )
+        for item in result:
+            item["configured_weights"] = weights_by_exercise.get(
+                int(item["exercise_id"]),
+                [],
             )
 
         return result

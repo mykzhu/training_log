@@ -77,6 +77,21 @@ class AnalysisServiceTests(unittest.TestCase):
     def test_unknown_exercise_profile_uses_fallback(self) -> None:
         self.assertEqual(get_exercise_load_profile("Mystery Lift"), DEFAULT_LOAD_PROFILE)
 
+    def test_profile_key_overrides_display_name_for_load_profile(self) -> None:
+        profile = get_exercise_load_profile(
+            "Romanian Pull",
+            profile_key="deadlift",
+        )
+
+        self.assertEqual(profile["category"], "heavy compound")
+
+        fallback = get_exercise_load_profile(
+            "Deadlift",
+            profile_key="unknown_profile",
+        )
+
+        self.assertEqual(fallback, DEFAULT_LOAD_PROFILE)
+
     def test_calculate_workout_load_metrics_scores_known_and_unknown_profiles(self) -> None:
         workout_exercises = [
             {

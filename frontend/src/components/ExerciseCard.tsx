@@ -41,7 +41,10 @@ export default function ExerciseCard({
     "draft_exercise_id" in exercise
       ? exercise.draft_exercise_id
       : exercise.workout_exercise_id;
-  const weightOptions = buildWeightOptions(defaultWeight);
+  const weightOptions = buildWeightOptions(defaultWeight, [
+    ...(exercise.configured_weights ?? []),
+    ...exercise.sets.map((setEntry) => setEntry.weight),
+  ]);
   const repsOptions = buildRepsOptions(defaultReps);
 
   useEffect(() => {
@@ -87,6 +90,7 @@ export default function ExerciseCard({
             key={setEntry.id}
             onDelete={onDeleteSet}
             onUpdate={onUpdateSet}
+            weightOptions={weightOptions}
             setEntry={setEntry}
             disabled={disabled}
           />

@@ -321,6 +321,7 @@ class WorkoutsApiTests(unittest.TestCase):
         self.assertEqual(response["exercises"][0]["exercise_name"], "Deadlift")
         self.assertEqual(response["exercises"][0]["total_sets"], 2)
         self.assertEqual(response["exercises"][0]["sets"][0]["weight"], 100.0)
+        self.assertIn(100.0, response["exercises"][0]["configured_weights"])
         self.assertIn("load_label", response["load_metrics"])
         self.assertEqual(response["analysis"]["prs"], [])
         self.assertEqual(
@@ -462,6 +463,48 @@ class WorkoutsApiTests(unittest.TestCase):
         self.assertEqual(response["exercises"][0]["exercise_name"], "Deadlift")
         self.assertEqual(response["exercises"][0]["position"], 1)
         self.assertEqual(response["exercises"][0]["sets"], [])
+
+    def test_inactive_exercise_cannot_be_added_to_completed_workout(self) -> None:
+        workout_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            exercises=[],
+        )
+        deadlift_id = self.exercise_id("Deadlift")
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE exercises SET is_active = 0 WHERE id = ?",
+                (deadlift_id,),
+            )
+
+        with self.assertRaises(HTTPException) as exc:
+            add_workout_exercise_endpoint(
+                workout_id,
+                AddExerciseRequest(exercise_id=deadlift_id),
+            )
+
+        self.assertEqual(exc.exception.status_code, 409)
+
+    def test_inactive_exercise_in_completed_workout_remains_visible(self) -> None:
+        workout_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [{"weight": 100, "reps": 5}],
+                },
+            ],
+        )
+        deadlift_id = self.exercise_id("Deadlift")
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE exercises SET is_active = 0 WHERE id = ?",
+                (deadlift_id,),
+            )
+
+        response = get_workout_detail(workout_id)
+
+        self.assertEqual(response["exercises"][0]["exercise_name"], "Deadlift")
+        self.assertIn(100.0, response["exercises"][0]["configured_weights"])
 
     def test_add_workout_exercise_endpoint_returns_404_for_missing_workout(
         self,

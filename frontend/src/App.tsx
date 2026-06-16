@@ -3,16 +3,18 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import BackupPage from "./pages/BackupPage";
 import CurrentWorkoutPage from "./pages/CurrentWorkoutPage";
 import HistoryPage from "./pages/HistoryPage";
+import SettingsPage from "./pages/SettingsPage";
 
 const StatsPage = lazy(() => import("./pages/StatsPage"));
 
-type PageKey = "current" | "history" | "stats" | "backup";
+type PageKey = "current" | "history" | "stats" | "backup" | "settings";
 
 const pages: Array<{ key: PageKey; label: string }> = [
   { key: "current", label: "Current" },
   { key: "history", label: "History" },
   { key: "stats", label: "Stats" },
   { key: "backup", label: "Backup" },
+  { key: "settings", label: "Settings" },
 ];
 
 const historyNavItems: Array<{
@@ -25,6 +27,7 @@ const historyNavItems: Array<{
   { key: "stats", label: "Stats", page: "stats", path: "/stats" },
   { key: "stats2", label: "Stats 2", page: "stats", path: "/stats2" },
   { key: "backup", label: "Backup", page: "backup", path: "/backup" },
+  { key: "settings", label: "Settings", page: "settings", path: "/settings" },
 ];
 
 function pageFromPath(pathname: string): PageKey {
@@ -36,6 +39,9 @@ function pageFromPath(pathname: string): PageKey {
   }
   if (pathname.startsWith("/backup")) {
     return "backup";
+  }
+  if (pathname.startsWith("/settings")) {
+    return "settings";
   }
 
   return "current";
@@ -121,6 +127,7 @@ export default function App() {
         </Suspense>
       )}
       {activePage === "backup" && <BackupPage />}
+      {activePage === "settings" && <SettingsPage />}
     </main>
   );
 }

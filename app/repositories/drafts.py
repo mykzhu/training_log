@@ -30,6 +30,7 @@ def load_active_draft(conn) -> dict[str, Any] | None:
             ade.id,
             ade.exercise_id,
             e.name AS exercise_name,
+            e.profile_key,
             ade.position
         FROM active_draft_exercises ade
         JOIN exercises e ON e.id = ade.exercise_id
@@ -68,6 +69,7 @@ def load_active_draft(conn) -> dict[str, Any] | None:
                 "id": int(row["id"]),
                 "exercise_id": int(row["exercise_id"]),
                 "exercise_name": row["exercise_name"],
+                "profile_key": row["profile_key"] or "accessory",
                 "position": int(row["position"]),
                 "sets": sets_by_exercise.get(int(row["id"]), []),
             }

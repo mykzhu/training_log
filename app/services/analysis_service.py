@@ -2,44 +2,44 @@ from collections.abc import Mapping
 from typing import Any
 
 
-EXERCISE_LOAD_PROFILES: dict[str, dict[str, float | str]] = {
+LOAD_PROFILES_BY_KEY: dict[str, dict[str, float | str]] = {
     "deadlift": {
         "category": "heavy compound",
         "exercise_factor": 1.8,
         "compound_factor": 1.8,
         "back_factor": 1.8,
     },
-    "goblet squat": {
+    "goblet_squat": {
         "category": "legs compound",
         "exercise_factor": 1.5,
         "compound_factor": 1.5,
         "back_factor": 1.1,
     },
-    "db bench press": {
+    "db_bench_press": {
         "category": "upper compound",
         "exercise_factor": 1.2,
         "compound_factor": 1.2,
         "back_factor": 0.2,
     },
-    "db row": {
+    "db_row": {
         "category": "upper pull",
         "exercise_factor": 1.2,
         "compound_factor": 1.2,
         "back_factor": 0.7,
     },
-    "ez curl": {
+    "ez_curl": {
         "category": "arms",
         "exercise_factor": 0.75,
         "compound_factor": 0.25,
         "back_factor": 0.1,
     },
-    "triceps extension": {
+    "triceps_extension": {
         "category": "arms",
         "exercise_factor": 0.75,
         "compound_factor": 0.25,
         "back_factor": 0.1,
     },
-    "lateral raise": {
+    "lateral_raise": {
         "category": "shoulders",
         "exercise_factor": 1.0,
         "compound_factor": 0.4,
@@ -60,8 +60,40 @@ DEFAULT_LOAD_PROFILE = {
     "back_factor": 0.3,
 }
 
+EXERCISE_PROFILE_KEYS_BY_NAME = {
+    "deadlift": "deadlift",
+    "goblet squat": "goblet_squat",
+    "db bench press": "db_bench_press",
+    "db row": "db_row",
+    "ez curl": "ez_curl",
+    "triceps extension": "triceps_extension",
+    "lateral raise": "lateral_raise",
+    "crunches": "crunches",
+}
 
-def get_exercise_load_profile(exercise_name: str) -> dict[str, float | str]:
+EXERCISE_LOAD_PROFILES = {
+    name: LOAD_PROFILES_BY_KEY[profile_key]
+    for name, profile_key in EXERCISE_PROFILE_KEYS_BY_NAME.items()
+}
+
+
+def profile_key_for_exercise_name(exercise_name: str) -> str:
+    normalized = exercise_name.strip().lower()
+
+    for name_fragment, profile_key in EXERCISE_PROFILE_KEYS_BY_NAME.items():
+        if name_fragment in normalized:
+            return profile_key
+
+    return "accessory"
+
+
+def get_exercise_load_profile(
+    exercise_name: str,
+    profile_key: str | None = None,
+) -> dict[str, float | str]:
+    if profile_key:
+        return LOAD_PROFILES_BY_KEY.get(profile_key, DEFAULT_LOAD_PROFILE)
+
     normalized = exercise_name.strip().lower()
 
     for key, profile in EXERCISE_LOAD_PROFILES.items():
@@ -145,7 +177,10 @@ def calculate_workout_load_metrics(
     for item in workout_exercises:
         exercise_id = int(item["exercise_id"])
         exercise_name = str(item["exercise_name"])
-        profile = get_exercise_load_profile(exercise_name)
+        profile = get_exercise_load_profile(
+            exercise_name,
+            profile_key=item.get("profile_key"),
+        )
 
         exercise_factor = float(profile["exercise_factor"])
         compound_factor = float(profile["compound_factor"])

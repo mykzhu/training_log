@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { createExercise, getExercises } from "../api/exercises";
+import { getExercises } from "../api/exercises";
 import type { Exercise, WorkoutDetail, WorkoutSummary } from "../api/types";
 import {
   addWorkoutExercise,
@@ -147,7 +147,6 @@ export default function HistoryPage({ initialWorkoutId }: HistoryPageProps) {
   );
   const [detail, setDetail] = useState<WorkoutDetail | null>(null);
   const [selectedExerciseId, setSelectedExerciseId] = useState("");
-  const [newExerciseName, setNewExerciseName] = useState("");
   const [createdAt, setCreatedAt] = useState("");
   const [sessionRpe, setSessionRpe] = useState("");
   const [lowerBackPain, setLowerBackPain] = useState("");
@@ -314,36 +313,9 @@ export default function HistoryPage({ initialWorkoutId }: HistoryPageProps) {
     await runDetailAction(() => addWorkoutExercise(detail.workout.id, exerciseId));
   }
 
-  async function createAndAddExercise() {
-    if (!detail) {
-      return;
-    }
-
-    const name = newExerciseName.trim();
-    if (!name) {
-      return;
-    }
-
-    setPending(true);
-    setError(null);
-    setMessage(null);
-    try {
-      const response = await createExercise(name);
-      await loadExercises();
-      setSelectedExerciseId(String(response.exercise.id));
-      const workoutResponse = await addWorkoutExercise(
-        detail.workout.id,
-        response.exercise.id,
-      );
-      hydrateDetail(workoutResponse);
-      await loadWorkouts();
-      setNewExerciseName("");
-      setMessage("Exercise added");
-    } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : "Action failed.");
-    } finally {
-      setPending(false);
-    }
+  function openSettings() {
+    window.history.pushState(null, "", "/settings");
+    window.dispatchEvent(new PopStateEvent("popstate"));
   }
 
   return (
@@ -706,22 +678,13 @@ export default function HistoryPage({ initialWorkoutId }: HistoryPageProps) {
             >
               Add
             </button>
-            <label>
-              New
-              <input
-                disabled={pending}
-                onChange={(event) => setNewExerciseName(event.target.value)}
-                placeholder="Exercise name"
-                value={newExerciseName}
-              />
-            </label>
             <button
               className="ghost-button"
-              disabled={pending || !newExerciseName.trim()}
-              onClick={createAndAddExercise}
+              disabled={pending}
+              onClick={openSettings}
               type="button"
             >
-              Create
+              Settings
             </button>
           </section>
 

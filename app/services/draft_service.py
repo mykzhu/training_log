@@ -5,6 +5,7 @@ from threading import RLock
 from typing import Any
 
 from app.db import get_db
+from app.repositories.exercises import get_weight_options_by_exercise_ids
 from app.repositories import drafts as draft_repository
 from app.repositories.workouts import get_previous_set_for_exercise
 
@@ -103,6 +104,7 @@ def update_active_draft_metadata(
 def add_exercise_to_active_draft(
     exercise_id: int,
     exercise_name: str,
+    profile_key: str | None = None,
 ) -> dict[str, Any] | None:
     with DRAFT_LOCK:
         draft = _get_active_workout_draft_locked()
@@ -118,6 +120,7 @@ def add_exercise_to_active_draft(
             "id": draft_exercise_id,
             "exercise_id": exercise_id,
             "exercise_name": exercise_name,
+            "profile_key": profile_key or "accessory",
             "position": position,
             "sets": [],
         }
@@ -374,6 +377,12 @@ def renumber_draft_sets(draft_exercise: dict[str, Any]) -> None:
 
 def get_draft_workout_details(draft: dict[str, Any]) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
+    weights_by_exercise = get_weight_options_by_exercise_ids(
+        [
+            int(item["exercise_id"])
+            for item in draft["workout_exercises"]
+        ]
+    )
 
     for item in sorted(draft["workout_exercises"], key=lambda x: (x["position"], x["id"])):
         sets = item["sets"]
@@ -402,12 +411,17 @@ def get_draft_workout_details(draft: dict[str, Any]) -> list[dict[str, Any]]:
                 "workout_exercise_id": item["id"],
                 "exercise_id": item["exercise_id"],
                 "exercise_name": item["exercise_name"],
+                "profile_key": item.get("profile_key") or "accessory",
                 "position": item["position"],
                 "sets": sets,
                 "total_volume": total_volume,
                 "total_reps": total_reps,
                 "default_weight": default_weight,
                 "default_reps": default_reps,
+                "configured_weights": weights_by_exercise.get(
+                    int(item["exercise_id"]),
+                    [],
+                ),
             }
         )
 

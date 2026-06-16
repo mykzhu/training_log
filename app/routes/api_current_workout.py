@@ -84,6 +84,7 @@ def build_current_workout_response(
                 "draft_exercise_id": item["workout_exercise_id"],
                 "exercise_id": item["exercise_id"],
                 "exercise_name": item["exercise_name"],
+                "profile_key": item["profile_key"],
                 "position": item["position"],
                 "sets": item["sets"],
                 "total_sets": len(item["sets"]),
@@ -91,6 +92,7 @@ def build_current_workout_response(
                 "total_volume": item["total_volume"],
                 "default_weight": item["default_weight"],
                 "default_reps": item["default_reps"],
+                "configured_weights": item["configured_weights"],
             }
             for item in workout_exercises
         ],
@@ -150,9 +152,13 @@ def add_current_workout_exercise(
 ) -> dict[str, Any]:
     require_active_draft()
     exercise = get_exercise_or_404(payload.exercise_id)
+    if not exercise["is_active"]:
+        raise HTTPException(status_code=409, detail="Exercise is inactive.")
+
     add_exercise_to_active_draft(
         exercise_id=int(exercise["id"]),
         exercise_name=str(exercise["name"]),
+        profile_key=str(exercise["profile_key"] or "accessory"),
     )
     return build_current_workout_response()
 

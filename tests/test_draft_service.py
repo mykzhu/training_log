@@ -63,6 +63,7 @@ class DraftServiceTests(unittest.TestCase):
                     "id": 1,
                     "exercise_id": self.exercise_id("Deadlift"),
                     "exercise_name": "Deadlift",
+                    "profile_key": "deadlift",
                     "position": 1,
                     "sets": [
                         {
@@ -103,6 +104,7 @@ class DraftServiceTests(unittest.TestCase):
                 "id": 1,
                 "exercise_id": self.exercise_id("Deadlift"),
                 "exercise_name": "Deadlift",
+                "profile_key": "deadlift",
                 "position": 1,
                 "sets": [],
             }

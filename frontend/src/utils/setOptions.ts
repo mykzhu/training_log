@@ -7,15 +7,7 @@ export function uniqueSortedNumbers(values: number[]) {
 }
 
 export function buildWeightOptions(currentWeight: number, extraWeights: number[] = []) {
-  const values: number[] = [currentWeight, ...extraWeights, 0];
-
-  for (let weight = 1; weight <= 70; weight += 1) {
-    values.push(weight);
-  }
-
-  for (let weight = 75; weight <= 150; weight += 5) {
-    values.push(weight);
-  }
+  const values: number[] = [currentWeight, ...extraWeights];
 
   return uniqueSortedNumbers(values.filter((value) => Number.isFinite(value)));
 }

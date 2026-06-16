@@ -137,6 +137,18 @@ label {
   gap: 14px;
 }
 
+.page-header h1 {
+  margin: 0 0 4px;
+  font-size: 28px;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+.page-header p {
+  margin: 0;
+  font-size: 14px;
+}
+
 .summary-band,
 .panel,
 .exercise-card,
@@ -347,7 +359,7 @@ label {
 }
 
 .add-exercise {
-  grid-template-columns: 1fr auto 1fr auto;
+  grid-template-columns: 1fr auto auto;
 }
 
 .exercise-list,
@@ -536,6 +548,74 @@ label {
 
 .backup-counts .stat-card {
   background: var(--card2);
+}
+
+.settings-add,
+.settings-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.settings-list {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 14px;
+  background: var(--card);
+}
+
+.settings-card-header,
+.settings-order {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.settings-card-header h2,
+.settings-weights h3 {
+  margin: 0 0 4px;
+  color: var(--blue);
+  font-size: 21px;
+  letter-spacing: 0;
+}
+
+.settings-card-header p {
+  margin: 0;
+  font-size: 13px;
+}
+
+.settings-order {
+  justify-content: flex-start;
+}
+
+.settings-weights {
+  display: grid;
+  gap: 8px;
+}
+
+.weight-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.weight-chip {
+  min-height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: var(--card2);
+  color: var(--text);
+  font-size: 14px;
 }
 
 .stats-toolbar {
@@ -990,7 +1070,7 @@ label {
   }
 
   .add-exercise {
-    grid-template-columns: 1fr auto;
+    grid-template-columns: 1fr auto auto;
   }
 
   .set-row {
@@ -1034,6 +1114,8 @@ label {
 
   .controls-grid,
   .add-exercise,
+  .settings-add,
+  .settings-row,
   .set-actions,
   .recovery-grid,
   .dashboard-grid,

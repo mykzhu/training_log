@@ -11,6 +11,7 @@ export type CurrentWorkoutExercise = {
   draft_exercise_id: number;
   exercise_id: number;
   exercise_name: string;
+  profile_key: string;
   position: number;
   sets: SetEntry[];
   total_sets: number;
@@ -18,12 +19,14 @@ export type CurrentWorkoutExercise = {
   total_volume: number;
   default_weight: number;
   default_reps: number;
+  configured_weights: number[];
 };
 
 export type WorkoutExercise = {
   workout_exercise_id: number;
   exercise_id: number;
   exercise_name: string;
+  profile_key: string;
   position: number;
   sets: SetEntry[];
   total_sets: number;
@@ -31,6 +34,7 @@ export type WorkoutExercise = {
   total_volume: number;
   default_weight: number;
   default_reps: number;
+  configured_weights: number[];
 };
 
 export type LoadMetrics = {
@@ -162,6 +166,23 @@ export type WorkoutAnalysis = {
 export type Exercise = {
   id: number;
   name: string;
+  is_active: boolean;
+  sort_order: number;
+  profile_key: string;
+  weights: number[];
+};
+
+export type ExerciseCreatePayload = {
+  name: string;
+  is_active?: boolean;
+  profile_key?: string;
+  weights?: number[];
+};
+
+export type ExerciseUpdatePayload = {
+  name?: string;
+  is_active?: boolean;
+  profile_key?: string;
 };
 
 export type StatsWorkout = {
