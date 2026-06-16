@@ -15,6 +15,18 @@ const pages: Array<{ key: PageKey; label: string }> = [
   { key: "backup", label: "Backup" },
 ];
 
+const historyNavItems: Array<{
+  key: string;
+  label: string;
+  page: PageKey;
+  path: string;
+}> = [
+  { key: "current", label: "Current", page: "current", path: "/" },
+  { key: "stats", label: "Stats", page: "stats", path: "/stats" },
+  { key: "stats2", label: "Stats 2", page: "stats", path: "/stats2" },
+  { key: "backup", label: "Backup", page: "backup", path: "/backup" },
+];
+
 function pageFromPath(pathname: string): PageKey {
   if (pathname.startsWith("/history") || pathname.startsWith("/workouts/")) {
     return "history";
@@ -60,30 +72,42 @@ export default function App() {
     return () => window.removeEventListener("popstate", syncFromPath);
   }, []);
 
-  function navigate(page: PageKey) {
+  function navigate(page: PageKey, path = pathForPage(page)) {
     setActivePage(page);
     setInitialWorkoutId(null);
-    window.history.pushState(null, "", pathForPage(page));
+    window.history.pushState(null, "", path);
   }
+
+  const isHistoryList = activePage === "history" && initialWorkoutId === null;
+  const headerTitle = isHistoryList ? "History" : "Training Log";
+  const headerSubtitle = isHistoryList
+    ? "Last 30 workouts"
+    : pages.find((page) => page.key === activePage)?.label;
+  const navItems = isHistoryList
+    ? historyNavItems
+    : pages.map((page) => ({
+        key: page.key,
+        label: page.label,
+        page: page.key,
+        path: pathForPage(page.key),
+      }));
 
   return (
     <main className={`app-shell app-shell-${activePage}`}>
       <header className="app-header">
         <div>
-          <h1>Training Log</h1>
-          <p className="muted active-label">
-            {pages.find((page) => page.key === activePage)?.label}
-          </p>
+          <h1>{headerTitle}</h1>
+          <p className="muted active-label">{headerSubtitle}</p>
         </div>
         <nav className="tabs" aria-label="Main navigation">
-          {pages.map((page) => (
+          {navItems.map((item) => (
             <button
-              className={page.key === activePage ? "tab tab-active" : "tab"}
-              key={page.key}
-              onClick={() => navigate(page.key)}
+              className={item.page === activePage ? "tab tab-active" : "tab"}
+              key={item.key}
+              onClick={() => navigate(item.page, item.path)}
               type="button"
             >
-              {page.label}
+              {item.label}
             </button>
           ))}
         </nav>

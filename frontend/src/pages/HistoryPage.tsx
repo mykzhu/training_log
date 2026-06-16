@@ -129,6 +129,11 @@ function scoreMetricClass(value: number | null | undefined) {
   return "metric-red";
 }
 
+function pushHistoryRoute(path: string) {
+  window.history.pushState(null, "", path);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
 type HistoryPageProps = {
   initialWorkoutId: number | null;
 };
@@ -253,7 +258,7 @@ export default function HistoryPage({ initialWorkoutId }: HistoryPageProps) {
       await deleteWorkout(detail.workout.id);
       setSelectedWorkoutId(null);
       setDetail(null);
-      window.history.pushState(null, "", "/history");
+      pushHistoryRoute("/history");
       await loadWorkouts();
       setMessage("Workout deleted");
     } catch (reason: unknown) {
@@ -265,13 +270,13 @@ export default function HistoryPage({ initialWorkoutId }: HistoryPageProps) {
 
   function openWorkout(workoutId: number) {
     setSelectedWorkoutId(workoutId);
-    window.history.pushState(null, "", `/workouts/${workoutId}`);
+    pushHistoryRoute(`/workouts/${workoutId}`);
   }
 
   function backToHistory() {
     setSelectedWorkoutId(null);
     setDetail(null);
-    window.history.pushState(null, "", "/history");
+    pushHistoryRoute("/history");
   }
 
   async function deleteWorkoutFromList(workout: WorkoutSummary) {
