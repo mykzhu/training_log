@@ -232,6 +232,11 @@ class WorkoutsApiTests(unittest.TestCase):
         self.assertEqual(response["exercises"][0]["total_sets"], 2)
         self.assertEqual(response["exercises"][0]["sets"][0]["weight"], 100.0)
         self.assertIn("load_label", response["load_metrics"])
+        self.assertEqual(response["analysis"]["prs"], [])
+        self.assertEqual(
+            response["analysis"]["exercises"][0]["exercise_name"],
+            "Deadlift",
+        )
 
     def test_get_workout_detail_returns_404_for_missing_workout(self) -> None:
         with self.assertRaises(HTTPException) as exc:

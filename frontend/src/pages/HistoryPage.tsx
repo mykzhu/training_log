@@ -22,6 +22,43 @@ function toDateTimeLocal(value: string) {
   return value.slice(0, 16);
 }
 
+function formatNumber(value: number | null | undefined, digits = 1) {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "—";
+  }
+
+  return Number(value).toFixed(digits);
+}
+
+function loadMetricClass(loadLabel: string | null | undefined) {
+  if (loadLabel === "Light") {
+    return "metric-green";
+  }
+  if (loadLabel === "Medium") {
+    return "metric-yellow";
+  }
+  if (loadLabel === "Hard") {
+    return "metric-orange";
+  }
+  if (loadLabel === "Very hard") {
+    return "metric-red";
+  }
+
+  return "metric-neutral";
+}
+
+function formatBestSet(setEntry: { weight: number; reps: number } | null) {
+  if (!setEntry) {
+    return "—";
+  }
+
+  if (setEntry.weight > 0) {
+    return `${formatNumber(setEntry.weight)} × ${setEntry.reps}`;
+  }
+
+  return `${setEntry.reps} reps`;
+}
+
 type HistoryPageProps = {
   initialWorkoutId: number | null;
 };
@@ -259,6 +296,148 @@ export default function HistoryPage({ initialWorkoutId }: HistoryPageProps) {
             <StatCard label="Reps" value={detail.total_reps} />
             <StatCard label="Load" value={detail.load_metrics.load_label} />
           </div>
+
+          <section className="panel analysis-card">
+            <h2>Analysis</h2>
+            <section
+              className={`analysis-section ${loadMetricClass(
+                detail.load_metrics.load_label,
+              )}`}
+            >
+              <h3>Workout load</h3>
+              <div className="analysis-row">
+                <div>
+                  <div className="analysis-main">
+                    {detail.load_metrics.load_label}
+                  </div>
+                  <div className="muted small">overall training difficulty</div>
+                </div>
+                <div className="analysis-value">
+                  {formatNumber(detail.load_metrics.load_score)}
+                </div>
+              </div>
+              <div className="analysis-row">
+                <div>
+                  <div className="analysis-main">Compound score</div>
+                  <div className="muted small">base exercise contribution</div>
+                </div>
+                <div className="analysis-value">
+                  {formatNumber(detail.load_metrics.compound_score)}
+                </div>
+              </div>
+              <div className="analysis-row">
+                <div>
+                  <div className="analysis-main">Intensity score</div>
+                  <div className="muted small">relative to your history</div>
+                </div>
+                <div className="analysis-value">
+                  {detail.load_metrics.intensity_score === null
+                    ? "—"
+                    : `${formatNumber(detail.load_metrics.intensity_score, 0)}%`}
+                </div>
+              </div>
+              <div className="analysis-row">
+                <div>
+                  <div className="analysis-main">Back stress</div>
+                  <div className="muted small">deadlift / squat / row stress</div>
+                </div>
+                <div className="analysis-value">
+                  {formatNumber(detail.load_metrics.back_stress_score)}
+                </div>
+              </div>
+              <p className="analysis-note">
+                Load score uses exercise type, reps, relative intensity and RPE.
+                This is more useful than tonnage alone when comparing heavy
+                compound work with light accessory volume.
+              </p>
+            </section>
+
+            <div className="analysis-grid">
+              <section className="analysis-section">
+                <h3>Best sets</h3>
+                {detail.analysis.exercises.length === 0 ? (
+                  <div className="muted">No sets yet.</div>
+                ) : (
+                  detail.analysis.exercises.map((exercise) => (
+                    <div className="analysis-row" key={exercise.exercise_id}>
+                      <div>
+                        <div className="analysis-main">
+                          {exercise.exercise_name}
+                        </div>
+                        <div className="muted small">
+                          {exercise.best_e1rm_set
+                            ? "best reliable strength set"
+                            : "best by set volume"}
+                        </div>
+                      </div>
+                      <div className="analysis-value">
+                        {formatBestSet(exercise.best_set)}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </section>
+
+              <section className="analysis-section">
+                <h3>Strength estimate</h3>
+                {detail.analysis.exercises.filter(
+                  (exercise) => exercise.best_e1rm !== null,
+                ).length === 0 ? (
+                  <div className="muted">No reliable e1RM estimate yet.</div>
+                ) : (
+                  detail.analysis.exercises
+                    .filter((exercise) => exercise.best_e1rm !== null)
+                    .map((exercise) => (
+                      <div className="analysis-row" key={exercise.exercise_id}>
+                        <div>
+                          <div className="analysis-main">
+                            {exercise.exercise_name}
+                          </div>
+                          <div className="muted small">
+                            from {formatBestSet(exercise.best_e1rm_set)}
+                          </div>
+                        </div>
+                        <div className="analysis-value">
+                          {formatNumber(exercise.best_e1rm)} kg
+                        </div>
+                      </div>
+                    ))
+                )}
+                <p className="analysis-note">
+                  e1RM is shown only for weighted sets with 3-12 reps.
+                </p>
+              </section>
+
+              <section className="analysis-section">
+                <h3>PRs</h3>
+                {detail.analysis.prs.length === 0 ? (
+                  <div className="muted">No PRs in this workout.</div>
+                ) : (
+                  detail.analysis.prs.map((pr) => (
+                    <div
+                      className="analysis-row"
+                      key={`${pr.exercise_name}-${pr.type}`}
+                    >
+                      <div className="analysis-main">{pr.exercise_name}</div>
+                      <div className="analysis-value">{pr.type}</div>
+                    </div>
+                  ))
+                )}
+              </section>
+
+              <section className="analysis-section">
+                <h3>Intensity</h3>
+                <div className="analysis-row">
+                  <div className="analysis-main">Average weight per rep</div>
+                  <div className="analysis-value">
+                    {detail.total_reps
+                      ? `${formatNumber(detail.total_volume / detail.total_reps)} kg/rep`
+                      : "—"}
+                  </div>
+                </div>
+              </section>
+            </div>
+          </section>
 
           <section className="panel controls-grid">
             <label>

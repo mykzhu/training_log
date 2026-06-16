@@ -25,7 +25,10 @@ from app.schemas import (
     UpdateSetRequest,
     WorkoutUpdateRequest,
 )
-from app.services.stats_service import calculate_workout_load_metrics
+from app.services.stats_service import (
+    build_workout_analysis,
+    calculate_workout_load_metrics,
+)
 
 
 router = APIRouter(prefix="/api/v1/workouts", tags=["workouts"])
@@ -155,6 +158,7 @@ def get_workout_detail(workout_id: int) -> dict[str, Any]:
         session_rpe=workout["session_rpe"],
         current_workout_id=workout_id,
     )
+    analysis = build_workout_analysis(workout_id, details)
 
     return {
         "workout": {
@@ -171,6 +175,7 @@ def get_workout_detail(workout_id: int) -> dict[str, Any]:
         "total_reps": total_reps,
         "total_sets": total_sets,
         "load_metrics": load_metrics,
+        "analysis": analysis,
     }
 
 

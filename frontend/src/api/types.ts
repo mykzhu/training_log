@@ -79,6 +79,22 @@ export type WorkoutDetail = {
   total_reps: number;
   total_sets: number;
   load_metrics: LoadMetrics;
+  analysis: WorkoutAnalysis;
+};
+
+export type WorkoutAnalysis = {
+  exercises: Array<{
+    exercise_id: number;
+    exercise_name: string;
+    best_set: { weight: number; reps: number } | null;
+    best_e1rm: number | null;
+    best_e1rm_set: { weight: number; reps: number } | null;
+    pr_flags: string[];
+  }>;
+  prs: Array<{
+    exercise_name: string;
+    type: string;
+  }>;
 };
 
 export type Exercise = {
