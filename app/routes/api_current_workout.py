@@ -3,6 +3,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 
 from app.db import get_db
+from app.repositories.drafts import EmptyDraftError
 from app.schemas import (
     AddExerciseRequest,
     AddSetRequest,
@@ -234,7 +235,14 @@ def delete_current_workout_set(
 @router.post("/finish")
 def finish_current_workout() -> dict[str, Any]:
     require_active_draft()
-    workout_id = finish_active_workout()
+    try:
+        workout_id = finish_active_workout()
+    except EmptyDraftError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot finish a workout with no sets.",
+        ) from exc
+
     if workout_id is None:
         raise HTTPException(status_code=409, detail="No active workout draft.")
 

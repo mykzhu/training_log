@@ -140,6 +140,43 @@ class CurrentWorkoutApiTests(unittest.TestCase):
         self.assertEqual(workout_count, 1)
         self.assertEqual(set_count, 1)
 
+    def test_finish_current_workout_rejects_empty_draft_and_preserves_it(self) -> None:
+        start_current_workout()
+
+        with self.assertRaises(HTTPException) as exc:
+            finish_current_workout()
+
+        self.assertEqual(exc.exception.status_code, 409)
+        self.assertEqual(
+            exc.exception.detail,
+            "Cannot finish a workout with no sets.",
+        )
+        self.assertTrue(get_current_workout()["active"])
+
+        with get_db() as conn:
+            workout_count = conn.execute("SELECT COUNT(*) FROM workouts").fetchone()[0]
+
+        self.assertEqual(workout_count, 0)
+
+    def test_second_finish_current_workout_does_not_duplicate_workout(self) -> None:
+        deadlift_id = self.exercise_id("Deadlift")
+
+        start_current_workout()
+        add_current_workout_exercise(AddExerciseRequest(exercise_id=deadlift_id))
+        add_current_workout_set(1, AddSetRequest(weight=100.0, reps=5))
+        first_response = finish_current_workout()
+
+        with self.assertRaises(HTTPException) as exc:
+            finish_current_workout()
+
+        self.assertEqual(first_response["workout_id"], 1)
+        self.assertEqual(exc.exception.status_code, 409)
+
+        with get_db() as conn:
+            workout_count = conn.execute("SELECT COUNT(*) FROM workouts").fetchone()[0]
+
+        self.assertEqual(workout_count, 1)
+
     def test_current_workout_errors_are_json_api_friendly(self) -> None:
         with self.assertRaises(HTTPException) as no_draft:
             update_current_workout_metadata(WorkoutMetadataUpdate(session_rpe=5))

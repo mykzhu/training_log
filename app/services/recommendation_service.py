@@ -826,7 +826,8 @@ def build_next_workout_recommendation(
     last_load_metrics = calculate_workout_load_metrics(
         workout_exercises=details,
         session_rpe=last_workout["session_rpe"],
-        current_workout_id=int(last_workout["id"]),
+        as_of_created_at=last_workout["created_at"],
+        as_of_workout_id=int(last_workout["id"]),
     )
 
     readiness = calculate_readiness_status(

@@ -148,7 +148,8 @@ def build_recovery_context(
         load_metrics = calculate_workout_load_metrics(
             workout_exercises=details,
             session_rpe=workout["session_rpe"],
-            current_workout_id=workout_id,
+            as_of_created_at=workout["created_at"],
+            as_of_workout_id=workout_id,
         )
 
         total_load_score += float(load_metrics["load_score"])

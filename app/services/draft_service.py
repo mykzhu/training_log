@@ -1,5 +1,4 @@
 import logging
-from copy import deepcopy
 from datetime import datetime
 from threading import RLock
 from typing import Any
@@ -310,18 +309,21 @@ def finish_active_workout() -> int | None:
     global ACTIVE_WORKOUT_DRAFT
 
     with DRAFT_LOCK:
-        active_draft = _get_active_workout_draft_locked()
-        if active_draft is None:
+        if _get_active_workout_draft_locked() is None:
             logger.warning("workout.draft.finish.no_active")
             return None
 
-        draft = deepcopy(active_draft)
+        try:
+            workout_id = draft_repository.finalize_active_draft()
+        except draft_repository.NoActiveDraftError:
+            ACTIVE_WORKOUT_DRAFT = None
+            logger.warning("workout.draft.finish.no_active")
+            return None
+        except draft_repository.EmptyDraftError:
+            logger.warning("workout.draft.finish.empty")
+            raise
 
-    workout_id = save_workout_draft_to_db(draft)
-
-    with DRAFT_LOCK:
         ACTIVE_WORKOUT_DRAFT = None
-        draft_repository.clear_active_draft()
 
     logger.info("workout.draft.finish workout_id=%s", workout_id)
     return workout_id

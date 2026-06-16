@@ -156,6 +156,7 @@ def calculate_workout_load_metrics(
         exercise_compound = 0.0
         exercise_intensity = 0.0
         exercise_back = 0.0
+        exercise_known_intensity_sets = 0
 
         best_e1rm = best_e1rm_by_exercise.get(exercise_id)
 
@@ -172,6 +173,7 @@ def calculate_workout_load_metrics(
             if best_e1rm and best_e1rm > 0 and set_e1rm is not None:
                 relative_intensity = min(1.5, set_e1rm / best_e1rm)
                 known_intensity_sets += 1
+                exercise_known_intensity_sets += 1
 
             set_rep_factor = rep_factor(reps)
             set_intensity_factor = intensity_factor(relative_intensity)
@@ -204,8 +206,8 @@ def calculate_workout_load_metrics(
                 "load_score": exercise_load,
                 "compound_score": exercise_compound,
                 "intensity_score": (
-                    exercise_intensity / len(item["sets"])
-                    if item["sets"]
+                    exercise_intensity / exercise_known_intensity_sets
+                    if exercise_known_intensity_sets
                     else None
                 ),
                 "back_stress_score": exercise_back,

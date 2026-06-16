@@ -118,6 +118,26 @@ class AnalysisServiceTests(unittest.TestCase):
         self.assertEqual(fallback_breakdown["category"], "accessory")
         self.assertTrue(math.isclose(fallback_breakdown["load_score"], 1.5))
 
+    def test_exercise_intensity_averages_only_known_intensity_sets(self) -> None:
+        metrics = calculate_workout_load_metrics(
+            workout_exercises=[
+                {
+                    "exercise_id": 1,
+                    "exercise_name": "Deadlift",
+                    "sets": [
+                        {"weight": 80, "reps": 5},
+                        {"weight": 0, "reps": 20},
+                    ],
+                },
+            ],
+            best_e1rm_by_exercise={1: 100.0},
+        )
+
+        breakdown = metrics["exercise_breakdown"][0]
+
+        self.assertTrue(math.isclose(metrics["intensity_score"], 93.33333333))
+        self.assertTrue(math.isclose(breakdown["intensity_score"], 93.33333333))
+
 
 if __name__ == "__main__":
     unittest.main()

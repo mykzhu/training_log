@@ -205,6 +205,96 @@ class WorkoutsApiTests(unittest.TestCase):
         self.assertEqual(response["workouts"][0]["exercises_count"], 1)
         self.assertIn("load_score", response["workouts"][0]["load_metrics"])
 
+    def test_get_workouts_orders_by_created_at_desc_then_id_desc(self) -> None:
+        newer_id = self.insert_workout(
+            created_at="2026-06-08T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [{"weight": 100, "reps": 5}],
+                },
+            ],
+        )
+        older_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [{"weight": 90, "reps": 5}],
+                },
+            ],
+        )
+
+        response = get_workouts(limit=30)
+
+        self.assertEqual(
+            [workout["id"] for workout in response["workouts"]],
+            [newer_id, older_id],
+        )
+
+    def test_historical_load_does_not_use_future_workout(self) -> None:
+        old_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [{"weight": 100, "reps": 5}],
+                },
+            ],
+        )
+        old_metrics_before = get_workout_detail(old_id)["load_metrics"]
+
+        self.insert_workout(
+            created_at="2026-06-15T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [{"weight": 300, "reps": 5}],
+                },
+            ],
+        )
+
+        old_metrics_after = get_workout_detail(old_id)["load_metrics"]
+
+        self.assertIsNone(old_metrics_after["intensity_score"])
+        self.assertEqual(
+            old_metrics_after["load_score"],
+            old_metrics_before["load_score"],
+        )
+
+    def test_historical_load_same_timestamp_uses_lower_id_only(self) -> None:
+        self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [{"weight": 100, "reps": 5}],
+                },
+            ],
+        )
+        target_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [{"weight": 110, "reps": 5}],
+                },
+            ],
+        )
+        self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [{"weight": 300, "reps": 5}],
+                },
+            ],
+        )
+
+        metrics = get_workout_detail(target_id)["load_metrics"]
+
+        self.assertAlmostEqual(metrics["intensity_score"], 110.0)
+
     def test_get_workout_detail_returns_exercises_sets_and_metrics(self) -> None:
         workout_id = self.insert_workout(
             created_at="2026-06-01T10:00:00",

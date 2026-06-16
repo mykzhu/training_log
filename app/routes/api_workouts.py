@@ -72,7 +72,8 @@ def build_workout_summary(workout: dict[str, Any]) -> dict[str, Any]:
     load_metrics = calculate_workout_load_metrics(
         workout_exercises=details,
         session_rpe=workout["session_rpe"],
-        current_workout_id=workout_id,
+        as_of_created_at=workout["created_at"],
+        as_of_workout_id=workout_id,
     )
 
     return {
@@ -156,7 +157,8 @@ def get_workout_detail(workout_id: int) -> dict[str, Any]:
     load_metrics = calculate_workout_load_metrics(
         workout_exercises=details,
         session_rpe=workout["session_rpe"],
-        current_workout_id=workout_id,
+        as_of_created_at=workout["created_at"],
+        as_of_workout_id=workout_id,
     )
     analysis = build_workout_analysis(workout_id, details)
 

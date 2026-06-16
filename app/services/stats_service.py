@@ -12,6 +12,8 @@ from app.services.analysis_service import (
 def get_best_e1rm_by_exercise(
     workout_exercises: list[dict[str, Any]],
     current_workout_id: int | None = None,
+    as_of_created_at: str | None = None,
+    as_of_workout_id: int | None = None,
 ) -> dict[int, float]:
     exercise_ids = sorted(
         {
@@ -28,7 +30,35 @@ def get_best_e1rm_by_exercise(
     params: list[Any] = list(exercise_ids)
 
     workout_filter = ""
-    if current_workout_id is not None:
+    if as_of_workout_id is None and current_workout_id is not None:
+        as_of_workout_id = current_workout_id
+
+    if as_of_created_at is None and as_of_workout_id is not None:
+        with get_db() as conn:
+            workout = conn.execute(
+                """
+                SELECT created_at
+                FROM workouts
+                WHERE id = ?
+                """,
+                (as_of_workout_id,),
+            ).fetchone()
+
+        if workout is not None:
+            as_of_created_at = str(workout["created_at"])
+
+    if as_of_created_at is not None and as_of_workout_id is not None:
+        workout_filter = """
+              AND (
+                    w.created_at < ?
+                    OR (w.created_at = ? AND w.id < ?)
+              )
+        """
+        params.extend([as_of_created_at, as_of_created_at, as_of_workout_id])
+    elif as_of_created_at is not None:
+        workout_filter = "AND w.created_at < ?"
+        params.append(as_of_created_at)
+    elif current_workout_id is not None:
         workout_filter = "AND w.id != ?"
         params.append(current_workout_id)
 
@@ -69,10 +99,14 @@ def calculate_workout_load_metrics(
     workout_exercises: list[dict[str, Any]],
     session_rpe: int | float | None = None,
     current_workout_id: int | None = None,
+    as_of_created_at: str | None = None,
+    as_of_workout_id: int | None = None,
 ) -> dict[str, Any]:
     best_e1rm_by_exercise = get_best_e1rm_by_exercise(
         workout_exercises=workout_exercises,
         current_workout_id=current_workout_id,
+        as_of_created_at=as_of_created_at,
+        as_of_workout_id=as_of_workout_id,
     )
 
     return calculate_load_metrics(
@@ -643,16 +677,20 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
                 """
                 SELECT *
                 FROM workouts
-                ORDER BY id DESC
+                ORDER BY created_at ASC, id ASC
                 """
             ).fetchall()
         else:
             workouts = conn.execute(
                 """
                 SELECT *
-                FROM workouts
-                ORDER BY id DESC
-                LIMIT ?
+                FROM (
+                    SELECT *
+                    FROM workouts
+                    ORDER BY created_at DESC, id DESC
+                    LIMIT ?
+                )
+                ORDER BY created_at ASC, id ASC
                 """,
                 (limit,),
             ).fetchall()
@@ -660,7 +698,7 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
     workout_items = []
     exercise_stats: dict[str, dict[str, Any]] = {}
 
-    for workout in reversed(workouts):
+    for workout in workouts:
         details = get_workout_details(workout["id"])
 
         total_volume = sum(item["total_volume"] for item in details)
@@ -674,7 +712,8 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
         load_metrics = calculate_workout_load_metrics(
             workout_exercises=details,
             session_rpe=workout["session_rpe"],
-            current_workout_id=workout["id"],
+            as_of_created_at=workout["created_at"],
+            as_of_workout_id=workout["id"],
         )
 
         workout_items.append(

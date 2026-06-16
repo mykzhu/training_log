@@ -10,7 +10,7 @@ def list_recent_workouts(limit: int = 30) -> list[dict[str, Any]]:
             """
             SELECT *
             FROM workouts
-            ORDER BY id DESC
+            ORDER BY created_at DESC, id DESC
             LIMIT ?
             """,
             (limit,),
@@ -143,21 +143,59 @@ def delete_workout_exercise(
 
 def get_previous_set_for_exercise(
     exercise_id: int,
-    current_workout_id: int,
+    current_workout_id: int | None = None,
+    *,
+    as_of_created_at: str | None = None,
+    as_of_workout_id: int | None = None,
 ) -> sqlite3.Row | None:
+    if as_of_workout_id is None and current_workout_id not in (None, 0):
+        as_of_workout_id = current_workout_id
+
+    if as_of_created_at is None and as_of_workout_id is not None:
+        with get_db() as conn:
+            workout = conn.execute(
+                """
+                SELECT created_at
+                FROM workouts
+                WHERE id = ?
+                """,
+                (as_of_workout_id,),
+            ).fetchone()
+
+        if workout is not None:
+            as_of_created_at = str(workout["created_at"])
+
+    workout_filter = ""
+    params: list[Any] = [exercise_id]
+
+    if as_of_created_at is not None and as_of_workout_id is not None:
+        workout_filter = """
+              AND (
+                    w.created_at < ?
+                    OR (w.created_at = ? AND w.id < ?)
+              )
+        """
+        params.extend([as_of_created_at, as_of_created_at, as_of_workout_id])
+    elif as_of_created_at is not None:
+        workout_filter = "AND w.created_at < ?"
+        params.append(as_of_created_at)
+    elif current_workout_id not in (None, 0):
+        workout_filter = "AND w.id != ?"
+        params.append(current_workout_id)
+
     with get_db() as conn:
         return conn.execute(
-            """
+            f"""
             SELECT se.weight, se.reps
             FROM set_entries se
             JOIN workout_exercises we ON we.id = se.workout_exercise_id
             JOIN workouts w ON w.id = we.workout_id
             WHERE we.exercise_id = ?
-              AND w.id != ?
-            ORDER BY w.workout_date DESC, w.id DESC, se.set_number DESC, se.id DESC
+              {workout_filter}
+            ORDER BY w.created_at DESC, w.id DESC, se.set_number DESC, se.id DESC
             LIMIT 1
             """,
-            (exercise_id, current_workout_id),
+            params,
         ).fetchone()
 
 
@@ -287,22 +325,10 @@ def duplicate_set_for_workout_exercise(
         ).fetchone()
 
         if source_set is None:
-            source_set = conn.execute(
-                """
-                SELECT se.weight, se.reps
-                FROM set_entries se
-                JOIN workout_exercises we ON we.id = se.workout_exercise_id
-                JOIN workouts w ON w.id = we.workout_id
-                WHERE we.exercise_id = ?
-                  AND w.id != ?
-                ORDER BY w.workout_date DESC, w.id DESC, se.set_number DESC, se.id DESC
-                LIMIT 1
-                """,
-                (
-                    workout_exercise["exercise_id"],
-                    workout_exercise["workout_id"],
-                ),
-            ).fetchone()
+            source_set = get_previous_set_for_exercise(
+                exercise_id=int(workout_exercise["exercise_id"]),
+                current_workout_id=int(workout_exercise["workout_id"]),
+            )
 
     if source_set is None:
         return None

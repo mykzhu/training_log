@@ -136,7 +136,7 @@ class RecoveryServiceTests(unittest.TestCase):
         self.assertEqual(last_7d["avg_rpe"], 6)
         self.assertEqual(last_7d["avg_back_pain"], 3)
         self.assertEqual(last_7d["load_label"], "Light")
-        self.assertTrue(math.isclose(last_7d["load_score"], 6.2964))
+        self.assertTrue(math.isclose(last_7d["load_score"], 5.3064))
 
         excluded = build_recovery_context(
             as_of="2026-06-06T10:00:00",

@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from app import config
 from app.db import get_db, init_db
@@ -235,6 +236,36 @@ class DraftServiceTests(unittest.TestCase):
         self.assertEqual(workout["session_rpe"], 6)
         self.assertEqual(workout["lower_back_pain"], 2)
         self.assertEqual(set_count, 1)
+
+    def test_finish_failure_keeps_draft_and_creates_no_workout(self) -> None:
+        deadlift_id = self.exercise_id("Deadlift")
+
+        start_active_workout_draft()
+        draft_exercise = add_exercise_to_active_draft(
+            exercise_id=deadlift_id,
+            exercise_name="Deadlift",
+        )
+        add_set_to_active_draft(
+            draft_exercise_id=int(draft_exercise["id"]),
+            weight=100.0,
+            reps=5,
+        )
+
+        with patch(
+            "app.repositories.drafts.insert_completed_exercises_and_sets",
+            side_effect=RuntimeError("insertion failed"),
+        ):
+            with self.assertRaises(RuntimeError):
+                finish_active_workout()
+
+        self.assertIsNotNone(get_active_workout_draft())
+
+        with get_db() as conn:
+            workout_count = conn.execute("SELECT COUNT(*) FROM workouts").fetchone()[0]
+            set_count = conn.execute("SELECT COUNT(*) FROM set_entries").fetchone()[0]
+
+        self.assertEqual(workout_count, 0)
+        self.assertEqual(set_count, 0)
 
     def test_active_draft_recovers_from_persistent_storage(self) -> None:
         deadlift_id = self.exercise_id("Deadlift")

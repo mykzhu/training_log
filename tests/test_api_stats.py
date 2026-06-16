@@ -160,6 +160,66 @@ class StatsApiTests(unittest.TestCase):
         self.assertIn("load", response["charts"])
         self.assertIn("sparkbars", response["charts"])
 
+    def test_get_stats_orders_by_created_at_ascending_then_id_ascending(self) -> None:
+        newer_id = self.insert_workout(
+            created_at="2026-06-08T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [{"weight": 110, "reps": 5}],
+                },
+            ],
+        )
+        older_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [{"weight": 100, "reps": 5}],
+                },
+            ],
+        )
+
+        response = get_stats(limit="all")
+
+        self.assertEqual(
+            [workout["id"] for workout in response["stats"]["workouts"]],
+            [older_id, newer_id],
+        )
+
+    def test_old_stats_are_stable_after_new_pr(self) -> None:
+        old_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [{"weight": 100, "reps": 5}],
+                },
+            ],
+        )
+        first_response = get_stats(limit="all")
+        old_load_before = first_response["stats"]["workouts"][0]["load_score"]
+
+        self.insert_workout(
+            created_at="2026-06-15T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [{"weight": 300, "reps": 5}],
+                },
+            ],
+        )
+
+        second_response = get_stats(limit="all")
+        old_workout = next(
+            workout
+            for workout in second_response["stats"]["workouts"]
+            if workout["id"] == old_id
+        )
+
+        self.assertEqual(old_workout["load_score"], old_load_before)
+        self.assertIsNone(old_workout["intensity_score"])
+
     def test_get_stats_limits_to_recent_workouts(self) -> None:
         _, second_id = self.seed_stats_workouts()
 
