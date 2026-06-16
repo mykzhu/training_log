@@ -17,6 +17,7 @@ from app.services.draft_service import (
     clear_active_workout_draft,
     delete_active_draft_exercise,
     delete_active_draft_set,
+    draft_has_logged_sets,
     duplicate_active_draft_set,
     finish_active_workout,
     get_active_workout_draft,
@@ -234,13 +235,20 @@ def delete_current_workout_set(
 
 @router.post("/finish")
 def finish_current_workout() -> dict[str, Any]:
-    require_active_draft()
+    draft = require_active_draft()
+
+    if not draft_has_logged_sets(draft):
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot finish a workout without logged sets.",
+        )
+
     try:
         workout_id = finish_active_workout()
     except EmptyDraftError as exc:
         raise HTTPException(
-            status_code=409,
-            detail="Cannot finish a workout with no sets.",
+            status_code=400,
+            detail="Cannot finish a workout without logged sets.",
         ) from exc
 
     if workout_id is None:

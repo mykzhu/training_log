@@ -93,6 +93,50 @@ class RecoveryServiceTests(unittest.TestCase):
 
         return workout_id
 
+    def insert_empty_workout(self, created_at: str) -> int:
+        with get_db() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO workouts (
+                    workout_date,
+                    created_at,
+                    finished_at,
+                    session_rpe,
+                    lower_back_pain,
+                    duration_seconds
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    created_at[:10],
+                    created_at,
+                    created_at,
+                    None,
+                    None,
+                    0,
+                ),
+            )
+
+        return int(cursor.lastrowid)
+
+    def insert_workout_without_sets(self, created_at: str) -> int:
+        workout_id = self.insert_empty_workout(created_at)
+
+        with get_db() as conn:
+            exercise = conn.execute(
+                "SELECT id FROM exercises WHERE name = ?",
+                ("Deadlift",),
+            ).fetchone()
+            conn.execute(
+                """
+                INSERT INTO workout_exercises (workout_id, exercise_id, position)
+                VALUES (?, ?, ?)
+                """,
+                (workout_id, int(exercise["id"]), 1),
+            )
+
+        return workout_id
+
     def test_format_time_gap_and_labels(self) -> None:
         self.assertEqual(format_time_gap(None), "—")
         self.assertEqual(format_time_gap(0.5), "<1h")
@@ -143,6 +187,63 @@ class RecoveryServiceTests(unittest.TestCase):
             exclude_workout_id=first_workout_id,
         )
         self.assertEqual(excluded["last_7d"]["workout_count"], 1)
+
+    def test_build_recovery_context_has_low_confidence_without_history(self) -> None:
+        context = build_recovery_context(as_of="2026-06-06T10:00:00")
+
+        self.assertFalse(context["has_history"])
+        self.assertEqual(context["last_7d"]["workout_count"], 0)
+        self.assertEqual(context["previous_21d"]["workout_count"], 0)
+        self.assertEqual(context["last_42d"]["workout_count"], 0)
+        self.assertIsNone(context["relative_load"]["acute_to_baseline"])
+        self.assertIsNone(context["relative_load"]["acute_back_to_baseline"])
+        self.assertEqual(context["relative_load"]["baseline_confidence"], "low")
+
+    def test_empty_workouts_are_ignored_by_recovery_context(self) -> None:
+        real_workout_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            session_rpe=5,
+            lower_back_pain=2,
+        )
+        self.insert_empty_workout("2026-06-05T10:00:00")
+        self.insert_workout_without_sets("2026-06-06T10:00:00")
+
+        context = build_recovery_context(as_of="2026-06-08T10:00:00")
+
+        self.assertEqual(context["previous_workout_id"], real_workout_id)
+        self.assertEqual(context["last_7d"]["workout_count"], 1)
+
+    def test_build_recovery_context_returns_multi_window_baseline(self) -> None:
+        for created_at in [
+            "2026-05-20T10:00:00",
+            "2026-05-27T10:00:00",
+            "2026-06-02T10:00:00",
+            "2026-06-09T10:00:00",
+            "2026-06-16T10:00:00",
+            "2026-06-23T10:00:00",
+        ]:
+            self.insert_workout(
+                created_at=created_at,
+                session_rpe=5,
+                lower_back_pain=1,
+            )
+
+        context = build_recovery_context(as_of="2026-06-29T10:00:00")
+
+        self.assertEqual(context["last_7d"]["days"], 7)
+        self.assertEqual(context["previous_21d"]["days"], 21)
+        self.assertEqual(context["last_42d"]["days"], 42)
+        self.assertEqual(context["last_7d"]["workout_count"], 1)
+        self.assertEqual(context["previous_21d"]["workout_count"], 3)
+        self.assertEqual(context["last_42d"]["workout_count"], 6)
+        self.assertTrue(
+            math.isclose(
+                context["relative_load"]["acute_to_baseline"],
+                1.0,
+            )
+        )
+        self.assertEqual(context["relative_load"]["baseline_confidence"], "medium")
+        self.assertEqual(context["last_7d"]["load_label"], "Normal")
 
 
 if __name__ == "__main__":

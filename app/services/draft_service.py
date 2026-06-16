@@ -1,4 +1,5 @@
 import logging
+from copy import deepcopy
 from datetime import datetime
 from threading import RLock
 from typing import Any
@@ -47,6 +48,13 @@ def clear_active_workout_draft() -> None:
     with DRAFT_LOCK:
         ACTIVE_WORKOUT_DRAFT = None
         draft_repository.clear_active_draft()
+
+
+def draft_has_logged_sets(draft: dict[str, Any]) -> bool:
+    return any(
+        bool(item.get("sets"))
+        for item in draft.get("workout_exercises", [])
+    )
 
 
 def start_active_workout_draft() -> tuple[dict[str, Any], bool]:
@@ -309,8 +317,15 @@ def finish_active_workout() -> int | None:
     global ACTIVE_WORKOUT_DRAFT
 
     with DRAFT_LOCK:
-        if _get_active_workout_draft_locked() is None:
+        active_draft = _get_active_workout_draft_locked()
+        if active_draft is None:
             logger.warning("workout.draft.finish.no_active")
+            return None
+
+        draft = deepcopy(active_draft)
+
+        if not draft_has_logged_sets(draft):
+            logger.warning("workout.draft.finish.empty_blocked")
             return None
 
         try:

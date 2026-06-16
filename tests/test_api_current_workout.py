@@ -146,10 +146,55 @@ class CurrentWorkoutApiTests(unittest.TestCase):
         with self.assertRaises(HTTPException) as exc:
             finish_current_workout()
 
-        self.assertEqual(exc.exception.status_code, 409)
+        self.assertEqual(exc.exception.status_code, 400)
         self.assertEqual(
             exc.exception.detail,
-            "Cannot finish a workout with no sets.",
+            "Cannot finish a workout without logged sets.",
+        )
+        self.assertTrue(get_current_workout()["active"])
+
+        with get_db() as conn:
+            workout_count = conn.execute("SELECT COUNT(*) FROM workouts").fetchone()[0]
+
+        self.assertEqual(workout_count, 0)
+
+    def test_finish_current_workout_rejects_exercise_without_sets(self) -> None:
+        deadlift_id = self.exercise_id("Deadlift")
+
+        start_current_workout()
+        add_current_workout_exercise(AddExerciseRequest(exercise_id=deadlift_id))
+
+        with self.assertRaises(HTTPException) as exc:
+            finish_current_workout()
+
+        self.assertEqual(exc.exception.status_code, 400)
+        self.assertEqual(
+            exc.exception.detail,
+            "Cannot finish a workout without logged sets.",
+        )
+        self.assertTrue(get_current_workout()["active"])
+
+        with get_db() as conn:
+            workout_count = conn.execute("SELECT COUNT(*) FROM workouts").fetchone()[0]
+
+        self.assertEqual(workout_count, 0)
+
+    def test_finish_current_workout_rejects_after_deleting_last_set(self) -> None:
+        deadlift_id = self.exercise_id("Deadlift")
+
+        start_current_workout()
+        add_current_workout_exercise(AddExerciseRequest(exercise_id=deadlift_id))
+        response = add_current_workout_set(1, AddSetRequest(weight=100.0, reps=5))
+        draft_set_id = response["exercises"][0]["sets"][0]["id"]
+        delete_current_workout_set(draft_set_id)
+
+        with self.assertRaises(HTTPException) as exc:
+            finish_current_workout()
+
+        self.assertEqual(exc.exception.status_code, 400)
+        self.assertEqual(
+            exc.exception.detail,
+            "Cannot finish a workout without logged sets.",
         )
         self.assertTrue(get_current_workout()["active"])
 

@@ -13,6 +13,7 @@ from app.services.draft_service import (
     create_workout_draft,
     delete_active_draft_exercise,
     delete_active_draft_set,
+    draft_has_logged_sets,
     duplicate_active_draft_set,
     finish_active_workout,
     get_active_workout_draft,
@@ -93,6 +94,23 @@ class DraftServiceTests(unittest.TestCase):
         self.assertEqual(draft["workout_exercises"], [])
         self.assertEqual(draft["next_workout_exercise_id"], 1)
         self.assertEqual(draft["next_set_id"], 1)
+
+    def test_draft_has_logged_sets_checks_nested_sets(self) -> None:
+        empty_draft = create_workout_draft()
+        exercise_without_sets = create_workout_draft()
+        exercise_without_sets["workout_exercises"].append(
+            {
+                "id": 1,
+                "exercise_id": self.exercise_id("Deadlift"),
+                "exercise_name": "Deadlift",
+                "position": 1,
+                "sets": [],
+            }
+        )
+
+        self.assertFalse(draft_has_logged_sets(empty_draft))
+        self.assertFalse(draft_has_logged_sets(exercise_without_sets))
+        self.assertTrue(draft_has_logged_sets(self.draft_with_sets()))
 
     def test_draft_lookup_and_details_use_current_sets(self) -> None:
         draft = self.draft_with_sets()
@@ -236,6 +254,17 @@ class DraftServiceTests(unittest.TestCase):
         self.assertEqual(workout["session_rpe"], 6)
         self.assertEqual(workout["lower_back_pain"], 2)
         self.assertEqual(set_count, 1)
+
+    def test_finish_active_workout_rejects_empty_draft_and_keeps_it(self) -> None:
+        start_active_workout_draft()
+
+        self.assertIsNone(finish_active_workout())
+        self.assertIsNotNone(get_active_workout_draft())
+
+        with get_db() as conn:
+            workout_count = conn.execute("SELECT COUNT(*) FROM workouts").fetchone()[0]
+
+        self.assertEqual(workout_count, 0)
 
     def test_finish_failure_keeps_draft_and_creates_no_workout(self) -> None:
         deadlift_id = self.exercise_id("Deadlift")

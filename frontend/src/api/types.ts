@@ -41,6 +41,20 @@ export type LoadMetrics = {
   back_stress_score: number;
 };
 
+export type RecoveryWindow = {
+  days: number;
+  workout_count: number;
+  load_score: number;
+  load_label?: string;
+  compound_score: number;
+  back_stress_score: number;
+  avg_rpe: number | null;
+  avg_back_pain: number | null;
+  weekly_load_equivalent: number;
+  weekly_back_stress_equivalent: number;
+  weekly_workout_average: number;
+};
+
 export type RecoveryContext = {
   as_of: string;
   has_history: boolean;
@@ -50,14 +64,13 @@ export type RecoveryContext = {
   days_since_previous_workout: number | null;
   previous_gap_label: string;
   hint: string;
-  last_7d: {
-    workout_count: number;
-    load_score: number;
-    load_label: string;
-    compound_score: number;
-    back_stress_score: number;
-    avg_rpe: number | null;
-    avg_back_pain: number | null;
+  last_7d: RecoveryWindow;
+  previous_21d: RecoveryWindow;
+  last_42d: RecoveryWindow;
+  relative_load: {
+    acute_to_baseline: number | null;
+    acute_back_to_baseline: number | null;
+    baseline_confidence: "low" | "medium" | "high";
   };
 };
 

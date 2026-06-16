@@ -34,17 +34,28 @@ function formatNumber(value: number | null | undefined, digits = 1) {
   return Number(value).toFixed(digits);
 }
 
+function formatRatio(value: number | null | undefined) {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "—";
+  }
+
+  return `${Number(value).toFixed(2)}×`;
+}
+
 function metricClassForLoad(loadLabel: string | null | undefined) {
-  if (loadLabel === "Light") {
+  if (loadLabel === "Light" || loadLabel === "Below usual") {
     return "metric-green";
+  }
+  if (loadLabel === "Normal") {
+    return "metric-lime";
   }
   if (loadLabel === "Medium") {
     return "metric-yellow";
   }
-  if (loadLabel === "Hard") {
+  if (loadLabel === "Hard" || loadLabel === "Elevated") {
     return "metric-orange";
   }
-  if (loadLabel === "Very hard") {
+  if (loadLabel === "Very hard" || loadLabel === "High") {
     return "metric-red";
   }
 
@@ -86,6 +97,34 @@ function metricClassForBackStress(value: number | null | undefined) {
   }
 
   return "metric-red";
+}
+
+function metricClassForRatio(value: number | null | undefined) {
+  if (value === null || value === undefined) {
+    return "metric-neutral";
+  }
+  if (value < 0.75) {
+    return "metric-green";
+  }
+  if (value <= 1.25) {
+    return "metric-lime";
+  }
+  if (value <= 1.5) {
+    return "metric-orange";
+  }
+
+  return "metric-red";
+}
+
+function metricClassForConfidence(value: string) {
+  if (value === "high") {
+    return "metric-green";
+  }
+  if (value === "medium") {
+    return "metric-lime";
+  }
+
+  return "metric-neutral";
 }
 
 function metricClassForReadiness(status: string) {
@@ -450,6 +489,26 @@ function RecoveryContextCard({ context }: RecoveryContextCardProps) {
 
       <div className="recovery-grid">
         <MetricTile
+          className={metricClassForRatio(context.relative_load.acute_to_baseline)}
+          value={formatRatio(context.relative_load.acute_to_baseline)}
+          label="load vs baseline"
+        />
+        <MetricTile
+          className={metricClassForRatio(context.relative_load.acute_back_to_baseline)}
+          value={formatRatio(context.relative_load.acute_back_to_baseline)}
+          label="back vs baseline"
+        />
+        <MetricTile
+          className={metricClassForConfidence(
+            context.relative_load.baseline_confidence,
+          )}
+          value={context.relative_load.baseline_confidence}
+          label="baseline confidence"
+        />
+      </div>
+
+      <div className="recovery-grid">
+        <MetricTile
           value={context.last_7d.workout_count}
           label="workouts in 7d"
         />
@@ -462,6 +521,21 @@ function RecoveryContextCard({ context }: RecoveryContextCardProps) {
           className={metricClassForScore(context.last_7d.avg_back_pain)}
           value={formatNumber(context.last_7d.avg_back_pain)}
           label="avg back"
+        />
+      </div>
+
+      <div className="recovery-grid">
+        <MetricTile
+          value={formatNumber(context.previous_21d.weekly_load_equivalent)}
+          label="21d weekly load"
+        />
+        <MetricTile
+          value={formatNumber(context.last_42d.weekly_load_equivalent)}
+          label="42d weekly load"
+        />
+        <MetricTile
+          value={formatNumber(context.last_42d.weekly_workout_average)}
+          label="workouts per week"
         />
       </div>
 

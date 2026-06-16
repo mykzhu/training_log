@@ -7,6 +7,7 @@ from app import config
 from app.db import get_db, init_db
 from app.services.recovery_service import build_recovery_context
 from app.services.recommendation_service import (
+    build_exercise_history_context,
     build_exercise_progression_trend,
     build_next_workout_recommendation,
     exercise_gap_label,
@@ -104,13 +105,29 @@ class RecommendationDatabaseTests(unittest.TestCase):
         config.DB_PATH = self.original_db_path
         self.temp_dir.cleanup()
 
-    def insert_deadlift_workout(self) -> int:
+    def exercise_id(self, exercise_name: str) -> int:
         with get_db() as conn:
-            exercise = conn.execute(
+            row = conn.execute(
                 "SELECT id FROM exercises WHERE name = ?",
-                ("Deadlift",),
+                (exercise_name,),
             ).fetchone()
 
+        if row is None:
+            raise AssertionError(f"Seed exercise not found: {exercise_name}")
+
+        return int(row["id"])
+
+    def insert_deadlift_workout(
+        self,
+        created_at: str = "2026-06-01T10:00:00",
+        *,
+        sets: list[tuple[float, int]] | None = None,
+        session_rpe: int | None = 6,
+        lower_back_pain: int | None = 2,
+    ) -> int:
+        sets = sets or [(100.0, 5)]
+
+        with get_db() as conn:
             workout_cursor = conn.execute(
                 """
                 INSERT INTO workouts (
@@ -124,11 +141,11 @@ class RecommendationDatabaseTests(unittest.TestCase):
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    "2026-06-01",
-                    "2026-06-01T10:00:00",
-                    "2026-06-01T11:00:00",
-                    6,
-                    2,
+                    created_at[:10],
+                    created_at,
+                    f"{created_at[:10]}T11:00:00",
+                    session_rpe,
+                    lower_back_pain,
                     3600,
                 ),
             )
@@ -139,28 +156,68 @@ class RecommendationDatabaseTests(unittest.TestCase):
                 INSERT INTO workout_exercises (workout_id, exercise_id, position)
                 VALUES (?, ?, ?)
                 """,
-                (workout_id, int(exercise["id"]), 1),
+                (workout_id, self.exercise_id("Deadlift"), 1),
             )
             workout_exercise_id = int(workout_exercise_cursor.lastrowid)
 
-            conn.execute(
-                """
-                INSERT INTO set_entries (
-                    workout_exercise_id,
-                    set_number,
-                    weight,
-                    reps,
-                    created_at
+            for set_number, (weight, reps) in enumerate(sets, start=1):
+                conn.execute(
+                    """
+                    INSERT INTO set_entries (
+                        workout_exercise_id,
+                        set_number,
+                        weight,
+                        reps,
+                        created_at
+                    )
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        workout_exercise_id,
+                        set_number,
+                        weight,
+                        reps,
+                        created_at,
+                    ),
                 )
-                VALUES (?, ?, ?, ?, ?)
+
+        return workout_id
+
+    def insert_empty_workout(self, created_at: str) -> int:
+        with get_db() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO workouts (
+                    workout_date,
+                    created_at,
+                    finished_at,
+                    session_rpe,
+                    lower_back_pain,
+                    duration_seconds
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    workout_exercise_id,
-                    1,
-                    100.0,
-                    5,
-                    "2026-06-01T10:10:00",
+                    created_at[:10],
+                    created_at,
+                    created_at,
+                    None,
+                    None,
+                    0,
                 ),
+            )
+
+        return int(cursor.lastrowid)
+
+    def insert_deadlift_workout_without_sets(self, created_at: str) -> int:
+        with get_db() as conn:
+            workout_id = self.insert_empty_workout(created_at)
+            conn.execute(
+                """
+                INSERT INTO workout_exercises (workout_id, exercise_id, position)
+                VALUES (?, ?, ?)
+                """,
+                (workout_id, self.exercise_id("Deadlift"), 1),
             )
 
         return workout_id
@@ -189,6 +246,90 @@ class RecommendationDatabaseTests(unittest.TestCase):
         self.assertEqual(exercise_recommendation["exercise_name"], "Deadlift")
         self.assertEqual(exercise_recommendation["action"], "add_reps")
         self.assertEqual(exercise_recommendation["target"], "100 kg × 6")
+
+    def test_empty_workout_is_ignored_by_recovery_and_recommendation(self) -> None:
+        real_workout_id = self.insert_deadlift_workout()
+        empty_workout_id = self.insert_empty_workout("2026-06-08T08:00:00")
+
+        recovery_context = build_recovery_context(as_of="2026-06-08T10:00:00")
+        recommendation = build_next_workout_recommendation(
+            recovery_context=recovery_context,
+        )
+
+        self.assertNotEqual(real_workout_id, empty_workout_id)
+        self.assertEqual(recovery_context["previous_workout_id"], real_workout_id)
+        self.assertEqual(recovery_context["last_7d"]["workout_count"], 1)
+        self.assertEqual(recommendation["last_workout_id"], real_workout_id)
+
+    def test_workout_with_exercise_but_without_sets_is_ignored(self) -> None:
+        real_workout_id = self.insert_deadlift_workout()
+        empty_workout_id = self.insert_deadlift_workout_without_sets(
+            "2026-06-08T08:00:00",
+        )
+
+        recovery_context = build_recovery_context(as_of="2026-06-08T10:00:00")
+        recommendation = build_next_workout_recommendation(
+            recovery_context=recovery_context,
+        )
+
+        self.assertNotEqual(real_workout_id, empty_workout_id)
+        self.assertEqual(recovery_context["previous_workout_id"], real_workout_id)
+        self.assertEqual(recommendation["last_workout_id"], real_workout_id)
+
+    def test_usual_exercise_interval_uses_median(self) -> None:
+        for created_at in [
+            "2026-01-01T10:00:00",
+            "2026-01-04T10:00:00",
+            "2026-01-07T10:00:00",
+            "2026-01-11T10:00:00",
+            "2026-01-31T10:00:00",
+        ]:
+            self.insert_deadlift_workout(created_at)
+
+        context = build_exercise_history_context(
+            exercise_id=self.exercise_id("Deadlift"),
+            as_of="2026-02-05T10:00:00",
+        )
+
+        self.assertEqual(context["usual_interval_days"], 3.5)
+
+    def test_acute_spike_uses_personal_baseline_in_readiness(self) -> None:
+        for created_at in [
+            "2026-05-20T10:00:00",
+            "2026-05-27T10:00:00",
+            "2026-06-02T10:00:00",
+            "2026-06-09T10:00:00",
+            "2026-06-16T10:00:00",
+        ]:
+            self.insert_deadlift_workout(
+                created_at,
+                session_rpe=5,
+                lower_back_pain=1,
+            )
+
+        self.insert_deadlift_workout(
+            "2026-06-23T10:00:00",
+            sets=[(100.0, 5), (100.0, 5)],
+            session_rpe=5,
+            lower_back_pain=1,
+        )
+
+        recovery_context = build_recovery_context(as_of="2026-06-29T10:00:00")
+        recommendation = build_next_workout_recommendation(
+            recovery_context=recovery_context,
+        )
+
+        self.assertEqual(
+            recovery_context["relative_load"]["baseline_confidence"],
+            "medium",
+        )
+        self.assertGreater(
+            recovery_context["relative_load"]["acute_to_baseline"],
+            1.5,
+        )
+        self.assertTrue(
+            any("recent baseline" in reason for reason in recommendation["reasons"])
+        )
 
 
 if __name__ == "__main__":

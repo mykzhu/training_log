@@ -1,11 +1,13 @@
 import sqlite3
 from datetime import datetime
+from statistics import median
 from typing import Any
 
 from app.db import get_db
 from app.repositories.workouts import get_workout_details
 from app.services.analysis_service import estimated_1rm, get_exercise_load_profile
 from app.services.recovery_service import (
+    NON_EMPTY_WORKOUT_EXISTS_SQL,
     build_recovery_context,
     format_time_gap,
     parse_iso_datetime,
@@ -34,13 +36,6 @@ def format_training_target(weight: float, reps: int) -> str:
         return f"{reps} reps"
 
     return f"{format_weight(weight)} kg × {reps}"
-
-
-def average(values: list[float]) -> float | None:
-    if not values:
-        return None
-
-    return sum(values) / len(values)
 
 
 def exercise_gap_status(
@@ -408,7 +403,7 @@ def build_exercise_history_context(
         if interval_days > 0:
             intervals.append(interval_days)
 
-    usual_interval_days = average(intervals)
+    usual_interval_days = median(intervals) if intervals else None
     gap_status = exercise_gap_status(
         days_since_same_exercise=days_since_same_exercise,
         usual_interval_days=usual_interval_days,
@@ -459,6 +454,10 @@ def calculate_readiness_status(
 
     hours_since_previous = recovery_context.get("hours_since_previous_workout")
     last_7d = recovery_context.get("last_7d", {})
+    relative_load = recovery_context.get("relative_load", {})
+    confidence = relative_load.get("baseline_confidence", "low")
+    acute_ratio = relative_load.get("acute_to_baseline")
+    acute_back_ratio = relative_load.get("acute_back_to_baseline")
 
     if hours_since_previous is None:
         reasons.append("No previous workout gap available yet.")
@@ -511,27 +510,63 @@ def calculate_readiness_status(
             score -= 35
             reasons.append("Lower back pain was high.")
 
-    load_7d = float(last_7d.get("load_score") or 0)
-    if load_7d >= 32:
-        score -= 15
-        reasons.append("7-day load is very high.")
-    elif load_7d >= 18:
-        score -= 7
-        reasons.append("7-day load is already significant.")
-    elif load_7d < 8:
-        score += 5
-        reasons.append("7-day load is low.")
+    use_personal_load_baseline = (
+        confidence in {"medium", "high"}
+        and acute_ratio is not None
+    )
 
-    back_stress_7d = float(last_7d.get("back_stress_score") or 0)
-    if back_stress_7d >= 12:
-        score -= 15
-        reasons.append("7-day back stress is high.")
-    elif back_stress_7d >= 8:
-        score -= 7
-        reasons.append("7-day back stress is moderate.")
-    elif back_stress_7d < 4:
-        score += 5
-        reasons.append("7-day back stress is low.")
+    if use_personal_load_baseline:
+        acute_ratio = float(acute_ratio)
+        if acute_ratio > 1.50:
+            score -= 15
+            reasons.append("7-day load is much higher than your recent baseline.")
+        elif acute_ratio > 1.25:
+            score -= 7
+            reasons.append("7-day load is above your recent baseline.")
+        elif acute_ratio < 0.75:
+            score += 3
+            reasons.append("7-day load is below your recent baseline.")
+        else:
+            reasons.append("7-day load is close to your recent baseline.")
+    else:
+        load_7d = float(last_7d.get("load_score") or 0)
+        if load_7d >= 32:
+            score -= 15
+            reasons.append("7-day load is very high.")
+        elif load_7d >= 18:
+            score -= 7
+            reasons.append("7-day load is already significant.")
+        elif load_7d < 8:
+            score += 5
+            reasons.append("7-day load is low.")
+
+    use_personal_back_baseline = (
+        confidence in {"medium", "high"}
+        and acute_back_ratio is not None
+    )
+
+    if use_personal_back_baseline:
+        acute_back_ratio = float(acute_back_ratio)
+        if acute_back_ratio > 1.50:
+            score -= 15
+            reasons.append("7-day back stress is much higher than your baseline.")
+        elif acute_back_ratio > 1.25:
+            score -= 7
+            reasons.append("7-day back stress is above your baseline.")
+        elif acute_back_ratio < 0.75:
+            score += 3
+            reasons.append("7-day back stress is below your baseline.")
+    else:
+        back_stress_7d = float(last_7d.get("back_stress_score") or 0)
+        if back_stress_7d >= 12:
+            score -= 15
+            reasons.append("7-day back stress is high.")
+        elif back_stress_7d >= 8:
+            score -= 7
+            reasons.append("7-day back stress is moderate.")
+        elif back_stress_7d < 4:
+            score += 5
+            reasons.append("7-day back stress is low.")
 
     # Safety caps.
     if hours_since_previous is not None and hours_since_previous < 24:
@@ -787,10 +822,11 @@ def build_next_workout_recommendation(
 
     with get_db() as conn:
         last_workout = conn.execute(
-            """
-            SELECT *
-            FROM workouts
-            ORDER BY created_at DESC, id DESC
+            f"""
+            SELECT w.*
+            FROM workouts w
+            WHERE {NON_EMPTY_WORKOUT_EXISTS_SQL}
+            ORDER BY w.created_at DESC, w.id DESC
             LIMIT 1
             """
         ).fetchone()
