@@ -44,6 +44,35 @@ type ChartPoint = {
   backPain: number | null;
 };
 
+type StatsLimit = 10 | 30 | 90 | "all";
+
+const statsLimitOptions: Array<{ value: StatsLimit; label: string }> = [
+  { value: 10, label: "10" },
+  { value: 30, label: "30" },
+  { value: 90, label: "90" },
+  { value: "all", label: "All" },
+];
+
+function parseStatsLimit(value: string | null): StatsLimit {
+  if (value === "10" || value === "30" || value === "90") {
+    return Number(value) as StatsLimit;
+  }
+
+  if (value === "all") {
+    return "all";
+  }
+
+  return 30;
+}
+
+function readStatsLimitFromUrl() {
+  return parseStatsLimit(new URLSearchParams(window.location.search).get("limit"));
+}
+
+function statsLimitPath(limit: StatsLimit) {
+  return `/stats?limit=${limit}`;
+}
+
 function formatNumber(value: number | null | undefined, digits = 0) {
   if (value === null || value === undefined || Number.isNaN(value)) {
     return "—";
@@ -192,16 +221,47 @@ function commonTooltipProps() {
 }
 
 export default function StatsPage() {
+  const [statsLimit, setStatsLimit] = useState<StatsLimit>(() => readStatsLimitFromUrl());
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getStats()
-      .then(setStats)
-      .catch((reason: unknown) => {
-        setError(reason instanceof Error ? reason.message : "Failed to load.");
-      });
+    function syncLimitFromUrl() {
+      setStatsLimit(readStatsLimitFromUrl());
+    }
+
+    window.history.replaceState(null, "", statsLimitPath(readStatsLimitFromUrl()));
+    window.addEventListener("popstate", syncLimitFromUrl);
+    return () => window.removeEventListener("popstate", syncLimitFromUrl);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    setError(null);
+    setStats(null);
+
+    getStats(statsLimit)
+      .then((response) => {
+        if (!cancelled) {
+          setStats(response);
+        }
+      })
+      .catch((reason: unknown) => {
+        if (!cancelled) {
+          setError(reason instanceof Error ? reason.message : "Failed to load.");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [statsLimit]);
+
+  function selectStatsLimit(limit: StatsLimit) {
+    setStatsLimit(limit);
+    window.history.pushState(null, "", statsLimitPath(limit));
+  }
 
   const workoutData = useMemo(
     () => buildWorkoutData(stats?.stats.workouts ?? []),
@@ -227,6 +287,27 @@ export default function StatsPage() {
 
   return (
     <section className="page-stack">
+      <section className="stats-toolbar" aria-label="Stats range">
+        <span className="stats-range-label">Last</span>
+        <div className="stats-range-control">
+          {statsLimitOptions.map((option) => (
+            <button
+              aria-pressed={statsLimit === option.value}
+              className={
+                statsLimit === option.value
+                  ? "stats-range-button stats-range-button-active"
+                  : "stats-range-button"
+              }
+              key={option.value}
+              onClick={() => selectStatsLimit(option.value)}
+              type="button"
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </section>
+
       {error && <div className="error-banner">{error}</div>}
       {!stats && !error && <section className="panel">Loading</section>}
       {stats && workoutData.length === 0 && <EmptyStats />}
