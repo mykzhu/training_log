@@ -132,37 +132,46 @@ export default function CurrentWorkoutPage() {
     return <section className="panel">Loading</section>;
   }
 
+  if (!currentWorkout.active) {
+    return (
+      <section className="page-stack">
+        {error && <div className="error-banner">{error}</div>}
+        <section className="panel ready-card">
+          <h2>Ready?</h2>
+          <p className="muted">
+            Workout will be created in the database only after you press Finish.
+          </p>
+          <button
+            className="primary-button start-button"
+            disabled={pending}
+            onClick={() => runAction(startCurrentWorkout)}
+            type="button"
+          >
+            Start workout
+          </button>
+        </section>
+      </section>
+    );
+  }
+
   return (
     <section className="page-stack">
       {error && <div className="error-banner">{error}</div>}
 
       <section className="summary-band">
         <div>
-          <StatusBadge tone={currentWorkout.active ? "good" : "neutral"}>
-            {currentWorkout.active ? "Active" : "Resting"}
-          </StatusBadge>
+          <StatusBadge tone="danger">Active</StatusBadge>
           <WorkoutTimer elapsedSeconds={elapsedSeconds} />
         </div>
         <div className="summary-actions">
-          {!currentWorkout.active ? (
-            <button
-              className="primary-button"
-              disabled={pending}
-              onClick={() => runAction(startCurrentWorkout)}
-              type="button"
-            >
-              Start
-            </button>
-          ) : (
-            <button
-              className="primary-button"
-              disabled={pending}
-              onClick={finishWorkout}
-              type="button"
-            >
-              Finish
-            </button>
-          )}
+          <button
+            className="primary-button finish-button"
+            disabled={pending}
+            onClick={finishWorkout}
+            type="button"
+          >
+            Finish workout
+          </button>
         </div>
       </section>
 
@@ -176,100 +185,96 @@ export default function CurrentWorkoutPage() {
         />
       </div>
 
-      {currentWorkout.active && (
-        <section className="panel controls-grid">
-          <label>
-            RPE
-            <select
-              disabled={pending}
-              onChange={(event) =>
-                runAction(() =>
-                  updateCurrentWorkoutMetadata({
-                    session_rpe: event.target.value ? Number(event.target.value) : null,
-                    lower_back_pain: currentWorkout.lower_back_pain,
-                  }),
-                )
-              }
-              value={rpeValue}
-            >
-              <option value="">—</option>
-              {Array.from({ length: 10 }, (_, index) => index + 1).map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Back
-            <select
-              disabled={pending}
-              onChange={(event) =>
-                runAction(() =>
-                  updateCurrentWorkoutMetadata({
-                    session_rpe: currentWorkout.session_rpe,
-                    lower_back_pain: event.target.value
-                      ? Number(event.target.value)
-                      : null,
-                  }),
-                )
-              }
-              value={painValue}
-            >
-              <option value="">—</option>
-              {Array.from({ length: 11 }, (_, index) => index).map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </label>
-        </section>
-      )}
+      <section className="panel controls-grid">
+        <label>
+          RPE
+          <select
+            disabled={pending}
+            onChange={(event) =>
+              runAction(() =>
+                updateCurrentWorkoutMetadata({
+                  session_rpe: event.target.value ? Number(event.target.value) : null,
+                  lower_back_pain: currentWorkout.lower_back_pain,
+                }),
+              )
+            }
+            value={rpeValue}
+          >
+            <option value="">RPE</option>
+            {Array.from({ length: 10 }, (_, index) => index + 1).map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Back
+          <select
+            disabled={pending}
+            onChange={(event) =>
+              runAction(() =>
+                updateCurrentWorkoutMetadata({
+                  session_rpe: currentWorkout.session_rpe,
+                  lower_back_pain: event.target.value
+                    ? Number(event.target.value)
+                    : null,
+                }),
+              )
+            }
+            value={painValue}
+          >
+            <option value="">Back Pain</option>
+            {Array.from({ length: 11 }, (_, index) => index).map((value) => (
+              <option key={value} value={value}>
+                Back Pain {value}/10
+              </option>
+            ))}
+          </select>
+        </label>
+      </section>
 
-      {currentWorkout.active && (
-        <section className="panel add-exercise">
-          <label>
-            Exercise
-            <select
-              disabled={pending || exerciseOptions.length === 0}
-              onChange={(event) => setSelectedExerciseId(event.target.value)}
-              value={selectedExerciseId}
-            >
-              {exerciseOptions.map((exercise) => (
-                <option key={exercise.value} value={exercise.value}>
-                  {exercise.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            className="secondary-button"
-            disabled={disabled || !selectedExerciseId}
-            onClick={addSelectedExercise}
-            type="button"
+      <section className="panel add-exercise">
+        <label>
+          Exercise
+          <select
+            disabled={pending || exerciseOptions.length === 0}
+            onChange={(event) => setSelectedExerciseId(event.target.value)}
+            value={selectedExerciseId}
           >
-            Add
-          </button>
-          <label>
-            New
-            <input
-              disabled={pending}
-              onChange={(event) => setNewExerciseName(event.target.value)}
-              placeholder="Exercise name"
-              value={newExerciseName}
-            />
-          </label>
-          <button
-            className="ghost-button"
-            disabled={disabled || !newExerciseName.trim()}
-            onClick={createAndAddExercise}
-            type="button"
-          >
-            Create
-          </button>
-        </section>
-      )}
+            {exerciseOptions.map((exercise) => (
+              <option key={exercise.value} value={exercise.value}>
+                {exercise.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          className="secondary-button"
+          disabled={disabled || !selectedExerciseId}
+          onClick={addSelectedExercise}
+          type="button"
+        >
+          Add
+        </button>
+        <label>
+          New
+          <input
+            disabled={pending}
+            onChange={(event) => setNewExerciseName(event.target.value)}
+            placeholder="New exercise name"
+            value={newExerciseName}
+          />
+        </label>
+        <button
+          className="ghost-button"
+          disabled={disabled || !newExerciseName.trim()}
+          onClick={createAndAddExercise}
+          type="button"
+        >
+          Create
+        </button>
+      </section>
 
       <div className="exercise-list">
         {currentWorkout.exercises.map((exercise) => (
@@ -277,6 +282,7 @@ export default function CurrentWorkoutPage() {
             disabled={pending}
             exercise={exercise}
             key={exercise.draft_exercise_id}
+            setEditorMode="select"
             onAddSet={(exerciseId, weight, reps) =>
               runAction(() => addCurrentWorkoutSet(exerciseId, { weight, reps }))
             }

@@ -1,4 +1,11 @@
+import { useEffect, useState } from "react";
+
 import type { CurrentWorkoutExercise, WorkoutExercise } from "../api/types";
+import {
+  buildRepsOptions,
+  buildWeightOptions,
+  formatSetOption,
+} from "../utils/setOptions";
 import SetRow from "./SetRow";
 
 type ExerciseLike = CurrentWorkoutExercise | WorkoutExercise;
@@ -6,6 +13,7 @@ type ExerciseLike = CurrentWorkoutExercise | WorkoutExercise;
 type ExerciseCardProps = {
   exercise: ExerciseLike;
   disabled: boolean;
+  setEditorMode?: "input" | "select";
   onAddSet: (exerciseId: number, weight: number, reps: number) => void;
   onDeleteExercise: (exerciseId: number) => void;
   onDeleteSet: (setId: number) => void;
@@ -21,13 +29,23 @@ export default function ExerciseCard({
   onDeleteSet,
   onDuplicateSet,
   onUpdateSet,
+  setEditorMode = "input",
 }: ExerciseCardProps) {
   const defaultWeight = Number(exercise.default_weight || 0);
   const defaultReps = Number(exercise.default_reps || 10);
+  const [addWeight, setAddWeight] = useState(String(defaultWeight));
+  const [addReps, setAddReps] = useState(String(defaultReps));
   const actionExerciseId =
     "draft_exercise_id" in exercise
       ? exercise.draft_exercise_id
       : exercise.workout_exercise_id;
+  const weightOptions = buildWeightOptions(defaultWeight);
+  const repsOptions = buildRepsOptions(defaultReps);
+
+  useEffect(() => {
+    setAddWeight(String(defaultWeight));
+    setAddReps(String(defaultReps));
+  }, [defaultWeight, defaultReps]);
 
   return (
     <section className="exercise-card">
@@ -52,6 +70,7 @@ export default function ExerciseCard({
       <div className="set-list">
         {exercise.sets.map((setEntry) => (
           <SetRow
+            editorMode={setEditorMode}
             key={setEntry.id}
             onDelete={onDeleteSet}
             onUpdate={onUpdateSet}
@@ -62,13 +81,45 @@ export default function ExerciseCard({
       </div>
 
       <div className="set-actions">
+        <label>
+          Kg
+          <select
+            className="scroll-select"
+            disabled={disabled}
+            onChange={(event) => setAddWeight(event.target.value)}
+            value={addWeight}
+          >
+            {weightOptions.map((option) => (
+              <option key={option} value={formatSetOption(option)}>
+                {formatSetOption(option)} kg
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Reps
+          <select
+            className="scroll-select"
+            disabled={disabled}
+            onChange={(event) => setAddReps(event.target.value)}
+            value={addReps}
+          >
+            {repsOptions.map((option) => (
+              <option key={option} value={formatSetOption(option)}>
+                {formatSetOption(option)} reps
+              </option>
+            ))}
+          </select>
+        </label>
         <button
           className="secondary-button"
           disabled={disabled}
-          onClick={() => onAddSet(actionExerciseId, defaultWeight, defaultReps)}
+          onClick={() =>
+            onAddSet(actionExerciseId, Number(addWeight), Number(addReps))
+          }
           type="button"
         >
-          Add {defaultWeight} kg x {defaultReps}
+          +
         </button>
         <button
           className="ghost-button"

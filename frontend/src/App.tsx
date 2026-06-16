@@ -69,8 +69,10 @@ export default function App() {
     <main className="app-shell">
       <header className="app-header">
         <div>
-          <p className="eyebrow">Training Log</p>
-          <h1>{pages.find((page) => page.key === activePage)?.label}</h1>
+          <h1>Training Log</h1>
+          <p className="muted active-label">
+            {pages.find((page) => page.key === activePage)?.label}
+          </p>
         </div>
         <nav className="tabs" aria-label="Main navigation">
           {pages.map((page) => (
