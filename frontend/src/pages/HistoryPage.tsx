@@ -30,6 +30,29 @@ function formatNumber(value: number | null | undefined, digits = 1) {
   return Number(value).toFixed(digits);
 }
 
+function formatDuration(seconds: number | null | undefined) {
+  if (seconds === null || seconds === undefined) {
+    return "—";
+  }
+
+  const totalMinutes = Math.floor(seconds / 60);
+  if (totalMinutes < 1) {
+    return `${seconds}s`;
+  }
+
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours === 0) {
+    return `${minutes}m`;
+  }
+
+  return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`;
+}
+
+function formatOptionalScore(value: number | null | undefined) {
+  return value === null || value === undefined ? "—" : String(value);
+}
+
 function loadMetricClass(loadLabel: string | null | undefined) {
   if (loadLabel === "Light") {
     return "metric-green";
@@ -291,10 +314,34 @@ export default function HistoryPage({ initialWorkoutId }: HistoryPageProps) {
           </section>
 
           <div className="stat-grid">
+            <StatCard
+              label="Duration"
+              value={formatDuration(detail.workout.duration_seconds)}
+            />
             <StatCard label="Volume" value={`${detail.total_volume.toFixed(0)} kg`} />
             <StatCard label="Sets" value={detail.total_sets} />
             <StatCard label="Reps" value={detail.total_reps} />
+            <StatCard
+              label="Avg Load"
+              value={
+                detail.total_reps
+                  ? `${formatNumber(detail.total_volume / detail.total_reps)} kg`
+                  : "—"
+              }
+            />
             <StatCard label="Load" value={detail.load_metrics.load_label} />
+            <StatCard
+              label="Back Stress"
+              value={formatNumber(detail.load_metrics.back_stress_score)}
+            />
+            <StatCard
+              label="RPE"
+              value={formatOptionalScore(detail.workout.session_rpe)}
+            />
+            <StatCard
+              label="Back Pain"
+              value={formatOptionalScore(detail.workout.lower_back_pain)}
+            />
           </div>
 
           <section className="panel analysis-card">
