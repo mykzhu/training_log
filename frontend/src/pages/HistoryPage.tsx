@@ -221,6 +221,12 @@ export default function HistoryPage({ initialWorkoutId }: HistoryPageProps) {
     window.history.pushState(null, "", `/workouts/${workoutId}`);
   }
 
+  function backToHistory() {
+    setSelectedWorkoutId(null);
+    setDetail(null);
+    window.history.pushState(null, "", "/history");
+  }
+
   async function addSelectedExercise() {
     if (!detail) {
       return;
@@ -271,38 +277,50 @@ export default function HistoryPage({ initialWorkoutId }: HistoryPageProps) {
       {error && <div className="error-banner">{error}</div>}
       {message && <div className="success-banner">{message}</div>}
 
-      <div className="table-list">
-        {workouts.map((workout) => (
-          <article
-            className={
-              selectedWorkoutId === workout.id ? "list-row list-row-active" : "list-row"
-            }
-            key={workout.id}
-          >
-            <div>
-              <h2>{workout.workout_date}</h2>
-              <p>
-                {workout.exercises_count} exercises · {workout.total_sets} sets ·{" "}
-                {workout.total_volume.toFixed(0)} kg
-              </p>
-            </div>
-            <div className="row-actions">
-              <StatusBadge>{workout.load_metrics.load_label}</StatusBadge>
-              <button
-                className="ghost-button"
-                disabled={pending}
-                onClick={() => openWorkout(workout.id)}
-                type="button"
-              >
-                Open
-              </button>
-            </div>
-          </article>
-        ))}
-      </div>
+      {selectedWorkoutId === null && (
+        <div className="table-list">
+          {workouts.map((workout) => (
+            <article className="list-row" key={workout.id}>
+              <div>
+                <h2>{workout.workout_date}</h2>
+                <p>
+                  {workout.exercises_count} exercises · {workout.total_sets} sets ·{" "}
+                  {workout.total_volume.toFixed(0)} kg
+                </p>
+              </div>
+              <div className="row-actions">
+                <StatusBadge>{workout.load_metrics.load_label}</StatusBadge>
+                <button
+                  className="ghost-button"
+                  disabled={pending}
+                  onClick={() => openWorkout(workout.id)}
+                  type="button"
+                >
+                  Open
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
 
-      {detail && (
+      {selectedWorkoutId !== null && !detail && (
+        <section className="panel">Loading workout</section>
+      )}
+
+      {selectedWorkoutId !== null && detail && (
         <section className="page-stack">
+          <div className="row-actions">
+            <button
+              className="ghost-button"
+              disabled={pending}
+              onClick={backToHistory}
+              type="button"
+            >
+              Back to history
+            </button>
+          </div>
+
           <section className="summary-band">
             <div>
               <StatusBadge>{detail.load_metrics.load_label}</StatusBadge>
