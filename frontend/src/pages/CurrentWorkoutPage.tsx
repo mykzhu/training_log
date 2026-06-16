@@ -23,6 +23,7 @@ import ExerciseCard from "../components/ExerciseCard";
 import StatCard from "../components/StatCard";
 import StatusBadge from "../components/StatusBadge";
 import WorkoutTimer from "../components/WorkoutTimer";
+import { rpeOptionLabel } from "../utils/rpeLabels";
 
 function formatNumber(value: number | null | undefined, digits = 1) {
   if (value === null || value === undefined || Number.isNaN(value)) {
@@ -295,7 +296,7 @@ export default function CurrentWorkoutPage() {
             <option value="">RPE</option>
             {Array.from({ length: 10 }, (_, index) => index + 1).map((value) => (
               <option key={value} value={value}>
-                {value}
+                {rpeOptionLabel(value)}
               </option>
             ))}
           </select>

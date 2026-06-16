@@ -17,6 +17,7 @@ import {
 import ExerciseCard from "../components/ExerciseCard";
 import StatCard from "../components/StatCard";
 import StatusBadge from "../components/StatusBadge";
+import { rpeOptionLabel } from "../utils/rpeLabels";
 
 function toDateTimeLocal(value: string) {
   return value.slice(0, 16);
@@ -652,7 +653,7 @@ export default function HistoryPage({ initialWorkoutId }: HistoryPageProps) {
                 <option value="">-</option>
                 {Array.from({ length: 10 }, (_, index) => index + 1).map((value) => (
                   <option key={value} value={value}>
-                    {value}
+                    {rpeOptionLabel(value)}
                   </option>
                 ))}
               </select>
