@@ -1,5 +1,16 @@
 # Codex Handoff: Training Log
 
+## 0. Current Migration Status
+
+As of 2026-06-16, the migration has switched from incremental fallback to a React-only upgrade path:
+
+* React is the only product UI.
+* Legacy Jinja routes and templates have been removed.
+* FastAPI serves `/api/v1` JSON endpoints and falls back to the bundled React app for non-API paths.
+* Docker builds the frontend in a Node stage and copies `frontend/dist` into the Python runtime image.
+* Runtime operation must remain fully local/offline: no CDN scripts, hosted fonts, remote images, or online APIs are required for core use.
+* Production can continue running the old image until the React-only build is ready to deploy.
+
 ## 1. Project Summary
 
 **Repository:** `mykzhu/training_log`
@@ -264,10 +275,9 @@ frontend/
 
 ### Architecture rules
 
-* Jinja and JSON API must use the same service layer.
+* React and JSON API must use the same service layer.
 * Analysis formulas must not be duplicated in route handlers or frontend code.
-* React migration must be incremental.
-* Legacy Jinja pages remain available until React reaches feature parity.
+* React owns all product page routes; no legacy Jinja fallback remains.
 * The frontend must not calculate authoritative training metrics.
 * FastAPI remains the source of truth.
 * API endpoints should be versioned under `/api/v1`.

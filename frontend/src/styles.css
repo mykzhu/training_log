@@ -127,6 +127,18 @@ label {
   gap: 12px;
 }
 
+.summary-band h2 {
+  margin: 0 0 4px;
+  font-size: 1.1rem;
+  letter-spacing: 0;
+}
+
+.summary-band p {
+  margin: 0;
+  color: #667085;
+  font-size: 0.92rem;
+}
+
 .summary-actions {
   display: flex;
   justify-content: flex-end;
@@ -199,6 +211,11 @@ label {
   gap: 12px;
 }
 
+.list-row-active {
+  border-color: #1f7a63;
+  box-shadow: 0 0 0 1px #1f7a63;
+}
+
 .exercise-header h2,
 .list-row h2 {
   margin: 0 0 4px;
@@ -215,10 +232,10 @@ label {
 
 .set-row {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) minmax(0, 1fr) auto;
+  grid-template-columns: 44px minmax(92px, 1fr) minmax(92px, 1fr) auto auto;
   align-items: center;
   gap: 8px;
-  min-height: 44px;
+  min-height: 64px;
   border-radius: 8px;
   padding: 8px 10px;
   background: #f6f7f8;
@@ -230,10 +247,15 @@ label {
 }
 
 .set-actions,
-.action-panel {
+.action-panel,
+.row-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.row-actions {
+  justify-content: flex-end;
 }
 
 .primary-button {
@@ -256,6 +278,18 @@ label {
 
 .danger-text {
   color: #b42318;
+}
+
+.compact-button {
+  min-height: 38px;
+}
+
+.file-control {
+  min-width: 180px;
+}
+
+.file-control input {
+  padding: 8px;
 }
 
 .status-badge {
@@ -330,7 +364,8 @@ label {
 
   .summary-actions button,
   .set-actions button,
-  .action-panel button {
+  .action-panel button,
+  .row-actions button {
     width: 100%;
   }
 
@@ -346,6 +381,10 @@ label {
 
   .set-row button {
     grid-column: 1 / -1;
+  }
+
+  .row-actions {
+    justify-content: stretch;
   }
 }
 

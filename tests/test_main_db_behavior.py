@@ -5,8 +5,12 @@ from pathlib import Path
 from typing import Any
 
 from app import config
-import app.main as main
+from app.db import get_db, init_db
+from app.repositories.workouts import get_workout_details
+from app.routes.api_workouts import update_workout_endpoint
+from app.schemas import WorkoutUpdateRequest
 from app.services import draft_service
+from app.services.stats_service import build_stats, build_workout_analysis
 
 
 class MainDatabaseBehaviorTests(unittest.TestCase):
@@ -16,7 +20,7 @@ class MainDatabaseBehaviorTests(unittest.TestCase):
         self.original_active_draft = draft_service.ACTIVE_WORKOUT_DRAFT
 
         config.DB_PATH = Path(self.temp_dir.name) / "training.db"
-        main.init_db()
+        init_db()
         draft_service.clear_active_workout_draft()
 
     def tearDown(self) -> None:
@@ -25,7 +29,7 @@ class MainDatabaseBehaviorTests(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def exercise_id(self, exercise_name: str) -> int:
-        with main.get_db() as conn:
+        with get_db() as conn:
             row = conn.execute(
                 "SELECT id FROM exercises WHERE name = ?",
                 (exercise_name,),
@@ -44,7 +48,7 @@ class MainDatabaseBehaviorTests(unittest.TestCase):
         session_rpe: int | None = None,
         lower_back_pain: int | None = None,
     ) -> int:
-        with main.get_db() as conn:
+        with get_db() as conn:
             workout_cursor = conn.execute(
                 """
                 INSERT INTO workouts (
@@ -133,7 +137,7 @@ class MainDatabaseBehaviorTests(unittest.TestCase):
             ],
         )
 
-        stats = main.build_stats(limit=30)
+        stats = build_stats(limit=30)
 
         self.assertEqual(
             [item["id"] for item in stats["workouts"]],
@@ -203,8 +207,8 @@ class MainDatabaseBehaviorTests(unittest.TestCase):
             ],
         )
 
-        workout_details = main.get_workout_details(current_workout_id)
-        analysis = main.build_workout_analysis(current_workout_id, workout_details)
+        workout_details = get_workout_details(current_workout_id)
+        analysis = build_workout_analysis(current_workout_id, workout_details)
 
         self.assertEqual(
             analysis["prs"],
@@ -226,7 +230,7 @@ class MainDatabaseBehaviorTests(unittest.TestCase):
         self.assertEqual(exercise_analysis["best_e1rm_set"], {"weight": 105.0, "reps": 6})
         self.assertTrue(math.isclose(exercise_analysis["best_e1rm"], 126.0))
 
-    def test_update_workout_metadata_parses_empty_form_values_as_none(self) -> None:
+    def test_update_workout_endpoint_can_clear_optional_metadata(self) -> None:
         workout_id = self.insert_workout(
             created_at="2026-06-01T10:00:00",
             session_rpe=8,
@@ -239,15 +243,18 @@ class MainDatabaseBehaviorTests(unittest.TestCase):
             ],
         )
 
-        response = main.update_workout_metadata(
-            workout_id=workout_id,
-            session_rpe="",
-            lower_back_pain="",
+        response = update_workout_endpoint(
+            workout_id,
+            WorkoutUpdateRequest(
+                session_rpe=None,
+                lower_back_pain=None,
+            ),
         )
 
-        self.assertEqual(response.status_code, 303)
+        self.assertIsNone(response["workout"]["session_rpe"])
+        self.assertIsNone(response["workout"]["lower_back_pain"])
 
-        with main.get_db() as conn:
+        with get_db() as conn:
             workout = conn.execute(
                 """
                 SELECT session_rpe, lower_back_pain

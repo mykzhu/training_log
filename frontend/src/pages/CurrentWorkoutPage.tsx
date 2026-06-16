@@ -10,6 +10,7 @@ import {
   getCurrentWorkout,
   startCurrentWorkout,
   updateCurrentWorkoutMetadata,
+  updateCurrentWorkoutSet,
 } from "../api/currentWorkout";
 import { createExercise, getExercises } from "../api/exercises";
 import type { CurrentWorkout, Exercise } from "../api/types";
@@ -285,6 +286,9 @@ export default function CurrentWorkoutPage() {
             onDeleteSet={(setId) => runAction(() => deleteCurrentWorkoutSet(setId))}
             onDuplicateSet={(exerciseId) =>
               runAction(() => duplicateCurrentWorkoutSet(exerciseId))
+            }
+            onUpdateSet={(setId, payload) =>
+              runAction(() => updateCurrentWorkoutSet(setId, payload))
             }
           />
         ))}

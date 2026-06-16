@@ -1,13 +1,16 @@
-import type { CurrentWorkoutExercise } from "../api/types";
+import type { CurrentWorkoutExercise, WorkoutExercise } from "../api/types";
 import SetRow from "./SetRow";
 
+type ExerciseLike = CurrentWorkoutExercise | WorkoutExercise;
+
 type ExerciseCardProps = {
-  exercise: CurrentWorkoutExercise;
+  exercise: ExerciseLike;
   disabled: boolean;
   onAddSet: (exerciseId: number, weight: number, reps: number) => void;
   onDeleteExercise: (exerciseId: number) => void;
   onDeleteSet: (setId: number) => void;
   onDuplicateSet: (exerciseId: number) => void;
+  onUpdateSet?: (setId: number, payload: { weight?: number; reps?: number }) => void;
 };
 
 export default function ExerciseCard({
@@ -17,9 +20,14 @@ export default function ExerciseCard({
   onDeleteExercise,
   onDeleteSet,
   onDuplicateSet,
+  onUpdateSet,
 }: ExerciseCardProps) {
   const defaultWeight = Number(exercise.default_weight || 0);
   const defaultReps = Number(exercise.default_reps || 10);
+  const actionExerciseId =
+    "draft_exercise_id" in exercise
+      ? exercise.draft_exercise_id
+      : exercise.workout_exercise_id;
 
   return (
     <section className="exercise-card">
@@ -34,7 +42,7 @@ export default function ExerciseCard({
         <button
           className="ghost-button danger-text"
           disabled={disabled}
-          onClick={() => onDeleteExercise(exercise.draft_exercise_id)}
+          onClick={() => onDeleteExercise(actionExerciseId)}
           type="button"
         >
           Delete
@@ -46,6 +54,7 @@ export default function ExerciseCard({
           <SetRow
             key={setEntry.id}
             onDelete={onDeleteSet}
+            onUpdate={onUpdateSet}
             setEntry={setEntry}
             disabled={disabled}
           />
@@ -56,7 +65,7 @@ export default function ExerciseCard({
         <button
           className="secondary-button"
           disabled={disabled}
-          onClick={() => onAddSet(exercise.draft_exercise_id, defaultWeight, defaultReps)}
+          onClick={() => onAddSet(actionExerciseId, defaultWeight, defaultReps)}
           type="button"
         >
           Add {defaultWeight} kg x {defaultReps}
@@ -64,7 +73,7 @@ export default function ExerciseCard({
         <button
           className="ghost-button"
           disabled={disabled}
-          onClick={() => onDuplicateSet(exercise.draft_exercise_id)}
+          onClick={() => onDuplicateSet(actionExerciseId)}
           type="button"
         >
           Duplicate

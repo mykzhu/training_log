@@ -1,6 +1,7 @@
 import { useState } from "react";
 
-import { getBackup, resetBackupData } from "../api/backup";
+import { getBackup, resetBackupData, restoreBackup } from "../api/backup";
+import type { BackupPayload } from "../api/backup";
 
 export default function BackupPage() {
   const [message, setMessage] = useState<string | null>(null);
@@ -30,6 +31,10 @@ export default function BackupPage() {
   }
 
   async function resetData() {
+    if (!window.confirm("Reset all training data?")) {
+      return;
+    }
+
     setPending(true);
     setError(null);
     try {
@@ -37,6 +42,25 @@ export default function BackupPage() {
       setMessage(`Reset complete · ${response.counts.exercises} exercises`);
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : "Action failed.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function importBackup(file: File | null) {
+    if (!file) {
+      return;
+    }
+
+    setPending(true);
+    setError(null);
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text) as BackupPayload;
+      const response = await restoreBackup(payload);
+      setMessage(`Restore complete · ${response.counts.workouts} workouts`);
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : "Restore failed.");
     } finally {
       setPending(false);
     }
@@ -63,6 +87,15 @@ export default function BackupPage() {
         >
           Reset Data
         </button>
+        <label className="file-control">
+          Import JSON
+          <input
+            accept="application/json,.json"
+            disabled={pending}
+            onChange={(event) => importBackup(event.target.files?.[0] ?? null)}
+            type="file"
+          />
+        </label>
       </section>
     </section>
   );
