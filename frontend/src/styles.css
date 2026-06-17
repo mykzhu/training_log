@@ -946,6 +946,9 @@ button.load-calendar-cell:focus-visible {
 }
 
 .chart-frame {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
   min-height: 240px;
 }
 
@@ -1864,5 +1867,54 @@ button.load-calendar-cell:focus-visible {
   .weekly-metric-select,
   .weekly-metric-buttons {
     width: 100%;
+  }
+}
+
+.strength-workload-scroll {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 6px;
+}
+
+.strength-workload-inner {
+  display: grid;
+  gap: 10px;
+  min-width: 100%;
+}
+
+.strength-workload-panel {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px 8px 4px;
+  background: var(--card2);
+}
+
+.strength-workload-panel-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 8px 6px;
+}
+
+.strength-workload-panel-heading strong {
+  font-size: 14px;
+}
+
+.strength-workload-panel-heading span {
+  color: var(--muted);
+  font-size: 11px;
+  text-align: right;
+}
+
+@media (max-width: 520px) {
+  .strength-workload-panel-heading {
+    display: grid;
+  }
+
+  .strength-workload-panel-heading span {
+    text-align: left;
   }
 }

@@ -43,6 +43,20 @@ const chartColors = {
   text: "#f2f2f2",
 };
 
+type StrengthWorkloadChartPoint = {
+  id: number | null;
+  week_start: string;
+  weekLabel: string;
+  weeklyE1rm: number | null;
+  rollingBest: number | null;
+  workload: number;
+  sets: number;
+  reps: number;
+  volume: number;
+  workouts: number;
+  hasPr: boolean;
+};
+
 type WeeklyWorkloadMetric = "sets" | "reps" | "volume";
 
 type WeeklyWorkloadChartPoint =
@@ -59,6 +73,31 @@ function formatWeekLabel(weekStart: string) {
     month: "short",
     day: "numeric",
   }).format(new Date(year, month - 1, day));
+}
+
+function weekStartForDate(dateValue: string) {
+  const [year, month, day] = dateValue
+    .slice(0, 10)
+    .split("-")
+    .map(Number);
+
+  const workoutDate = new Date(year, month - 1, day);
+  const daysSinceMonday =
+    (workoutDate.getDay() + 6) % 7;
+
+  workoutDate.setDate(
+    workoutDate.getDate() - daysSinceMonday,
+  );
+
+  const weekYear = workoutDate.getFullYear();
+  const weekMonth = String(
+    workoutDate.getMonth() + 1,
+  ).padStart(2, "0");
+  const weekDay = String(
+    workoutDate.getDate(),
+  ).padStart(2, "0");
+
+  return `${weekYear}-${weekMonth}-${weekDay}`;
 }
 
 function weeklyMetricLabel(
@@ -437,6 +476,106 @@ function WeeklyWorkloadTooltip({
   );
 }
 
+type StrengthWorkloadTooltipProps = {
+  active?: boolean;
+  metric: WeeklyWorkloadMetric;
+  mode: "strength" | "workload";
+  payload?: Array<{
+    payload?: StrengthWorkloadChartPoint;
+  }>;
+};
+
+function StrengthWorkloadTooltip({
+  active,
+  metric,
+  mode,
+  payload,
+}: StrengthWorkloadTooltipProps) {
+  const point = payload?.find(
+    (item) => item.payload,
+  )?.payload;
+
+  if (!active || !point) {
+    return null;
+  }
+
+  return (
+    <div className="strength-progress-tooltip">
+      <strong>
+        Week of {formatWeekLabel(point.week_start)}
+      </strong>
+
+      {mode === "strength" ? (
+        <>
+          <div>
+            <span>Weekly best e1RM</span>
+            <b>
+              {point.weeklyE1rm === null
+                ? "—"
+                : `${formatNumber(
+                    point.weeklyE1rm,
+                    1,
+                  )} kg`}
+            </b>
+          </div>
+
+          <div>
+            <span>Historical best</span>
+            <b>
+              {point.rollingBest === null
+                ? "—"
+                : `${formatNumber(
+                    point.rollingBest,
+                    1,
+                  )} kg`}
+            </b>
+          </div>
+
+          {point.hasPr && (
+            <div className="strength-progress-pr">
+              New e1RM PR this week
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <div>
+            <span>{weeklyMetricLabel(metric)}</span>
+            <b>
+              {formatWeeklyMetric(
+                point.workload,
+                metric,
+              )}
+            </b>
+          </div>
+
+          <div>
+            <span>Workouts</span>
+            <b>{point.workouts}</b>
+          </div>
+
+          <div>
+            <span>Sets</span>
+            <b>{point.sets}</b>
+          </div>
+
+          <div>
+            <span>Reps</span>
+            <b>{point.reps}</b>
+          </div>
+
+          <div>
+            <span>Volume</span>
+            <b>
+              {formatNumber(point.volume, 0)} kg
+            </b>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 type StrengthTooltipProps = {
   active?: boolean;
   payload?: Array<{
@@ -626,6 +765,16 @@ export default function StatsPage() {
   const [
     weeklyWorkloadMetric,
     setWeeklyWorkloadMetric,
+  ] = useState<WeeklyWorkloadMetric>("sets");
+
+  const [
+    selectedComparisonExerciseId,
+    setSelectedComparisonExerciseId,
+  ] = useState<number | null>(null);
+
+  const [
+    comparisonWorkloadMetric,
+    setComparisonWorkloadMetric,
   ] = useState<WeeklyWorkloadMetric>("sets");
 
   useEffect(() => {
@@ -1064,6 +1213,272 @@ export default function StatsPage() {
     firstStrengthPoint && latestStrengthPoint
       ? latestStrengthPoint.e1rm - firstStrengthPoint.e1rm
       : null;
+
+  const comparisonExercises = useMemo(() => {
+  const workloadExerciseIds = new Set(
+    exerciseWeeklyWorkload.map(
+      (exercise) => exercise.exercise_id,
+    ),
+  );
+
+  return exerciseProgress
+    .filter((exercise) =>
+      workloadExerciseIds.has(
+        exercise.exercise_id,
+      ),
+    )
+    .map((exercise) => ({
+      exercise_id: exercise.exercise_id,
+      name: exercise.name,
+    }));
+}, [
+  exerciseProgress,
+  exerciseWeeklyWorkload,
+]);
+
+useEffect(() => {
+  if (comparisonExercises.length === 0) {
+    setSelectedComparisonExerciseId(null);
+    return;
+  }
+
+  setSelectedComparisonExerciseId((current) => {
+    const currentStillExists =
+      comparisonExercises.some(
+        (exercise) =>
+          exercise.exercise_id === current,
+      );
+
+    return currentStillExists
+      ? current
+      : comparisonExercises[0].exercise_id;
+  });
+}, [comparisonExercises]);
+
+const selectedComparisonStrength = useMemo(
+  () =>
+    exerciseProgress.find(
+      (exercise) =>
+        exercise.exercise_id ===
+        selectedComparisonExerciseId,
+    ) ?? null,
+  [
+    exerciseProgress,
+    selectedComparisonExerciseId,
+  ],
+);
+
+const selectedComparisonWorkload = useMemo(
+  () =>
+    exerciseWeeklyWorkload.find(
+      (exercise) =>
+        exercise.exercise_id ===
+        selectedComparisonExerciseId,
+    ) ?? null,
+  [
+    exerciseWeeklyWorkload,
+    selectedComparisonExerciseId,
+  ],
+);
+
+const strengthWorkloadData =
+  useMemo<StrengthWorkloadChartPoint[]>(
+    () => {
+      if (
+        !selectedComparisonStrength ||
+        !selectedComparisonWorkload
+      ) {
+        return [];
+      }
+
+      const strengthByWeek = new Map<
+        string,
+        {
+          weeklyE1rm: number;
+          rollingBest: number;
+          hasPr: boolean;
+          workoutId: number;
+        }
+      >();
+
+      for (
+        const point
+        of selectedComparisonStrength.points
+      ) {
+        const weekStart = weekStartForDate(
+          point.date,
+        );
+
+        const existing =
+          strengthByWeek.get(weekStart);
+
+        if (!existing) {
+          strengthByWeek.set(weekStart, {
+            weeklyE1rm: point.e1rm,
+            rollingBest: point.rolling_best,
+            hasPr: point.is_pr,
+            workoutId: point.workout_id,
+          });
+
+          continue;
+        }
+
+        existing.rollingBest = Math.max(
+          existing.rollingBest,
+          point.rolling_best,
+        );
+
+        existing.hasPr =
+          existing.hasPr || point.is_pr;
+
+        if (
+          point.e1rm > existing.weeklyE1rm
+        ) {
+          existing.weeklyE1rm = point.e1rm;
+          existing.workoutId =
+            point.workout_id;
+        }
+      }
+
+      let carriedRollingBest:
+        number | null = null;
+
+      return selectedComparisonWorkload.weeks.map(
+        (week) => {
+          const strength =
+            strengthByWeek.get(
+              week.week_start,
+            );
+
+          if (strength) {
+            carriedRollingBest =
+              carriedRollingBest === null
+                ? strength.rollingBest
+                : Math.max(
+                    carriedRollingBest,
+                    strength.rollingBest,
+                  );
+          }
+
+          return {
+            id: strength?.workoutId ?? null,
+            week_start: week.week_start,
+            weekLabel: formatWeekLabel(
+              week.week_start,
+            ),
+            weeklyE1rm:
+              strength?.weeklyE1rm ?? null,
+            rollingBest:
+              carriedRollingBest,
+            workload:
+              week[comparisonWorkloadMetric],
+            sets: week.sets,
+            reps: week.reps,
+            volume: week.volume,
+            workouts: week.workouts,
+            hasPr: strength?.hasPr ?? false,
+          };
+        },
+      );
+    },
+    [
+      comparisonWorkloadMetric,
+      selectedComparisonStrength,
+      selectedComparisonWorkload,
+    ],
+  );
+
+  const strengthWorkloadDomain =
+    useMemo<[number, number]>(() => {
+      const values: number[] = [];
+
+      for (const point of strengthWorkloadData) {
+        if (point.weeklyE1rm !== null) {
+          values.push(point.weeklyE1rm);
+        }
+
+        if (point.rollingBest !== null) {
+          values.push(point.rollingBest);
+        }
+      }
+
+      if (values.length === 0) {
+        return [0, 1];
+      }
+
+      const minimum = Math.min(...values);
+      const maximum = Math.max(...values);
+      const minimumSpan = Math.max(
+        maximum * 0.08,
+        2,
+      );
+      const span = Math.max(
+        maximum - minimum,
+        minimumSpan,
+      );
+      const padding = span * 0.15;
+
+      return [
+        Math.max(
+          0,
+          Math.floor(
+            (minimum - padding) * 10,
+          ) / 10,
+        ),
+        Math.ceil(
+          (maximum + padding) * 10,
+        ) / 10,
+      ];
+    }, [strengthWorkloadData]);
+
+  const comparisonBestValues =
+    strengthWorkloadData
+      .map((point) => point.rollingBest)
+      .filter(
+        (value): value is number =>
+          value !== null,
+      );
+
+  const firstComparisonBest =
+    comparisonBestValues[0] ?? null;
+
+  const latestComparisonBest =
+    comparisonBestValues[
+      comparisonBestValues.length - 1
+    ] ?? null;
+
+  const comparisonStrengthGain =
+    firstComparisonBest !== null &&
+    latestComparisonBest !== null
+      ? latestComparisonBest -
+        firstComparisonBest
+      : null;
+
+  const comparisonActiveWeeks =
+    strengthWorkloadData.filter(
+      (point) => point.workouts > 0,
+    );
+
+  const averageComparisonWorkload =
+    comparisonActiveWeeks.length > 0
+      ? comparisonActiveWeeks.reduce(
+          (total, point) =>
+            total + point.workload,
+          0,
+        ) / comparisonActiveWeeks.length
+      : null;
+
+  const comparisonBarColor =
+    comparisonWorkloadMetric === "sets"
+      ? chartColors.blue
+      : comparisonWorkloadMetric === "reps"
+        ? chartColors.green
+        : chartColors.orange;
+
+  const strengthWorkloadChartWidth = Math.max(
+    680,
+    strengthWorkloadData.length * 54,
+  );
 
   const summary = stats?.stats.summary;
   const sparkbars = stats?.charts.sparkbars;
@@ -2655,6 +3070,378 @@ export default function StatsPage() {
               ) : (
                 <div className="empty">
                   No weekly workload history for this exercise.
+                </div>
+              )}
+            </ChartCard>
+
+            <ChartCard
+              wide
+              actions={
+                comparisonExercises.length > 0 ? (
+                  <div className="chart-filter-row">
+                    <label className="chart-exercise-select">
+                      <span>Exercise</span>
+
+                      <select
+                        onChange={(event) =>
+                          setSelectedComparisonExerciseId(
+                            Number(event.target.value),
+                          )
+                        }
+                        value={
+                          selectedComparisonExerciseId ??
+                          comparisonExercises[0]
+                            .exercise_id
+                        }
+                      >
+                        {comparisonExercises.map(
+                          (exercise) => (
+                            <option
+                              key={exercise.exercise_id}
+                              value={exercise.exercise_id}
+                            >
+                              {exercise.name}
+                            </option>
+                          ),
+                        )}
+                      </select>
+                    </label>
+
+                    <div className="weekly-metric-select">
+                      <span>Workload</span>
+
+                      <div
+                        aria-label="Comparison workload metric"
+                        className="weekly-metric-buttons"
+                        role="group"
+                      >
+                        {(
+                          [
+                            ["sets", "Sets"],
+                            ["reps", "Reps"],
+                            ["volume", "Volume"],
+                          ] as Array<
+                            [WeeklyWorkloadMetric, string]
+                          >
+                        ).map(([metric, label]) => (
+                          <button
+                            aria-pressed={
+                              comparisonWorkloadMetric ===
+                              metric
+                            }
+                            className={
+                              comparisonWorkloadMetric ===
+                              metric
+                                ? "weekly-metric-button weekly-metric-button-active"
+                                : "weekly-metric-button"
+                            }
+                            key={metric}
+                            onClick={() =>
+                              setComparisonWorkloadMetric(
+                                metric,
+                              )
+                            }
+                            type="button"
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : null
+              }
+              subtitle="Weekly strength performance aligned with weekly training exposure"
+              title="Strength versus workload"
+            >
+              {selectedComparisonStrength &&
+              selectedComparisonWorkload &&
+              strengthWorkloadData.length > 0 ? (
+                <>
+                  <div className="strength-progress-summary">
+                    <div>
+                      <strong>
+                        {latestComparisonBest === null
+                          ? "—"
+                          : `${formatNumber(
+                              latestComparisonBest,
+                              1,
+                            )} kg`}
+                      </strong>
+                      <span>current rolling e1RM best</span>
+                    </div>
+
+                    <div>
+                      <strong>
+                        {comparisonStrengthGain === null
+                          ? "—"
+                          : `${
+                              comparisonStrengthGain >= 0
+                                ? "+"
+                                : ""
+                            }${formatNumber(
+                              comparisonStrengthGain,
+                              1,
+                            )} kg`}
+                      </strong>
+                      <span>rolling-best gain in range</span>
+                    </div>
+
+                    <div>
+                      <strong>
+                        {formatWeeklyMetric(
+                          averageComparisonWorkload,
+                          comparisonWorkloadMetric,
+                        )}
+                      </strong>
+                      <span>average active-week workload</span>
+                    </div>
+                  </div>
+
+                  <div className="strength-workload-scroll">
+                    <div
+                      className="strength-workload-inner"
+                      style={{
+                        width: strengthWorkloadChartWidth,
+                      }}
+                    >
+                      <section className="strength-workload-panel">
+                        <div className="strength-workload-panel-heading">
+                          <strong>Strength</strong>
+                          <span>
+                            Weekly best e1RM and historical best
+                          </span>
+                        </div>
+
+                        <ResponsiveContainer
+                          height={240}
+                          width="100%"
+                        >
+                          <LineChart
+                            className="clickable-chart"
+                            data={strengthWorkloadData}
+                            margin={{
+                              top: 16,
+                              right: 18,
+                              left: 0,
+                              bottom: 0,
+                            }}
+                            onClick={openWorkoutFromChart}
+                            syncId="strength-workload-comparison"
+                          >
+                            <CartesianGrid
+                              stroke={chartColors.grid}
+                              strokeDasharray="3 3"
+                            />
+
+                            <XAxis
+                              dataKey="week_start"
+                              hide
+                            />
+
+                            <YAxis
+                              domain={strengthWorkloadDomain}
+                              stroke={chartColors.muted}
+                              tick={{ fontSize: 12 }}
+                              tickFormatter={(value) =>
+                                formatNumber(
+                                  Number(value),
+                                  1,
+                                )
+                              }
+                              width={52}
+                            />
+
+                            <Tooltip
+                              content={
+                                <StrengthWorkloadTooltip
+                                  metric={
+                                    comparisonWorkloadMetric
+                                  }
+                                  mode="strength"
+                                />
+                              }
+                            />
+
+                            <Legend
+                              wrapperStyle={{
+                                color: chartColors.muted,
+                              }}
+                            />
+
+                            <Line
+                              activeDot={{ r: 5 }}
+                              connectNulls
+                              dataKey="weeklyE1rm"
+                              dot={{ r: 3 }}
+                              name="Weekly best e1RM"
+                              stroke={chartColors.blue}
+                              strokeWidth={2}
+                              type="monotone"
+                            />
+
+                            <Line
+                              activeDot={false}
+                              dataKey="rollingBest"
+                              dot={false}
+                              name="Historical best"
+                              stroke={chartColors.green}
+                              strokeWidth={3}
+                              type="stepAfter"
+                            />
+
+                            {strengthWorkloadData
+                              .filter(
+                                (point) =>
+                                  point.hasPr &&
+                                  point.weeklyE1rm !== null,
+                              )
+                              .map((point) => (
+                                <ReferenceDot
+                                  fill={chartColors.orange}
+                                  key={`comparison-pr-${point.week_start}`}
+                                  r={6}
+                                  stroke={chartColors.card}
+                                  strokeWidth={2}
+                                  x={point.week_start}
+                                  y={point.weeklyE1rm!}
+                                />
+                              ))}
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </section>
+
+                      <section className="strength-workload-panel">
+                        <div className="strength-workload-panel-heading">
+                          <strong>Workload</strong>
+                          <span>
+                            {weeklyMetricLabel(
+                              comparisonWorkloadMetric,
+                            )}{" "}
+                            per calendar week
+                          </span>
+                        </div>
+
+                        <ResponsiveContainer
+                          height={230}
+                          width="100%"
+                        >
+                          <BarChart
+                            data={strengthWorkloadData}
+                            margin={{
+                              top: 16,
+                              right: 18,
+                              left: 0,
+                              bottom: 0,
+                            }}
+                            syncId="strength-workload-comparison"
+                          >
+                            <CartesianGrid
+                              stroke={chartColors.grid}
+                              strokeDasharray="3 3"
+                            />
+
+                            <XAxis
+                              dataKey="week_start"
+                              stroke={chartColors.muted}
+                              tick={{ fontSize: 12 }}
+                              tickFormatter={(value) =>
+                                formatWeekLabel(
+                                  String(value),
+                                )
+                              }
+                            />
+
+                            <YAxis
+                              allowDecimals={
+                                comparisonWorkloadMetric ===
+                                "volume"
+                              }
+                              domain={[0, "auto"]}
+                              stroke={chartColors.muted}
+                              tick={{ fontSize: 12 }}
+                              width={52}
+                            />
+
+                            <Tooltip
+                              content={
+                                <StrengthWorkloadTooltip
+                                  metric={
+                                    comparisonWorkloadMetric
+                                  }
+                                  mode="workload"
+                                />
+                              }
+                            />
+
+                            <Bar
+                              dataKey="workload"
+                              fill={comparisonBarColor}
+                              name={weeklyMetricLabel(
+                                comparisonWorkloadMetric,
+                              )}
+                              radius={[6, 6, 0, 0]}
+                            />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </section>
+                    </div>
+                  </div>
+
+                  <ChartInsight
+                    question="Is additional workload producing measurable strength progress?"
+                    explanation="The charts use the same weekly timeline so changes in strength can be compared directly with training exposure."
+                  >
+                    <div className="chart-insight-details">
+                      <span>
+                        A rising green strength line while
+                        workload remains relatively stable is
+                        a strong indication of improved
+                        performance.
+                      </span>
+
+                      <span>
+                        Rising workload followed by a later
+                        strength increase may indicate useful
+                        training accumulation.
+                      </span>
+
+                      <span>
+                        Workload rising for several weeks
+                        without any strength improvement may
+                        reflect fatigue, excessive volume,
+                        exercise inconsistency, or insufficient
+                        recovery.
+                      </span>
+
+                      <span>
+                        A short-term e1RM decline does not
+                        automatically indicate lost strength.
+                        Rep targets, fatigue, technique, and
+                        programming can affect an individual
+                        session.
+                      </span>
+
+                      <span>
+                        Weeks without a valid 3–12-rep weighted
+                        set have no blue strength point. They
+                        are not estimated or filled in.
+                      </span>
+                    </div>
+
+                    <p className="chart-insight-footnote">
+                      This comparison shows association, not
+                      causation. Training adaptations can lag
+                      behind workload by several weeks, and the
+                      chart does not account for sleep,
+                      nutrition, illness, or other recovery
+                      factors.
+                    </p>
+                  </ChartInsight>
+                </>
+              ) : (
+                <div className="empty">
+                  No matching strength and workload history.
                 </div>
               )}
             </ChartCard>
