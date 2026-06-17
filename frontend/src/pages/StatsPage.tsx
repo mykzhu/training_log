@@ -18,7 +18,11 @@ import {
 } from "recharts";
 
 import { getStats } from "../api/stats";
+
 import type {
+  ExerciseRepProgress,
+  ExerciseRepTargetProgress,
+  ExerciseRepWeightPoint,
   ExerciseStats,
   ExerciseStrengthPoint,
   StatsResponse,
@@ -105,6 +109,12 @@ function loadCalendarDescription(day: LoadCalendarDay) {
 type StrengthChartPoint = ExerciseStrengthPoint & {
   id: number;
   chartKey: string;
+};
+
+type RepWeightChartPoint = ExerciseRepWeightPoint & {
+  id: number;
+  chartKey: string;
+  reps: number;
 };
 
 type ChartPoint = {
@@ -370,6 +380,46 @@ function StrengthProgressTooltip({
   );
 }
 
+type RepWeightTooltipProps = {
+  active?: boolean;
+  payload?: Array<{
+    payload?: RepWeightChartPoint;
+  }>;
+};
+
+function RepWeightProgressTooltip({
+  active,
+  payload,
+}: RepWeightTooltipProps) {
+  const point = payload?.[0]?.payload;
+
+  if (!active || !point) {
+    return null;
+  }
+
+  return (
+    <div className="strength-progress-tooltip">
+      <strong>{point.date}</strong>
+
+      <div>
+        <span>Best {point.reps}-rep weight</span>
+        <b>{formatNumber(point.weight, 1)} kg</b>
+      </div>
+
+      <div>
+        <span>Historical best</span>
+        <b>{formatNumber(point.rolling_best, 1)} kg</b>
+      </div>
+
+      {point.is_pr && (
+        <div className="strength-progress-pr">
+          New {point.reps}-rep PR
+        </div>
+      )}
+    </div>
+  );
+}
+
 function commonTooltipProps() {
   return {
     contentStyle: {
@@ -454,8 +504,15 @@ export default function StatsPage() {
   const [statsLimit, setStatsLimit] = useState<StatsLimit>(() => readStatsLimitFromUrl());
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+
   const [selectedStrengthExerciseId, setSelectedStrengthExerciseId] =
   useState<number | null>(null);
+
+  const [selectedRepExerciseId, setSelectedRepExerciseId] =
+  useState<number | null>(null);
+
+  const [selectedRepTarget, setSelectedRepTarget] =
+    useState<number | null>(null);
 
   useEffect(() => {
     function syncLimitFromUrl() {
@@ -639,6 +696,127 @@ export default function StatsPage() {
       null,
     [exerciseProgress, selectedStrengthExerciseId],
   );
+
+  const exerciseRepProgress = useMemo<ExerciseRepProgress[]>(
+    () => stats?.stats.exercise_rep_progress ?? [],
+    [stats],
+  );
+
+  useEffect(() => {
+    if (exerciseRepProgress.length === 0) {
+      setSelectedRepExerciseId(null);
+      return;
+    }
+
+    setSelectedRepExerciseId((current) => {
+      const currentStillExists = exerciseRepProgress.some(
+        (exercise) => exercise.exercise_id === current,
+      );
+
+      return currentStillExists
+        ? current
+        : exerciseRepProgress[0].exercise_id;
+    });
+  }, [exerciseRepProgress]);
+
+  const selectedRepExercise = useMemo(
+    () =>
+      exerciseRepProgress.find(
+        (exercise) =>
+          exercise.exercise_id === selectedRepExerciseId,
+      ) ??
+      exerciseRepProgress[0] ??
+      null,
+    [exerciseRepProgress, selectedRepExerciseId],
+  );
+
+  useEffect(() => {
+    const targets = selectedRepExercise?.rep_targets ?? [];
+
+    if (targets.length === 0) {
+      setSelectedRepTarget(null);
+      return;
+    }
+
+    setSelectedRepTarget((current) => {
+      const currentStillExists = targets.some(
+        (target) => target.reps === current,
+      );
+
+      if (currentStillExists) {
+        return current;
+      }
+
+      const preferredTarget = [...targets].sort(
+        (
+          first: ExerciseRepTargetProgress,
+          second: ExerciseRepTargetProgress,
+        ) =>
+          second.points.length - first.points.length ||
+          first.reps - second.reps,
+      )[0];
+
+      return preferredTarget?.reps ?? null;
+    });
+  }, [selectedRepExercise]);
+
+  const selectedRepTargetProgress = useMemo(
+    () =>
+      selectedRepExercise?.rep_targets.find(
+        (target) => target.reps === selectedRepTarget,
+      ) ??
+      selectedRepExercise?.rep_targets[0] ??
+      null,
+    [selectedRepExercise, selectedRepTarget],
+  );
+
+  const repWeightChartData = useMemo<RepWeightChartPoint[]>(
+    () =>
+      (selectedRepTargetProgress?.points ?? []).map(
+        (point) => ({
+          ...point,
+          id: point.workout_id,
+          chartKey: `${point.date}-${point.workout_id}`,
+          reps: selectedRepTargetProgress?.reps ?? 0,
+        }),
+      ),
+    [selectedRepTargetProgress],
+  );
+
+  const repWeightDomain = useMemo<[number, number]>(() => {
+    const values = repWeightChartData.flatMap((point) => [
+      point.weight,
+      point.rolling_best,
+    ]);
+
+    if (values.length === 0) {
+      return [0, 1];
+    }
+
+    const minimum = Math.min(...values);
+    const maximum = Math.max(...values);
+    const minimumSpan = Math.max(maximum * 0.08, 2);
+    const span = Math.max(maximum - minimum, minimumSpan);
+    const padding = span * 0.15;
+
+    return [
+      Math.max(
+        0,
+        Math.floor((minimum - padding) * 10) / 10,
+      ),
+      Math.ceil((maximum + padding) * 10) / 10,
+    ];
+  }, [repWeightChartData]);
+
+  const firstRepWeightPoint = repWeightChartData[0] ?? null;
+
+  const latestRepWeightPoint =
+    repWeightChartData[repWeightChartData.length - 1] ?? null;
+
+  const visibleRepWeightChange =
+    firstRepWeightPoint && latestRepWeightPoint
+      ? latestRepWeightPoint.weight - firstRepWeightPoint.weight
+      : null;
 
   const strengthChartData = useMemo<StrengthChartPoint[]>(
     () =>
@@ -1819,6 +1997,240 @@ export default function StatsPage() {
               ) : (
                 <div className="empty">
                   No eligible exercise strength history yet.
+                </div>
+              )}
+            </ChartCard>
+
+            <ChartCard
+              wide
+              actions={
+                selectedRepExercise ? (
+                  <div className="chart-filter-row">
+                    <label className="chart-exercise-select">
+                      <span>Exercise</span>
+
+                      <select
+                        onChange={(event) =>
+                          setSelectedRepExerciseId(
+                            Number(event.target.value),
+                          )
+                        }
+                        value={
+                          selectedRepExerciseId ??
+                          selectedRepExercise.exercise_id
+                        }
+                      >
+                        {exerciseRepProgress.map((exercise) => (
+                          <option
+                            key={exercise.exercise_id}
+                            value={exercise.exercise_id}
+                          >
+                            {exercise.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="chart-rep-select">
+                      <span>Reps</span>
+
+                      <select
+                        onChange={(event) =>
+                          setSelectedRepTarget(
+                            Number(event.target.value),
+                          )
+                        }
+                        value={
+                          selectedRepTarget ??
+                          selectedRepTargetProgress?.reps ??
+                          ""
+                        }
+                      >
+                        {selectedRepExercise.rep_targets.map((target) => (
+                          <option
+                            key={target.reps}
+                            value={target.reps}
+                          >
+                            {target.reps} reps
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                ) : null
+              }
+              subtitle="Best actual weight lifted for the same repetition target in each workout"
+              title="Weight at fixed reps"
+            >
+              {selectedRepExercise &&
+              selectedRepTargetProgress &&
+              repWeightChartData.length > 0 ? (
+                <>
+                  <div className="strength-progress-summary">
+                    <div>
+                      <strong>
+                        {formatNumber(
+                          latestRepWeightPoint?.weight,
+                          1,
+                        )}{" "}
+                        kg
+                      </strong>
+                      <span>
+                        latest {selectedRepTargetProgress.reps}-rep weight
+                      </span>
+                    </div>
+
+                    <div>
+                      <strong>
+                        {formatNumber(
+                          latestRepWeightPoint?.rolling_best,
+                          1,
+                        )}{" "}
+                        kg
+                      </strong>
+                      <span>
+                        historical {selectedRepTargetProgress.reps}-rep best
+                      </span>
+                    </div>
+
+                    <div>
+                      <strong>
+                        {visibleRepWeightChange === null
+                          ? "—"
+                          : `${
+                              visibleRepWeightChange >= 0 ? "+" : ""
+                            }${formatNumber(
+                              visibleRepWeightChange,
+                              1,
+                            )} kg`}
+                      </strong>
+                      <span>change in selected range</span>
+                    </div>
+                  </div>
+
+                  <ResponsiveContainer height={300} width="100%">
+                    <LineChart
+                      className="clickable-chart"
+                      data={repWeightChartData}
+                      margin={{
+                        top: 18,
+                        right: 18,
+                        left: 0,
+                        bottom: 0,
+                      }}
+                      onClick={openWorkoutFromChart}
+                    >
+                      <CartesianGrid
+                        stroke={chartColors.grid}
+                        strokeDasharray="3 3"
+                      />
+
+                      <XAxis
+                        dataKey="chartKey"
+                        stroke={chartColors.muted}
+                        tick={{ fontSize: 12 }}
+                        tickFormatter={(value) =>
+                          String(value).slice(0, 10)
+                        }
+                      />
+
+                      <YAxis
+                        domain={repWeightDomain}
+                        stroke={chartColors.muted}
+                        tick={{ fontSize: 12 }}
+                        tickFormatter={(value) =>
+                          formatNumber(Number(value), 1)
+                        }
+                      />
+
+                      <Tooltip
+                        content={<RepWeightProgressTooltip />}
+                      />
+
+                      <Legend
+                        wrapperStyle={{ color: chartColors.muted }}
+                      />
+
+                      <Line
+                        activeDot={{ r: 5 }}
+                        dataKey="weight"
+                        dot={{ r: 3 }}
+                        name={`Best ${selectedRepTargetProgress.reps}-rep weight`}
+                        stroke={chartColors.blue}
+                        strokeWidth={2}
+                        type="monotone"
+                      />
+
+                      <Line
+                        activeDot={false}
+                        dataKey="rolling_best"
+                        dot={false}
+                        name="Historical best"
+                        stroke={chartColors.green}
+                        strokeWidth={3}
+                        type="stepAfter"
+                      />
+
+                      {repWeightChartData
+                        .filter((point) => point.is_pr)
+                        .map((point) => (
+                          <ReferenceDot
+                            fill={chartColors.orange}
+                            key={`rep-pr-${point.workout_id}`}
+                            r={6}
+                            stroke={chartColors.card}
+                            strokeWidth={2}
+                            x={point.chartKey}
+                            y={point.weight}
+                          />
+                        ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+
+                  <ChartInsight
+                    question={`Can I lift more actual weight for ${selectedRepTargetProgress.reps} repetitions?`}
+                    explanation="This chart compares only sets from the same exercise with exactly the same number of repetitions."
+                  >
+                    <div className="chart-insight-details">
+                      <span>
+                        The blue line shows the heaviest qualifying set
+                        performed in each workout.
+                      </span>
+
+                      <span>
+                        The green stepped line shows the historical best
+                        weight recorded for this exact exercise and rep
+                        count.
+                      </span>
+
+                      <span>
+                        Orange markers indicate genuine fixed-rep personal
+                        records. The first recorded result establishes the
+                        baseline.
+                      </span>
+
+                      <span>
+                        Workouts where this exact rep target was not
+                        performed are omitted rather than interpolated.
+                      </span>
+
+                      <span>
+                        For the most accurate comparison, keep technique,
+                        range of motion, equipment, and exercise variation
+                        consistent.
+                      </span>
+                    </div>
+
+                    <p className="chart-insight-footnote">
+                      Unlike e1RM, this is a direct recorded-performance
+                      metric and does not use a strength-estimation formula.
+                      Only sets with positive recorded weight are included.
+                    </p>
+                  </ChartInsight>
+                </>
+              ) : (
+                <div className="empty">
+                  No fixed-repetition weight history for this exercise.
                 </div>
               )}
             </ChartCard>

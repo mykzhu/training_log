@@ -1732,3 +1732,56 @@ button.load-calendar-cell:focus-visible {
     width: 100%;
   }
 }
+
+.chart-filter-row {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+}
+
+.chart-rep-select {
+  display: grid;
+  gap: 4px;
+}
+
+.chart-rep-select > span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.chart-rep-select select {
+  width: 112px;
+  min-height: 38px;
+  border-radius: 11px;
+  padding: 0 30px 0 10px;
+  font-size: 14px;
+}
+
+@media (max-width: 620px) {
+  .chart-filter-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 112px;
+    width: 100%;
+  }
+
+  .chart-filter-row .chart-exercise-select {
+    min-width: 0;
+  }
+
+  .chart-filter-row .chart-exercise-select select {
+    width: 100%;
+  }
+}
+
+@media (max-width: 420px) {
+  .chart-filter-row {
+    grid-template-columns: 1fr;
+  }
+
+  .chart-rep-select,
+  .chart-rep-select select {
+    width: 100%;
+  }
+}

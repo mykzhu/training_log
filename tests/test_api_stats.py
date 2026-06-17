@@ -350,5 +350,128 @@ class StatsApiTests(unittest.TestCase):
         self.assertAlmostEqual(point["rolling_best"], 140.0, places=3)
         self.assertFalse(point["is_pr"])
 
+    def test_stats_includes_fixed_rep_weight_progress(self) -> None:
+        first_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [
+                        {"weight": 100, "reps": 5},
+                        {"weight": 105, "reps": 5},
+                        {"weight": 90, "reps": 8},
+                    ],
+                },
+            ],
+        )
+
+        second_id = self.insert_workout(
+            created_at="2026-06-08T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [
+                        {"weight": 102.5, "reps": 5},
+                        {"weight": 95, "reps": 8},
+                    ],
+                },
+            ],
+        )
+
+        third_id = self.insert_workout(
+            created_at="2026-06-15T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [
+                        {"weight": 110, "reps": 5},
+                    ],
+                },
+            ],
+        )
+
+        response = get_stats(limit="all")
+
+        progress = next(
+            item
+            for item in response["stats"]["exercise_rep_progress"]
+            if item["name"] == "Deadlift"
+        )
+
+        five_rep_target = next(
+            target
+            for target in progress["rep_targets"]
+            if target["reps"] == 5
+        )
+
+        self.assertEqual(
+            [
+                point["workout_id"]
+                for point in five_rep_target["points"]
+            ],
+            [first_id, second_id, third_id],
+        )
+
+        first, second, third = five_rep_target["points"]
+
+        self.assertEqual(first["weight"], 105.0)
+        self.assertEqual(first["rolling_best"], 105.0)
+        self.assertFalse(first["is_pr"])
+
+        self.assertEqual(second["weight"], 102.5)
+        self.assertEqual(second["rolling_best"], 105.0)
+        self.assertFalse(second["is_pr"])
+
+        self.assertEqual(third["weight"], 110.0)
+        self.assertEqual(third["rolling_best"], 110.0)
+        self.assertTrue(third["is_pr"])
+
+
+    def test_fixed_rep_progress_uses_history_before_selected_range(
+        self,
+    ) -> None:
+        self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [{"weight": 120, "reps": 5}],
+                },
+            ],
+        )
+
+        latest_id = self.insert_workout(
+            created_at="2026-06-08T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [{"weight": 110, "reps": 5}],
+                },
+            ],
+        )
+
+        response = get_stats(limit="1")
+
+        progress = next(
+            item
+            for item in response["stats"]["exercise_rep_progress"]
+            if item["name"] == "Deadlift"
+        )
+
+        target = next(
+            item
+            for item in progress["rep_targets"]
+            if item["reps"] == 5
+        )
+
+        self.assertEqual(len(target["points"]), 1)
+
+        point = target["points"][0]
+
+        self.assertEqual(point["workout_id"], latest_id)
+        self.assertEqual(point["weight"], 110.0)
+        self.assertEqual(point["rolling_best"], 120.0)
+        self.assertFalse(point["is_pr"])
+
 if __name__ == "__main__":
     unittest.main()

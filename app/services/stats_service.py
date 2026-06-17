@@ -221,6 +221,105 @@ def build_e1rm_baselines_by_workout(
 
     return baselines_by_workout
 
+def build_weight_baselines_by_workout(
+    workouts: list[Any],
+    details_by_workout: dict[int, list[dict[str, Any]]],
+) -> dict[int, dict[int, dict[int, float]]]:
+    ordered_workouts = sorted(workouts, key=workout_sort_key)
+
+    baselines_by_workout: dict[
+        int,
+        dict[int, dict[int, float]],
+    ] = {
+        workout_id(workout): {}
+        for workout in ordered_workouts
+    }
+
+    exercise_ids = sorted(
+        {
+            int(item["exercise_id"])
+            for details in details_by_workout.values()
+            for item in details
+            if item.get("exercise_id") is not None
+        }
+    )
+
+    if not ordered_workouts or not exercise_ids:
+        return baselines_by_workout
+
+    max_workout = ordered_workouts[-1]
+    placeholders = ", ".join("?" for _ in exercise_ids)
+
+    params: list[Any] = [
+        *exercise_ids,
+        workout_created_at(max_workout),
+        workout_created_at(max_workout),
+        workout_id(max_workout),
+    ]
+
+    with get_db() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT
+                we.exercise_id,
+                w.id AS workout_id,
+                w.created_at,
+                se.weight,
+                se.reps
+            FROM set_entries se
+            JOIN workout_exercises we
+              ON we.id = se.workout_exercise_id
+            JOIN workouts w
+              ON w.id = we.workout_id
+            WHERE we.exercise_id IN ({placeholders})
+              AND se.weight > 0
+              AND se.reps > 0
+              AND (
+                    w.created_at < ?
+                    OR (w.created_at = ? AND w.id < ?)
+              )
+            ORDER BY
+                w.created_at ASC,
+                w.id ASC,
+                se.set_number ASC,
+                se.id ASC
+            """,
+            params,
+        ).fetchall()
+
+    best_by_exercise: dict[int, dict[int, float]] = {}
+    row_index = 0
+
+    for workout in ordered_workouts:
+        while row_index < len(rows) and row_is_before_workout(
+            rows[row_index],
+            workout,
+        ):
+            row = rows[row_index]
+
+            exercise_id = int(row["exercise_id"])
+            reps = int(row["reps"])
+            weight = float(row["weight"])
+
+            exercise_best = best_by_exercise.setdefault(
+                exercise_id,
+                {},
+            )
+
+            previous_best = exercise_best.get(reps)
+
+            if previous_best is None or weight > previous_best:
+                exercise_best[reps] = weight
+
+            row_index += 1
+
+        baselines_by_workout[workout_id(workout)] = {
+            exercise_id: dict(reps_to_weight)
+            for exercise_id, reps_to_weight
+            in best_by_exercise.items()
+        }
+
+    return baselines_by_workout
 
 def build_workout_analysis(
     workout_id: int,
@@ -808,9 +907,15 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
         details_by_workout=details_by_workout,
     )
 
+    weight_baselines_by_workout = build_weight_baselines_by_workout(
+        workouts=list(workouts),
+        details_by_workout=details_by_workout,
+    )
+
     workout_items = []
     exercise_stats: dict[int, dict[str, Any]] = {}
     exercise_progress: dict[int, dict[str, Any]] = {}
+    exercise_rep_progress: dict[int, dict[str, Any]] = {}
 
     for workout in workouts:
         current_workout_id = int(workout["id"])
@@ -855,6 +960,7 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
         )
 
         workout_strength_best: dict[int, dict[str, Any]] = {}
+        workout_rep_best: dict[int, dict[str, Any]] = {}
 
         for item in details:
             exercise_id = int(item["exercise_id"])
@@ -879,6 +985,21 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
             for set_row in item["sets"]:
                 weight = float(set_row["weight"])
                 reps = int(set_row["reps"])
+
+                if weight > 0 and reps > 0:
+                    exercise_rep_best = workout_rep_best.setdefault(
+                        exercise_id,
+                        {
+                            "name": exercise_name,
+                            "targets": {},
+                        },
+                    )
+
+                    previous_weight = exercise_rep_best["targets"].get(reps)
+
+                    if previous_weight is None or weight > previous_weight:
+                        exercise_rep_best["targets"][reps] = weight
+
                 e1rm = estimated_1rm(weight, reps)
 
                 if e1rm is None:
@@ -945,6 +1066,57 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
                 }
             )
 
+        historical_weight_baselines = (
+            weight_baselines_by_workout.get(
+                current_workout_id,
+                {},
+            )
+        )
+
+        for exercise_id, workout_progress in workout_rep_best.items():
+            progress = exercise_rep_progress.setdefault(
+                exercise_id,
+                {
+                    "exercise_id": exercise_id,
+                    "name": workout_progress["name"],
+                    "rep_targets": {},
+                },
+            )
+
+            exercise_history = historical_weight_baselines.get(
+                exercise_id,
+                {},
+            )
+
+            for reps, weight in workout_progress["targets"].items():
+                previous_best = exercise_history.get(reps)
+
+                rolling_best = weight
+                if previous_best is not None:
+                    rolling_best = max(previous_best, weight)
+
+                target = progress["rep_targets"].setdefault(
+                    reps,
+                    {
+                        "reps": reps,
+                        "points": [],
+                    },
+                )
+
+                target["points"].append(
+                    {
+                        "workout_id": current_workout_id,
+                        "date": workout["created_at"][:10],
+                        "weight": weight,
+                        "rolling_best": rolling_best,
+                        # The first result establishes the baseline.
+                        "is_pr": (
+                            previous_best is not None
+                            and weight > previous_best + 1e-9
+                        ),
+                    }
+                )
+
     total_volume = sum(item["total_volume"] for item in workout_items)
     total_reps = sum(item["total_reps"] for item in workout_items)
     total_sets = sum(item["total_sets"] for item in workout_items)
@@ -982,10 +1154,31 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
         if item["exercise_id"] in exercise_progress
     ]
 
+    sorted_exercise_rep_progress = []
+
+    for exercise in sorted_exercise_stats:
+        exercise_id = int(exercise["exercise_id"])
+        progress = exercise_rep_progress.get(exercise_id)
+
+        if progress is None:
+            continue
+
+        sorted_exercise_rep_progress.append(
+            {
+                "exercise_id": exercise_id,
+                "name": progress["name"],
+                "rep_targets": sorted(
+                    progress["rep_targets"].values(),
+                    key=lambda target: target["reps"],
+                ),
+            }
+        )
+
     return {
         "workouts": workout_items,
         "exercise_stats": sorted_exercise_stats,
         "exercise_progress": sorted_exercise_progress,
+        "exercise_rep_progress": sorted_exercise_rep_progress,
         "summary": {
             "workout_count": len(workout_items),
             "total_volume": total_volume,
