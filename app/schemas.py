@@ -19,7 +19,7 @@ class AddExerciseRequest(BaseModel):
 class ExerciseCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     is_active: bool = True
-    profile_key: str = Field(default="accessory", min_length=1, max_length=80)
+    profile_key: str | None = Field(default=None, min_length=1, max_length=80)
     weights: list[float] = Field(default_factory=list)
 
 

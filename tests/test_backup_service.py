@@ -118,6 +118,43 @@ class BackupServiceTests(unittest.TestCase):
         self.assertEqual(set_count, 1)
         self.assertGreater(weight_count, 0)
 
+    def test_schema_v3_restore_preserves_exact_inactive_empty_weights(self) -> None:
+        self.insert_workout()
+        with get_db() as conn:
+            crunches_id = conn.execute(
+                "SELECT id FROM exercises WHERE name = ?",
+                ("Crunches",),
+            ).fetchone()["id"]
+            conn.execute(
+                "UPDATE exercises SET is_active = 0 WHERE id = ?",
+                (crunches_id,),
+            )
+            conn.execute(
+                "DELETE FROM exercise_weight_options WHERE exercise_id = ?",
+                (crunches_id,),
+            )
+
+        payload = build_backup_payload()
+        reset_database_data()
+        restore_backup_payload(payload)
+
+        with get_db() as conn:
+            exercise = conn.execute(
+                "SELECT is_active FROM exercises WHERE id = ?",
+                (crunches_id,),
+            ).fetchone()
+            weight_count = conn.execute(
+                """
+                SELECT COUNT(*)
+                FROM exercise_weight_options
+                WHERE exercise_id = ?
+                """,
+                (crunches_id,),
+            ).fetchone()[0]
+
+        self.assertEqual(exercise["is_active"], 0)
+        self.assertEqual(weight_count, 0)
+
     def test_restore_backup_payload_accepts_schema_v1_without_duration(self) -> None:
         payload = {
             "app": "training-log",
@@ -179,6 +216,78 @@ class BackupServiceTests(unittest.TestCase):
         self.assertIsNone(workout["lower_back_pain"])
         self.assertIsNone(workout["duration_seconds"])
         self.assertIn(80.0, [row["weight"] for row in weights])
+
+    def test_restore_backup_payload_accepts_schema_v2_and_derives_weights(self) -> None:
+        payload = {
+            "app": "training-log",
+            "schema_version": 2,
+            "exported_at": "2026-06-01T12:00:00",
+            "tables": {
+                "exercises": [{"id": 1, "name": "Goblet Squat"}],
+                "workouts": [
+                    {
+                        "id": 1,
+                        "workout_date": "2026-06-01",
+                        "created_at": "2026-06-01T10:00:00",
+                        "finished_at": "2026-06-01T11:00:00",
+                        "session_rpe": 6,
+                        "lower_back_pain": 1,
+                        "duration_seconds": 3600,
+                    }
+                ],
+                "workout_exercises": [
+                    {
+                        "id": 1,
+                        "workout_id": 1,
+                        "exercise_id": 1,
+                        "position": 1,
+                    }
+                ],
+                "set_entries": [
+                    {
+                        "id": 1,
+                        "workout_exercise_id": 1,
+                        "set_number": 1,
+                        "weight": 18.25,
+                        "reps": 10,
+                        "created_at": "2026-06-01T10:15:00",
+                    }
+                ],
+            },
+        }
+
+        restore_backup_payload(payload)
+
+        with get_db() as conn:
+            weights = [
+                row["weight"]
+                for row in conn.execute(
+                    """
+                    SELECT weight
+                    FROM exercise_weight_options
+                    WHERE exercise_id = 1
+                    ORDER BY weight ASC
+                    """
+                )
+            ]
+
+        self.assertIn(18.25, weights)
+        self.assertIn(12.0, weights)
+
+    def test_invalid_backup_validation_happens_before_destructive_restore(self) -> None:
+        self.insert_workout()
+        payload = build_backup_payload()
+        payload["tables"]["workout_exercises"][0]["exercise_id"] = 9999
+
+        with self.assertRaises(ValueError):
+            restore_backup_payload(payload)
+
+        with get_db() as conn:
+            workout_count = conn.execute("SELECT COUNT(*) FROM workouts").fetchone()[0]
+            set_count = conn.execute("SELECT COUNT(*) FROM set_entries").fetchone()[0]
+
+        self.assertEqual(workout_count, 1)
+        self.assertEqual(set_count, 1)
 
     def test_reset_database_data_clears_workouts_and_reseeds_defaults(self) -> None:
         self.insert_workout()

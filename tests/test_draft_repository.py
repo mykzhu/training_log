@@ -6,8 +6,11 @@ from app import config
 from app.db import get_db, init_db
 from app.repositories.drafts import (
     clear_active_draft,
+    create_active_draft,
     get_active_draft,
-    replace_active_draft,
+    insert_draft_exercise,
+    insert_draft_set,
+    update_active_draft_metadata,
 )
 from app.services.backup_service import reset_database_data
 
@@ -79,16 +82,36 @@ class DraftRepositoryTests(unittest.TestCase):
         self.assertIn("active_draft_exercises", table_names)
         self.assertIn("active_draft_sets", table_names)
 
-    def test_replace_and_get_active_draft_round_trips_current_shape(self) -> None:
+    def test_targeted_mutations_round_trip_current_shape(self) -> None:
         draft = self.draft()
 
-        replace_active_draft(draft)
+        create_active_draft(draft["started_at"])
+        update_active_draft_metadata(6, 2)
+        self.assertIsNotNone(
+            insert_draft_exercise(draft["workout_exercises"][0]["exercise_id"])
+        )
+        self.assertIsNotNone(
+            insert_draft_set(
+                draft["workout_exercises"][0]["id"],
+                weight=100.0,
+                reps=5,
+                created_at="2026-06-01T10:05:00",
+            )
+        )
         loaded = get_active_draft()
 
         self.assertEqual(loaded, draft)
 
     def test_clear_active_draft_removes_child_rows(self) -> None:
-        replace_active_draft(self.draft())
+        draft = self.draft()
+        create_active_draft(draft["started_at"])
+        insert_draft_exercise(draft["workout_exercises"][0]["exercise_id"])
+        insert_draft_set(
+            draft["workout_exercises"][0]["id"],
+            weight=100.0,
+            reps=5,
+            created_at="2026-06-01T10:05:00",
+        )
 
         clear_active_draft()
 
@@ -108,7 +131,15 @@ class DraftRepositoryTests(unittest.TestCase):
         self.assertEqual(counts, {"draft": 0, "exercises": 0, "sets": 0})
 
     def test_reset_database_data_clears_active_draft(self) -> None:
-        replace_active_draft(self.draft())
+        draft = self.draft()
+        create_active_draft(draft["started_at"])
+        insert_draft_exercise(draft["workout_exercises"][0]["exercise_id"])
+        insert_draft_set(
+            draft["workout_exercises"][0]["id"],
+            weight=100.0,
+            reps=5,
+            created_at="2026-06-01T10:05:00",
+        )
 
         reset_database_data()
 

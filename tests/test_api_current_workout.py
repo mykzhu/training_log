@@ -32,13 +32,11 @@ class CurrentWorkoutApiTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.original_db_path = config.DB_PATH
-        self.original_active_draft = draft_service.ACTIVE_WORKOUT_DRAFT
         config.DB_PATH = Path(self.temp_dir.name) / "training.db"
         init_db()
         draft_service.clear_active_workout_draft()
 
     def tearDown(self) -> None:
-        draft_service.ACTIVE_WORKOUT_DRAFT = self.original_active_draft
         config.DB_PATH = self.original_db_path
         self.temp_dir.cleanup()
 
@@ -155,6 +153,27 @@ class CurrentWorkoutApiTests(unittest.TestCase):
 
         self.assertTrue(response["active"])
         self.assertEqual(response["exercises"][0]["exercise_name"], "Deadlift")
+
+    def test_profile_update_refreshes_current_workout_metrics(self) -> None:
+        deadlift_id = self.exercise_id("Deadlift")
+
+        start_current_workout()
+        add_current_workout_exercise(AddExerciseRequest(exercise_id=deadlift_id))
+        add_current_workout_set(1, AddSetRequest(weight=100.0, reps=5))
+
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE exercises SET profile_key = ? WHERE id = ?",
+                ("accessory", deadlift_id),
+            )
+
+        response = get_current_workout()
+
+        self.assertEqual(response["exercises"][0]["profile_key"], "accessory")
+        self.assertEqual(
+            response["load_metrics"]["exercise_breakdown"][0]["category"],
+            "accessory",
+        )
 
     def test_finish_current_workout_persists_workout_and_clears_draft(self) -> None:
         deadlift_id = self.exercise_id("Deadlift")

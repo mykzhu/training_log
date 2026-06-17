@@ -2,6 +2,7 @@ import { jsonBody, requestJson } from "./client";
 import type {
   Exercise,
   ExerciseCreatePayload,
+  ExerciseProfile,
   ExerciseUpdatePayload,
 } from "./types";
 
@@ -56,4 +57,8 @@ export function reorderExercises(exerciseIds: number[]) {
     method: "PUT",
     body: jsonBody({ exercise_ids: exerciseIds }),
   });
+}
+
+export function getExerciseProfiles() {
+  return requestJson<{ profiles: ExerciseProfile[] }>("/api/v1/exercise-profiles");
 }

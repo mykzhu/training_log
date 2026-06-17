@@ -553,9 +553,16 @@ label {
 .settings-add,
 .settings-row {
   display: grid;
-  grid-template-columns: 1fr auto;
   gap: 8px;
   align-items: end;
+}
+
+.settings-add {
+  grid-template-columns: minmax(150px, 1fr) minmax(140px, 0.7fr) minmax(110px, 0.45fr) auto;
+}
+
+.settings-row {
+  grid-template-columns: minmax(150px, 1fr) minmax(140px, 0.7fr) auto;
 }
 
 .settings-list {

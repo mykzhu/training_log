@@ -59,6 +59,20 @@ DEFAULT_LOAD_PROFILE = {
     "compound_factor": 0.5,
     "back_factor": 0.3,
 }
+LOAD_PROFILES_BY_KEY["accessory"] = DEFAULT_LOAD_PROFILE
+
+PROFILE_LABELS_BY_KEY = {
+    "deadlift": "Deadlift",
+    "goblet_squat": "Goblet squat",
+    "db_bench_press": "DB bench press",
+    "db_row": "DB row",
+    "ez_curl": "EZ curl",
+    "triceps_extension": "Triceps extension",
+    "lateral_raise": "Lateral raise",
+    "crunches": "Crunches",
+    "accessory": "Accessory",
+}
+SUPPORTED_PROFILE_KEYS = tuple(PROFILE_LABELS_BY_KEY)
 
 EXERCISE_PROFILE_KEYS_BY_NAME = {
     "deadlift": "deadlift",
@@ -85,6 +99,21 @@ def profile_key_for_exercise_name(exercise_name: str) -> str:
             return profile_key
 
     return "accessory"
+
+
+def is_supported_profile_key(profile_key: str) -> bool:
+    return profile_key in SUPPORTED_PROFILE_KEYS
+
+
+def list_exercise_profiles() -> list[dict[str, str]]:
+    return [
+        {
+            "key": key,
+            "label": PROFILE_LABELS_BY_KEY[key],
+            "category": str(LOAD_PROFILES_BY_KEY[key]["category"]),
+        }
+        for key in SUPPORTED_PROFILE_KEYS
+    ]
 
 
 def get_exercise_load_profile(
