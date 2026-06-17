@@ -2,8 +2,11 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from app.db import get_db
-from app.repositories.workouts import get_workout_details
-from app.services.stats_service import calculate_workout_load_metrics
+from app.repositories.workouts import get_workout_details_batch
+from app.services.stats_service import (
+    build_e1rm_baselines_by_workout,
+    calculate_workout_load_metrics,
+)
 
 
 NON_EMPTY_WORKOUT_EXISTS_SQL = """
@@ -133,7 +136,19 @@ def get_non_empty_workouts_between(
 def summarize_workouts(
     workouts: list[Any],
     window_days: int,
+    *,
+    details_by_workout: dict[int, list[dict[str, Any]]] | None = None,
+    e1rm_baselines_by_workout: dict[int, dict[int, float]] | None = None,
 ) -> dict[str, Any]:
+    workout_ids = [int(workout["id"]) for workout in workouts]
+    if details_by_workout is None:
+        details_by_workout = get_workout_details_batch(workout_ids)
+    if e1rm_baselines_by_workout is None:
+        e1rm_baselines_by_workout = build_e1rm_baselines_by_workout(
+            workouts=workouts,
+            details_by_workout=details_by_workout,
+        )
+
     total_load_score = 0.0
     total_compound_score = 0.0
     total_back_stress_score = 0.0
@@ -142,13 +157,17 @@ def summarize_workouts(
 
     for workout in workouts:
         workout_id = int(workout["id"])
-        details = get_workout_details(workout_id)
+        details = details_by_workout.get(workout_id, [])
 
         load_metrics = calculate_workout_load_metrics(
             workout_exercises=details,
             session_rpe=workout["session_rpe"],
             as_of_created_at=workout["created_at"],
             as_of_workout_id=workout_id,
+            best_e1rm_by_exercise=e1rm_baselines_by_workout.get(
+                workout_id,
+                {},
+            ),
         )
 
         total_load_score += float(load_metrics["load_score"])
@@ -256,25 +275,49 @@ def build_recovery_context(
     baseline_start = as_of_dt - timedelta(days=28)
     long_start = as_of_dt - timedelta(days=42)
 
-    last_7d_workouts = get_non_empty_workouts_between(
-        acute_start,
-        as_of_dt,
-        exclude_workout_id=exclude_workout_id,
-    )
-    previous_21d_workouts = get_non_empty_workouts_between(
-        baseline_start,
-        acute_start,
-        exclude_workout_id=exclude_workout_id,
-    )
     last_42d_workouts = get_non_empty_workouts_between(
         long_start,
         as_of_dt,
         exclude_workout_id=exclude_workout_id,
     )
 
-    last_7d = summarize_workouts(last_7d_workouts, 7)
-    previous_21d = summarize_workouts(previous_21d_workouts, 21)
-    last_42d = summarize_workouts(last_42d_workouts, 42)
+    last_7d_workouts = []
+    previous_21d_workouts = []
+    for workout in last_42d_workouts:
+        workout_dt = parse_iso_datetime(str(workout["created_at"]))
+        if workout_dt is None:
+            continue
+
+        if acute_start <= workout_dt < as_of_dt:
+            last_7d_workouts.append(workout)
+        elif baseline_start <= workout_dt < acute_start:
+            previous_21d_workouts.append(workout)
+
+    workout_ids = [int(workout["id"]) for workout in last_42d_workouts]
+    details_by_workout = get_workout_details_batch(workout_ids)
+    e1rm_baselines_by_workout = build_e1rm_baselines_by_workout(
+        workouts=last_42d_workouts,
+        details_by_workout=details_by_workout,
+    )
+
+    last_7d = summarize_workouts(
+        last_7d_workouts,
+        7,
+        details_by_workout=details_by_workout,
+        e1rm_baselines_by_workout=e1rm_baselines_by_workout,
+    )
+    previous_21d = summarize_workouts(
+        previous_21d_workouts,
+        21,
+        details_by_workout=details_by_workout,
+        e1rm_baselines_by_workout=e1rm_baselines_by_workout,
+    )
+    last_42d = summarize_workouts(
+        last_42d_workouts,
+        42,
+        details_by_workout=details_by_workout,
+        e1rm_baselines_by_workout=e1rm_baselines_by_workout,
+    )
 
     acute_to_baseline = safe_ratio(
         float(last_7d["weekly_load_equivalent"]),

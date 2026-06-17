@@ -389,11 +389,111 @@ def delete_set_entry(set_id: int) -> dict[str, Any] | None:
     return current_set
 
 
-def get_workout_details(workout_id: int) -> list[dict[str, Any]]:
+def sql_placeholders(values: list[int]) -> str:
+    return ", ".join("?" for _ in values)
+
+
+def row_is_before_workout(
+    row: sqlite3.Row,
+    *,
+    workout_id: int,
+    created_at: str,
+) -> bool:
+    row_created_at = str(row["created_at"])
+    row_workout_id = int(row["workout_id"])
+
+    return row_created_at < created_at or (
+        row_created_at == created_at and row_workout_id < workout_id
+    )
+
+
+def get_previous_sets_for_empty_items(
+    conn: sqlite3.Connection,
+    empty_items: list[dict[str, Any]],
+    workout_created_at_by_id: dict[int, str],
+) -> dict[int, sqlite3.Row]:
+    exercise_ids = sorted({int(item["exercise_id"]) for item in empty_items})
+    if not exercise_ids:
+        return {}
+
+    placeholders = sql_placeholders(exercise_ids)
+    rows = conn.execute(
+        f"""
+        SELECT
+            we.exercise_id,
+            w.id AS workout_id,
+            w.created_at,
+            se.weight,
+            se.reps
+        FROM set_entries se
+        JOIN workout_exercises we ON we.id = se.workout_exercise_id
+        JOIN workouts w ON w.id = we.workout_id
+        WHERE we.exercise_id IN ({placeholders})
+        ORDER BY
+            we.exercise_id ASC,
+            w.created_at DESC,
+            w.id DESC,
+            se.set_number DESC,
+            se.id DESC
+        """,
+        exercise_ids,
+    ).fetchall()
+
+    rows_by_exercise: dict[int, list[sqlite3.Row]] = {}
+    for row in rows:
+        rows_by_exercise.setdefault(int(row["exercise_id"]), []).append(row)
+
+    previous_by_item: dict[int, sqlite3.Row] = {}
+    for item in empty_items:
+        workout_exercise_id = int(item["workout_exercise_id"])
+        workout_id = int(item["workout_id"])
+        created_at = workout_created_at_by_id.get(workout_id)
+        if created_at is None:
+            continue
+
+        for row in rows_by_exercise.get(int(item["exercise_id"]), []):
+            if row_is_before_workout(
+                row,
+                workout_id=workout_id,
+                created_at=created_at,
+            ):
+                previous_by_item[workout_exercise_id] = row
+                break
+
+    return previous_by_item
+
+
+def get_workout_details_batch(
+    workout_ids: list[int],
+) -> dict[int, list[dict[str, Any]]]:
+    unique_workout_ids = sorted({int(workout_id) for workout_id in workout_ids})
+    if not unique_workout_ids:
+        return {}
+
+    placeholders = sql_placeholders(unique_workout_ids)
+    details_by_workout: dict[int, list[dict[str, Any]]] = {
+        workout_id: []
+        for workout_id in unique_workout_ids
+    }
+
     with get_db() as conn:
+        workout_rows = conn.execute(
+            f"""
+            SELECT id, created_at
+            FROM workouts
+            WHERE id IN ({placeholders})
+            """,
+            unique_workout_ids,
+        ).fetchall()
+        workout_created_at_by_id = {
+            int(row["id"]): str(row["created_at"])
+            for row in workout_rows
+        }
+
         exercise_rows = conn.execute(
-            """
+            f"""
             SELECT
+                we.workout_id,
                 we.id AS workout_exercise_id,
                 we.position,
                 e.id AS exercise_id,
@@ -401,24 +501,43 @@ def get_workout_details(workout_id: int) -> list[dict[str, Any]]:
                 e.profile_key
             FROM workout_exercises we
             JOIN exercises e ON e.id = we.exercise_id
-            WHERE we.workout_id = ?
-            ORDER BY we.position ASC, we.id ASC
+            WHERE we.workout_id IN ({placeholders})
+            ORDER BY we.workout_id ASC, we.position ASC, we.id ASC
             """,
-            (workout_id,),
+            unique_workout_ids,
         ).fetchall()
 
-        result: list[dict[str, Any]] = []
-
-        for row in exercise_rows:
-            sets = conn.execute(
-                """
+        workout_exercise_ids = [
+            int(row["workout_exercise_id"])
+            for row in exercise_rows
+        ]
+        sets_by_workout_exercise: dict[int, list[sqlite3.Row]] = {
+            workout_exercise_id: []
+            for workout_exercise_id in workout_exercise_ids
+        }
+        if workout_exercise_ids:
+            set_placeholders = sql_placeholders(workout_exercise_ids)
+            set_rows = conn.execute(
+                f"""
                 SELECT *
                 FROM set_entries
-                WHERE workout_exercise_id = ?
-                ORDER BY set_number ASC, id ASC
+                WHERE workout_exercise_id IN ({set_placeholders})
+                ORDER BY workout_exercise_id ASC, set_number ASC, id ASC
                 """,
-                (row["workout_exercise_id"],),
+                workout_exercise_ids,
             ).fetchall()
+
+            for set_row in set_rows:
+                sets_by_workout_exercise.setdefault(
+                    int(set_row["workout_exercise_id"]),
+                    [],
+                ).append(set_row)
+
+        empty_items: list[dict[str, Any]] = []
+        for row in exercise_rows:
+            workout_id = int(row["workout_id"])
+            workout_exercise_id = int(row["workout_exercise_id"])
+            sets = sets_by_workout_exercise.get(workout_exercise_id, [])
 
             total_volume = sum(float(s["weight"]) * int(s["reps"]) for s in sets)
             total_reps = sum(int(s["reps"]) for s in sets)
@@ -428,40 +547,54 @@ def get_workout_details(workout_id: int) -> list[dict[str, Any]]:
                 default_weight = float(last_set["weight"])
                 default_reps = int(last_set["reps"])
             else:
-                previous_set = get_previous_set_for_exercise(
-                    exercise_id=row["exercise_id"],
-                    current_workout_id=workout_id,
-                )
+                default_weight = 0.0
+                default_reps = 10
 
-                if previous_set:
-                    default_weight = float(previous_set["weight"])
-                    default_reps = int(previous_set["reps"])
-                else:
-                    default_weight = 0.0
-                    default_reps = 10
+            item = {
+                "workout_id": workout_id,
+                "workout_exercise_id": workout_exercise_id,
+                "exercise_id": int(row["exercise_id"]),
+                "exercise_name": row["exercise_name"],
+                "profile_key": row["profile_key"] or "accessory",
+                "position": int(row["position"]),
+                "sets": sets,
+                "total_volume": total_volume,
+                "total_reps": total_reps,
+                "default_weight": default_weight,
+                "default_reps": default_reps,
+            }
+            details_by_workout.setdefault(workout_id, []).append(item)
+            if not sets:
+                empty_items.append(item)
 
-            result.append(
-                {
-                    "workout_exercise_id": row["workout_exercise_id"],
-                    "exercise_id": row["exercise_id"],
-                    "exercise_name": row["exercise_name"],
-                    "profile_key": row["profile_key"] or "accessory",
-                    "position": row["position"],
-                    "sets": sets,
-                    "total_volume": total_volume,
-                    "total_reps": total_reps,
-                    "default_weight": default_weight,
-                    "default_reps": default_reps,
-                }
-            )
-
-        weights_by_exercise = get_weight_options_by_exercise_ids(
-            [int(item["exercise_id"]) for item in result]
+        previous_sets = get_previous_sets_for_empty_items(
+            conn,
+            empty_items,
+            workout_created_at_by_id,
         )
-        for item in result:
-            item["configured_weights"] = weights_by_exercise.get(
-                int(item["exercise_id"]),
-                [],
-            )
+        for item in empty_items:
+            previous_set = previous_sets.get(int(item["workout_exercise_id"]))
+            if previous_set:
+                item["default_weight"] = float(previous_set["weight"])
+                item["default_reps"] = int(previous_set["reps"])
 
-        return result
+    all_details = [
+        item
+        for details in details_by_workout.values()
+        for item in details
+    ]
+    weights_by_exercise = get_weight_options_by_exercise_ids(
+        [int(item["exercise_id"]) for item in all_details]
+    )
+    for item in all_details:
+        item["configured_weights"] = weights_by_exercise.get(
+            int(item["exercise_id"]),
+            [],
+        )
+        item.pop("workout_id", None)
+
+    return details_by_workout
+
+
+def get_workout_details(workout_id: int) -> list[dict[str, Any]]:
+    return get_workout_details_batch([workout_id]).get(workout_id, [])
