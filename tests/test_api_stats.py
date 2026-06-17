@@ -473,5 +473,72 @@ class StatsApiTests(unittest.TestCase):
         self.assertEqual(point["rolling_best"], 120.0)
         self.assertFalse(point["is_pr"])
 
+    def test_stats_includes_zero_filled_weekly_workload(
+        self,
+    ) -> None:
+        self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [
+                        {"weight": 100, "reps": 5},
+                        {"weight": 90, "reps": 8},
+                    ],
+                },
+            ],
+        )
+
+        self.insert_workout(
+            created_at="2026-06-15T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [
+                        {"weight": 110, "reps": 5},
+                    ],
+                },
+            ],
+        )
+
+        response = get_stats(limit="all")
+
+        workload = next(
+            item
+            for item in response["stats"][
+                "exercise_weekly_workload"
+            ]
+            if item["name"] == "Deadlift"
+        )
+
+        self.assertEqual(
+            [
+                week["week_start"]
+                for week in workload["weeks"]
+            ],
+            [
+                "2026-06-01",
+                "2026-06-08",
+                "2026-06-15",
+            ],
+        )
+
+        first, empty, third = workload["weeks"]
+
+        self.assertEqual(first["sets"], 2)
+        self.assertEqual(first["reps"], 13)
+        self.assertEqual(first["volume"], 1220.0)
+        self.assertEqual(first["workouts"], 1)
+
+        self.assertEqual(empty["sets"], 0)
+        self.assertEqual(empty["reps"], 0)
+        self.assertEqual(empty["volume"], 0.0)
+        self.assertEqual(empty["workouts"], 0)
+
+        self.assertEqual(third["sets"], 1)
+        self.assertEqual(third["reps"], 5)
+        self.assertEqual(third["volume"], 550.0)
+        self.assertEqual(third["workouts"], 1)
+
 if __name__ == "__main__":
     unittest.main()

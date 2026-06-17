@@ -289,6 +289,20 @@ export type StatsCharts = {
   sparkbars: StatsSparkbars;
 };
 
+export type ExerciseWeeklyWorkloadPoint = {
+  week_start: string;
+  sets: number;
+  reps: number;
+  volume: number;
+  workouts: number;
+};
+
+export type ExerciseWeeklyWorkload = {
+  exercise_id: number;
+  name: string;
+  weeks: ExerciseWeeklyWorkloadPoint[];
+};
+
 export type StatsResponse = {
   limit: number | "all";
   stats: {
@@ -297,6 +311,7 @@ export type StatsResponse = {
     exercise_stats: ExerciseStats[];
     exercise_progress: ExerciseStrengthProgress[];
     exercise_rep_progress: ExerciseRepProgress[];
+    exercise_weekly_workload: ExerciseWeeklyWorkload[];
   };
   charts: StatsCharts;
 };

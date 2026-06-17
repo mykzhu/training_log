@@ -135,6 +135,34 @@ def workout_id(workout: Any) -> int:
 def workout_sort_key(workout: Any) -> tuple[str, int]:
     return (workout_created_at(workout), workout_id(workout))
 
+def workout_week_start(created_at: str) -> str:
+    workout_day = date.fromisoformat(created_at[:10])
+    monday = workout_day - timedelta(days=workout_day.weekday())
+    return monday.isoformat()
+
+def build_selected_week_starts(
+    workouts: list[Any],
+) -> list[str]:
+    if not workouts:
+        return []
+
+    first_day = date.fromisoformat(
+        workout_created_at(workouts[0])[:10]
+    )
+    last_day = date.fromisoformat(
+        workout_created_at(workouts[-1])[:10]
+    )
+
+    current = first_day - timedelta(days=first_day.weekday())
+    final = last_day - timedelta(days=last_day.weekday())
+
+    weeks: list[str] = []
+
+    while current <= final:
+        weeks.append(current.isoformat())
+        current += timedelta(days=7)
+
+    return weeks
 
 def row_is_before_workout(row: Any, workout: Any) -> bool:
     row_created_at = str(row["created_at"])
@@ -912,10 +940,15 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
         details_by_workout=details_by_workout,
     )
 
+    selected_week_starts = build_selected_week_starts(
+        list(workouts)
+    )
+
     workout_items = []
     exercise_stats: dict[int, dict[str, Any]] = {}
     exercise_progress: dict[int, dict[str, Any]] = {}
     exercise_rep_progress: dict[int, dict[str, Any]] = {}
+    exercise_weekly_workload: dict[int, dict[str, Any]] = {}
 
     for workout in workouts:
         current_workout_id = int(workout["id"])
@@ -981,6 +1014,34 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
             stats["total_volume"] += item["total_volume"]
             stats["total_reps"] += item["total_reps"]
             stats["total_sets"] += len(item["sets"])
+
+            week_start = workout_week_start(
+                str(workout["created_at"])
+            )
+
+            weekly_exercise = exercise_weekly_workload.setdefault(
+                exercise_id,
+                {
+                    "exercise_id": exercise_id,
+                    "name": exercise_name,
+                    "weeks": {},
+                },
+            )
+
+            week_bucket = weekly_exercise["weeks"].setdefault(
+                week_start,
+                {
+                    "sets": 0,
+                    "reps": 0,
+                    "volume": 0.0,
+                    "workout_ids": set(),
+                },
+            )
+
+            week_bucket["sets"] += len(item["sets"])
+            week_bucket["reps"] += int(item["total_reps"])
+            week_bucket["volume"] += float(item["total_volume"])
+            week_bucket["workout_ids"].add(current_workout_id)
 
             for set_row in item["sets"]:
                 weight = float(set_row["weight"])
@@ -1148,6 +1209,53 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
         reverse=True,
     )
 
+    sorted_exercise_weekly_workload = []
+
+    for exercise in sorted_exercise_stats:
+        exercise_id = int(exercise["exercise_id"])
+
+        weekly_exercise = exercise_weekly_workload.get(
+            exercise_id
+        )
+
+        if weekly_exercise is None:
+            continue
+
+        weeks = []
+
+        for week_start in selected_week_starts:
+            bucket = weekly_exercise["weeks"].get(week_start)
+
+            if bucket is None:
+                weeks.append(
+                    {
+                        "week_start": week_start,
+                        "sets": 0,
+                        "reps": 0,
+                        "volume": 0.0,
+                        "workouts": 0,
+                    }
+                )
+                continue
+
+            weeks.append(
+                {
+                    "week_start": week_start,
+                    "sets": int(bucket["sets"]),
+                    "reps": int(bucket["reps"]),
+                    "volume": float(bucket["volume"]),
+                    "workouts": len(bucket["workout_ids"]),
+                }
+            )
+
+        sorted_exercise_weekly_workload.append(
+            {
+                "exercise_id": exercise_id,
+                "name": weekly_exercise["name"],
+                "weeks": weeks,
+            }
+        )
+
     sorted_exercise_progress = [
         exercise_progress[item["exercise_id"]]
         for item in sorted_exercise_stats
@@ -1179,6 +1287,9 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
         "exercise_stats": sorted_exercise_stats,
         "exercise_progress": sorted_exercise_progress,
         "exercise_rep_progress": sorted_exercise_rep_progress,
+        "exercise_weekly_workload": (
+            sorted_exercise_weekly_workload
+        ),
         "summary": {
             "workout_count": len(workout_items),
             "total_volume": total_volume,

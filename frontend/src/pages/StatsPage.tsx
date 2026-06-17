@@ -25,6 +25,8 @@ import type {
   ExerciseRepWeightPoint,
   ExerciseStats,
   ExerciseStrengthPoint,
+  ExerciseWeeklyWorkload,
+  ExerciseWeeklyWorkloadPoint,
   StatsResponse,
   StatsWorkout,
 } from "../api/types";
@@ -40,6 +42,53 @@ const chartColors = {
   card: "#171717",
   text: "#f2f2f2",
 };
+
+type WeeklyWorkloadMetric = "sets" | "reps" | "volume";
+
+type WeeklyWorkloadChartPoint =
+  ExerciseWeeklyWorkloadPoint & {
+    weekLabel: string;
+  };
+
+function formatWeekLabel(weekStart: string) {
+  const [year, month, day] = weekStart
+    .split("-")
+    .map(Number);
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+  }).format(new Date(year, month - 1, day));
+}
+
+function weeklyMetricLabel(
+  metric: WeeklyWorkloadMetric,
+) {
+  if (metric === "sets") {
+    return "Working sets";
+  }
+
+  if (metric === "reps") {
+    return "Repetitions";
+  }
+
+  return "Volume";
+}
+
+function formatWeeklyMetric(
+  value: number | null | undefined,
+  metric: WeeklyWorkloadMetric,
+) {
+  if (value === null || value === undefined) {
+    return "—";
+  }
+
+  if (metric === "volume") {
+    return `${formatNumber(value, 0)} kg`;
+  }
+
+  return formatNumber(value, 0);
+}
 
 type LoadCalendarDay = {
   date: string;
@@ -333,6 +382,61 @@ function ChartCard({
   );
 }
 
+type WeeklyWorkloadTooltipProps = {
+  active?: boolean;
+  metric: WeeklyWorkloadMetric;
+  payload?: Array<{
+    payload?: WeeklyWorkloadChartPoint;
+  }>;
+};
+
+function WeeklyWorkloadTooltip({
+  active,
+  metric,
+  payload,
+}: WeeklyWorkloadTooltipProps) {
+  const point = payload?.[0]?.payload;
+
+  if (!active || !point) {
+    return null;
+  }
+
+  return (
+    <div className="strength-progress-tooltip">
+      <strong>
+        Week of {formatWeekLabel(point.week_start)}
+      </strong>
+
+      <div>
+        <span>{weeklyMetricLabel(metric)}</span>
+        <b>
+          {formatWeeklyMetric(point[metric], metric)}
+        </b>
+      </div>
+
+      <div>
+        <span>Workouts</span>
+        <b>{point.workouts}</b>
+      </div>
+
+      <div>
+        <span>Sets</span>
+        <b>{point.sets}</b>
+      </div>
+
+      <div>
+        <span>Reps</span>
+        <b>{point.reps}</b>
+      </div>
+
+      <div>
+        <span>Volume</span>
+        <b>{formatNumber(point.volume, 0)} kg</b>
+      </div>
+    </div>
+  );
+}
+
 type StrengthTooltipProps = {
   active?: boolean;
   payload?: Array<{
@@ -514,6 +618,16 @@ export default function StatsPage() {
   const [selectedRepTarget, setSelectedRepTarget] =
     useState<number | null>(null);
 
+  const [
+    selectedWorkloadExerciseId,
+    setSelectedWorkloadExerciseId,
+  ] = useState<number | null>(null);
+
+  const [
+    weeklyWorkloadMetric,
+    setWeeklyWorkloadMetric,
+  ] = useState<WeeklyWorkloadMetric>("sets");
+
   useEffect(() => {
     function syncLimitFromUrl() {
       setStatsLimit(readStatsLimitFromUrl());
@@ -662,6 +776,95 @@ export default function StatsPage() {
         )
         .sort((a, b) => b.best_e1rm - a.best_e1rm),
     [stats],
+  );
+
+  const exerciseWeeklyWorkload =
+    useMemo<ExerciseWeeklyWorkload[]>(
+      () =>
+        stats?.stats.exercise_weekly_workload ?? [],
+      [stats],
+    );
+
+  useEffect(() => {
+    if (exerciseWeeklyWorkload.length === 0) {
+      setSelectedWorkloadExerciseId(null);
+      return;
+    }
+
+    setSelectedWorkloadExerciseId((current) => {
+      const currentStillExists =
+        exerciseWeeklyWorkload.some(
+          (exercise) =>
+            exercise.exercise_id === current,
+        );
+
+      return currentStillExists
+        ? current
+        : exerciseWeeklyWorkload[0].exercise_id;
+    });
+  }, [exerciseWeeklyWorkload]);
+
+  const selectedWeeklyWorkload = useMemo(
+    () =>
+      exerciseWeeklyWorkload.find(
+        (exercise) =>
+          exercise.exercise_id ===
+          selectedWorkloadExerciseId,
+      ) ??
+      exerciseWeeklyWorkload[0] ??
+      null,
+    [
+      exerciseWeeklyWorkload,
+      selectedWorkloadExerciseId,
+    ],
+  );
+
+  const weeklyWorkloadData =
+    useMemo<WeeklyWorkloadChartPoint[]>(
+      () =>
+        (selectedWeeklyWorkload?.weeks ?? []).map(
+          (week) => ({
+            ...week,
+            weekLabel: formatWeekLabel(
+              week.week_start,
+            ),
+          }),
+        ),
+      [selectedWeeklyWorkload],
+    );
+
+  const activeWorkloadWeeks = weeklyWorkloadData.filter(
+    (week) => week.workouts > 0,
+  );
+
+  const totalWeeklyMetric =
+    weeklyWorkloadData.reduce(
+      (total, week) =>
+        total + week[weeklyWorkloadMetric],
+      0,
+    );
+
+  const averageActiveWeek =
+    activeWorkloadWeeks.length > 0
+      ? totalWeeklyMetric /
+        activeWorkloadWeeks.length
+      : null;
+
+  const latestWorkloadWeek =
+    weeklyWorkloadData[
+      weeklyWorkloadData.length - 1
+    ] ?? null;
+
+  const weeklyBarColor =
+    weeklyWorkloadMetric === "sets"
+      ? chartColors.blue
+      : weeklyWorkloadMetric === "reps"
+        ? chartColors.green
+        : chartColors.orange;
+
+  const weeklyChartWidth = Math.max(
+    680,
+    weeklyWorkloadData.length * 54,
   );
 
   const exerciseProgress = useMemo(
@@ -2231,6 +2434,227 @@ export default function StatsPage() {
               ) : (
                 <div className="empty">
                   No fixed-repetition weight history for this exercise.
+                </div>
+              )}
+            </ChartCard>
+
+            <ChartCard
+              wide
+              actions={
+                selectedWeeklyWorkload ? (
+                  <div className="chart-filter-row">
+                    <label className="chart-exercise-select">
+                      <span>Exercise</span>
+
+                      <select
+                        onChange={(event) =>
+                          setSelectedWorkloadExerciseId(
+                            Number(event.target.value),
+                          )
+                        }
+                        value={
+                          selectedWorkloadExerciseId ??
+                          selectedWeeklyWorkload.exercise_id
+                        }
+                      >
+                        {exerciseWeeklyWorkload.map(
+                          (exercise) => (
+                            <option
+                              key={exercise.exercise_id}
+                              value={exercise.exercise_id}
+                            >
+                              {exercise.name}
+                            </option>
+                          ),
+                        )}
+                      </select>
+                    </label>
+
+                    <div className="weekly-metric-select">
+                      <span>Metric</span>
+
+                      <div
+                        aria-label="Weekly workload metric"
+                        className="weekly-metric-buttons"
+                        role="group"
+                      >
+                        {(
+                          [
+                            ["sets", "Sets"],
+                            ["reps", "Reps"],
+                            ["volume", "Volume"],
+                          ] as Array<
+                            [WeeklyWorkloadMetric, string]
+                          >
+                        ).map(([metric, label]) => (
+                          <button
+                            aria-pressed={
+                              weeklyWorkloadMetric === metric
+                            }
+                            className={
+                              weeklyWorkloadMetric === metric
+                                ? "weekly-metric-button weekly-metric-button-active"
+                                : "weekly-metric-button"
+                            }
+                            key={metric}
+                            onClick={() =>
+                              setWeeklyWorkloadMetric(metric)
+                            }
+                            type="button"
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : null
+              }
+              subtitle="Weekly training exposure for one exercise"
+              title="Weekly exercise workload"
+            >
+              {selectedWeeklyWorkload &&
+              weeklyWorkloadData.length > 0 ? (
+                <>
+                  <div className="strength-progress-summary">
+                    <div>
+                      <strong>
+                        {formatWeeklyMetric(
+                          latestWorkloadWeek?.[
+                            weeklyWorkloadMetric
+                          ],
+                          weeklyWorkloadMetric,
+                        )}
+                      </strong>
+                      <span>latest calendar week</span>
+                    </div>
+
+                    <div>
+                      <strong>
+                        {formatWeeklyMetric(
+                          averageActiveWeek,
+                          weeklyWorkloadMetric,
+                        )}
+                      </strong>
+                      <span>average active week</span>
+                    </div>
+
+                    <div>
+                      <strong>
+                        {activeWorkloadWeeks.length}
+                      </strong>
+                      <span>
+                        weeks with this exercise
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="weekly-workload-chart-scroll">
+                    <div
+                      className="weekly-workload-chart"
+                      style={{ width: weeklyChartWidth }}
+                    >
+                      <ResponsiveContainer
+                        height={300}
+                        width="100%"
+                      >
+                        <BarChart
+                          data={weeklyWorkloadData}
+                          margin={{
+                            top: 18,
+                            right: 18,
+                            left: 0,
+                            bottom: 0,
+                          }}
+                        >
+                          <CartesianGrid
+                            stroke={chartColors.grid}
+                            strokeDasharray="3 3"
+                          />
+
+                          <XAxis
+                            dataKey="weekLabel"
+                            stroke={chartColors.muted}
+                            tick={{ fontSize: 12 }}
+                          />
+
+                          <YAxis
+                            allowDecimals={
+                              weeklyWorkloadMetric === "volume"
+                            }
+                            domain={[0, "auto"]}
+                            stroke={chartColors.muted}
+                            tick={{ fontSize: 12 }}
+                          />
+
+                          <Tooltip
+                            content={
+                              <WeeklyWorkloadTooltip
+                                metric={weeklyWorkloadMetric}
+                              />
+                            }
+                          />
+
+                          <Bar
+                            dataKey={weeklyWorkloadMetric}
+                            fill={weeklyBarColor}
+                            name={weeklyMetricLabel(
+                              weeklyWorkloadMetric,
+                            )}
+                            radius={[6, 6, 0, 0]}
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  <ChartInsight
+                    question="Am I training this exercise consistently enough to support progress?"
+                    explanation="Each bar represents one calendar week. Change the metric to compare working sets, repetitions, or total weight moved."
+                  >
+                    <div className="chart-insight-details">
+                      <span>
+                        Sets are usually the clearest default
+                        measure of weekly training exposure.
+                      </span>
+
+                      <span>
+                        Repetitions reveal changes in rep
+                        emphasis, but can rise when lighter
+                        training is used.
+                      </span>
+
+                      <span>
+                        Volume combines weight and repetitions,
+                        but can change substantially when the
+                        exercise or rep range changes.
+                      </span>
+
+                      <span>
+                        A zero week means the selected exercise
+                        was not performed. It is not missing
+                        data.
+                      </span>
+
+                      <span>
+                        Compare this chart with the strength
+                        trend above. Rising strength with stable
+                        workload is generally a stronger signal
+                        than volume rising by itself.
+                      </span>
+                    </div>
+
+                    <p className="chart-insight-footnote">
+                      Weekly workload describes training
+                      exposure, not recovery or muscle growth.
+                      Compare trends primarily within the same
+                      exercise and technique.
+                    </p>
+                  </ChartInsight>
+                </>
+              ) : (
+                <div className="empty">
+                  No weekly workload history for this exercise.
                 </div>
               )}
             </ChartCard>
