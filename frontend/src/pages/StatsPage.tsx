@@ -834,8 +834,8 @@ export default function StatsPage() {
 
             <ChartCard
               wide
-              subtitle="Average estimated intensity versus previous personal bests"
-              title="Relative intensity"
+              subtitle="Estimated set strength compared with previous exercise bests"
+              title="Strength vs prior best"
             >
               <ResponsiveContainer height={240} width="100%">
                 <LineChart
@@ -895,8 +895,8 @@ export default function StatsPage() {
                 </LineChart>
               </ResponsiveContainer>
               <ChartInsight
-                question="How close were working sets to previous strength levels?"
-                explanation="Relative intensity compares estimated set strength with the best historical e1RM available before that workout."
+                question="How close were the performed sets to previous strength levels?"
+                explanation="Each eligible set is compared with the previous best estimated 1RM for the same exercise, then averaged across the workout."
               >
                 <div className="chart-insight-scale">
                   <div>
@@ -924,43 +924,165 @@ export default function StatsPage() {
             </ChartCard>
 
             <ChartCard
-              subtitle="Load, compound contribution, and back stress"
+              wide
+              subtitle="Overall load, compound demand, and estimated back stress by workout"
               title="Session load"
             >
-              <ResponsiveContainer height={240} width="100%">
+              <ResponsiveContainer height={260} width="100%">
                 <LineChart
                   className="clickable-chart"
                   data={workoutData}
+                  margin={{ top: 12, right: 18, left: 0, bottom: 0 }}
                   onClick={openWorkoutFromChart}
                 >
-                  <CartesianGrid stroke={chartColors.grid} strokeDasharray="3 3" />
-                  <XAxis dataKey="date" stroke={chartColors.muted} tick={{ fontSize: 12 }} />
-                  <YAxis stroke={chartColors.muted} tick={{ fontSize: 12 }} />
+                  <CartesianGrid
+                    stroke={chartColors.grid}
+                    strokeDasharray="3 3"
+                  />
+
+                  <XAxis
+                    dataKey="date"
+                    stroke={chartColors.muted}
+                    tick={{ fontSize: 12 }}
+                  />
+
+                  <YAxis
+                    domain={[
+                      0,
+                      (dataMax: number) => Math.max(5, dataMax * 1.1),
+                    ]}
+                    stroke={chartColors.muted}
+                    tick={{ fontSize: 12 }}
+                  />
+
                   <Tooltip {...commonTooltipProps()} />
-                  <Legend wrapperStyle={{ color: chartColors.muted }} />
+
+                  <Legend
+                    formatter={(value) => {
+                      const labels: Record<string, string> = {
+                        load: "Overall load",
+                        compound: "Compound demand",
+                        backStress: "Back stress",
+                      };
+
+                      return labels[String(value)] ?? String(value);
+                    }}
+                    wrapperStyle={{ color: chartColors.muted }}
+                  />
+
                   <Line
+                    activeDot={{ r: 5 }}
                     dataKey="load"
-                    dot={false}
+                    dot={{ r: 3 }}
+                    name="Overall load"
                     stroke={chartColors.blue}
                     strokeWidth={2}
                     type="monotone"
                   />
+
                   <Line
+                    activeDot={{ r: 5 }}
                     dataKey="compound"
-                    dot={false}
+                    dot={{ r: 3 }}
+                    name="Compound demand"
                     stroke={chartColors.green}
                     strokeWidth={2}
                     type="monotone"
                   />
+
                   <Line
+                    activeDot={{ r: 5 }}
                     dataKey="backStress"
-                    dot={false}
+                    dot={{ r: 3 }}
+                    name="Back stress"
                     stroke={chartColors.orange}
                     strokeWidth={2}
                     type="monotone"
                   />
                 </LineChart>
               </ResponsiveContainer>
+
+              <ChartInsight
+                question="How demanding was the workout overall?"
+                explanation="The chart separates general training demand, compound-exercise contribution, and estimated lower-back stress."
+              >
+                <div className="chart-insight-metrics">
+                  <div>
+                    <strong>Overall load</strong>
+                    <span>
+                      Combines exercise difficulty, repetition range, relative intensity,
+                      number of working sets, and session RPE.
+                    </span>
+                  </div>
+
+                  <div>
+                    <strong>Compound demand</strong>
+                    <span>
+                      Shows how much of the workout came from larger compound movements
+                      such as deadlifts, squats, presses, and rows.
+                    </span>
+                  </div>
+
+                  <div>
+                    <strong>Back stress</strong>
+                    <span>
+                      Estimates lower-back demand using each exercise&apos;s configured
+                      back factor, repetition range, and relative intensity.
+                    </span>
+                  </div>
+                </div>
+
+                <div className="chart-insight-scale chart-insight-scale-four">
+                  <div>
+                    <strong>&lt;4</strong>
+                    <span>Light overall load</span>
+                  </div>
+
+                  <div>
+                    <strong>4–8</strong>
+                    <span>Medium overall load</span>
+                  </div>
+
+                  <div>
+                    <strong>8–14</strong>
+                    <span>Hard overall load</span>
+                  </div>
+
+                  <div>
+                    <strong>14+</strong>
+                    <span>Very hard overall load</span>
+                  </div>
+                </div>
+
+                <div className="chart-insight-details">
+                  <span>
+                    Rising overall load means recent sessions are becoming more demanding,
+                    but the other two lines help explain why.
+                  </span>
+
+                  <span>
+                    High compound demand with moderate back stress may indicate a demanding
+                    session that is not especially back-heavy.
+                  </span>
+
+                  <span>
+                    High back stress can occur even when total workout volume is moderate,
+                    especially when back-loaded exercises are performed near previous
+                    strength levels.
+                  </span>
+
+                  <span>
+                    Compare these scores mainly against your own workout history. They are
+                    personalized app scores, not standardized physical units.
+                  </span>
+                </div>
+
+                <p className="chart-insight-footnote">
+                  The Light, Medium, Hard, and Very hard ranges apply only to the blue
+                  Overall load line. Compound demand and Back stress are separate supporting
+                  scores and do not use the same category thresholds.
+                </p>
+              </ChartInsight>
             </ChartCard>
 
             <ChartCard
