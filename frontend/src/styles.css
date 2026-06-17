@@ -1918,3 +1918,182 @@ button.load-calendar-cell:focus-visible {
     text-align: left;
   }
 }
+
+.benchmark-picker {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 11px;
+  background: var(--card2);
+}
+
+.benchmark-picker-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.benchmark-picker-heading > div {
+  display: grid;
+  gap: 2px;
+}
+
+.benchmark-picker-heading strong {
+  font-size: 13px;
+}
+
+.benchmark-picker-heading span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.benchmark-picker-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.benchmark-picker-button {
+  min-height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 11px;
+  background: var(--card);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.benchmark-picker-button:hover:not(:disabled) {
+  border-color: rgba(10, 132, 255, 0.65);
+  color: var(--text);
+}
+
+.benchmark-picker-button-active {
+  border-color: rgba(10, 132, 255, 0.75);
+  background: rgba(10, 132, 255, 0.18);
+  color: var(--blue);
+}
+
+.benchmark-picker-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.benchmark-picker-button-active:disabled {
+  opacity: 1;
+}
+
+.benchmark-chart-scroll {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.benchmark-chart-inner {
+  width: 100%;
+  min-width: 0;
+  height: 340px;
+}
+
+.benchmark-results-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.benchmark-result {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+  background: var(--card2);
+}
+
+.benchmark-result > div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.benchmark-result > div strong {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.benchmark-result > b {
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.benchmark-result > span {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.benchmark-result-dot,
+.benchmark-tooltip-dot {
+  display: inline-block;
+  width: 9px;
+  min-width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.benchmark-progress-tooltip {
+  display: grid;
+  gap: 9px;
+  min-width: 230px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+  background: var(--card);
+  color: var(--text);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.benchmark-progress-tooltip > strong {
+  font-size: 13px;
+}
+
+.benchmark-tooltip-row {
+  display: grid;
+  grid-template-columns: 9px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.benchmark-tooltip-row > div {
+  display: grid;
+  gap: 2px;
+}
+
+.benchmark-tooltip-row b {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.benchmark-tooltip-row span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+@media (max-width: 520px) {
+  .benchmark-picker-heading {
+    display: grid;
+  }
+
+  .benchmark-results-grid {
+    grid-template-columns: 1fr;
+  }
+}

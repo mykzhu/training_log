@@ -43,6 +43,39 @@ const chartColors = {
   text: "#f2f2f2",
 };
 
+const benchmarkPalette = [
+  chartColors.blue,
+  chartColors.green,
+  chartColors.orange,
+  chartColors.purple,
+  chartColors.red,
+];
+
+type BenchmarkNormalizedPoint = {
+  date: string;
+  workoutId: number;
+  index: number;
+  e1rm: number;
+};
+
+type BenchmarkSeriesModel = {
+  exerciseId: number;
+  name: string;
+  color: string;
+  valueKey: string;
+  rawKey: string;
+  baselineE1rm: number;
+  latestIndex: number;
+  gain: number;
+  points: BenchmarkNormalizedPoint[];
+};
+
+type BenchmarkChartPoint = {
+  date: string;
+  chartKey: string;
+  [key: string]: string | number | null;
+};
+
 type StrengthWorkloadChartPoint = {
   id: number | null;
   week_start: string;
@@ -421,6 +454,82 @@ function ChartCard({
   );
 }
 
+type BenchmarkProgressTooltipProps = {
+  active?: boolean;
+  payload?: Array<{
+    payload?: BenchmarkChartPoint;
+  }>;
+  series: BenchmarkSeriesModel[];
+};
+
+function BenchmarkProgressTooltip({
+  active,
+  payload,
+  series,
+}: BenchmarkProgressTooltipProps) {
+  const point = payload?.find(
+    (item) => item.payload,
+  )?.payload;
+
+  if (!active || !point) {
+    return null;
+  }
+
+  const visibleSeries = series.filter(
+    (item) =>
+      typeof point[item.valueKey] === "number",
+  );
+
+  if (visibleSeries.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="benchmark-progress-tooltip">
+      <strong>{point.date}</strong>
+
+      {visibleSeries.map((item) => {
+        const normalizedValue = Number(
+          point[item.valueKey],
+        );
+
+        const e1rm = Number(
+          point[item.rawKey],
+        );
+
+        return (
+          <div
+            className="benchmark-tooltip-row"
+            key={item.exerciseId}
+          >
+            <span
+              aria-hidden="true"
+              className="benchmark-tooltip-dot"
+              style={{
+                background: item.color,
+              }}
+            />
+
+            <div>
+              <b>{item.name}</b>
+
+              <span>
+                {formatNumber(
+                  normalizedValue,
+                  1,
+                )}
+                %
+                {" · "}
+                {formatNumber(e1rm, 1)} kg e1RM
+              </span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 type WeeklyWorkloadTooltipProps = {
   active?: boolean;
   metric: WeeklyWorkloadMetric;
@@ -777,6 +886,11 @@ export default function StatsPage() {
     setComparisonWorkloadMetric,
   ] = useState<WeeklyWorkloadMetric>("sets");
 
+  const [
+    selectedBenchmarkExerciseIds,
+    setSelectedBenchmarkExerciseIds,
+  ] = useState<number[]>([]);
+
   useEffect(() => {
     function syncLimitFromUrl() {
       setStatsLimit(readStatsLimitFromUrl());
@@ -1020,6 +1134,44 @@ export default function StatsPage() {
     () => stats?.stats.exercise_progress ?? [],
     [stats],
   );
+
+  const benchmarkCandidates = useMemo(
+    () =>
+      exerciseProgress.filter(
+        (exercise) =>
+          exercise.points.length >= 2,
+      ),
+    [exerciseProgress],
+  );
+
+  useEffect(() => {
+    const validExerciseIds = new Set(
+      benchmarkCandidates.map(
+        (exercise) => exercise.exercise_id,
+      ),
+    );
+
+    setSelectedBenchmarkExerciseIds(
+      (current) => {
+        const retained = current
+          .filter((exerciseId) =>
+            validExerciseIds.has(exerciseId),
+          )
+          .slice(0, 5);
+
+        if (retained.length > 0) {
+          return retained;
+        }
+
+        return benchmarkCandidates
+          .slice(0, 3)
+          .map(
+            (exercise) =>
+              exercise.exercise_id,
+          );
+      },
+    );
+  }, [benchmarkCandidates]);
 
   useEffect(() => {
     if (exerciseProgress.length === 0) {
@@ -1511,6 +1663,273 @@ const strengthWorkloadData =
   const backPainLoggedCount = workouts.filter(
     (workout) => workout.lower_back_pain !== null,
   ).length;
+
+  function toggleBenchmarkExercise(
+    exerciseId: number,
+  ) {
+    setSelectedBenchmarkExerciseIds(
+      (current) => {
+        const isSelected =
+          current.includes(exerciseId);
+
+        if (isSelected) {
+          if (current.length === 1) {
+            return current;
+          }
+
+          return current.filter(
+            (selectedId) =>
+              selectedId !== exerciseId,
+          );
+        }
+
+        if (current.length >= 5) {
+          return current;
+        }
+
+        return [...current, exerciseId];
+      },
+    );
+  }
+
+  const benchmarkSeries =
+    useMemo<BenchmarkSeriesModel[]>(
+      () =>
+        selectedBenchmarkExerciseIds
+          .map((exerciseId, index) => {
+            const exercise =
+              benchmarkCandidates.find(
+                (candidate) =>
+                  candidate.exercise_id ===
+                  exerciseId,
+              );
+
+            if (!exercise) {
+              return null;
+            }
+
+            const sortedPoints = [
+              ...exercise.points,
+            ].sort(
+              (first, second) =>
+                first.date.localeCompare(
+                  second.date,
+                ) ||
+                first.workout_id -
+                  second.workout_id,
+            );
+
+            /*
+            * Normally an exercise has one point
+            * per date. If more than one workout
+            * exists on the same date, retain the
+            * highest e1RM for that date.
+            */
+            const bestPointByDate = new Map<
+              string,
+              ExerciseStrengthPoint
+            >();
+
+            for (const point of sortedPoints) {
+              const existing =
+                bestPointByDate.get(
+                  point.date,
+                );
+
+              if (
+                !existing ||
+                point.e1rm > existing.e1rm
+              ) {
+                bestPointByDate.set(
+                  point.date,
+                  point,
+                );
+              }
+            }
+
+            const uniquePoints = [
+              ...bestPointByDate.values(),
+            ].sort(
+              (first, second) =>
+                first.date.localeCompare(
+                  second.date,
+                ),
+            );
+
+            const baselineE1rm =
+              uniquePoints[0]?.e1rm;
+
+            if (
+              baselineE1rm === undefined ||
+              baselineE1rm <= 0
+            ) {
+              return null;
+            }
+
+            const points =
+              uniquePoints.map(
+                (point) => ({
+                  date: point.date,
+                  workoutId:
+                    point.workout_id,
+                  e1rm: point.e1rm,
+                  index:
+                    point.e1rm /
+                    baselineE1rm *
+                    100,
+                }),
+              );
+
+            const latestIndex =
+              points[
+                points.length - 1
+              ]?.index ?? 100;
+
+            return {
+              exerciseId:
+                exercise.exercise_id,
+              name: exercise.name,
+              color:
+                benchmarkPalette[
+                  index %
+                    benchmarkPalette.length
+                ],
+              valueKey:
+                `benchmark_${exercise.exercise_id}`,
+              rawKey:
+                `benchmark_raw_${exercise.exercise_id}`,
+              baselineE1rm,
+              latestIndex,
+              gain: latestIndex - 100,
+              points,
+            };
+          })
+          .filter(
+            (
+              series,
+            ): series is BenchmarkSeriesModel =>
+              series !== null,
+          ),
+      [
+        benchmarkCandidates,
+        selectedBenchmarkExerciseIds,
+      ],
+    );
+
+  const benchmarkChartData =
+    useMemo<BenchmarkChartPoint[]>(
+      () => {
+        const pointsByDate = new Map<
+          string,
+          BenchmarkChartPoint
+        >();
+
+        for (const series of benchmarkSeries) {
+          for (const point of series.points) {
+            const row =
+              pointsByDate.get(point.date) ??
+              {
+                date: point.date,
+                chartKey: point.date,
+              };
+
+            row[series.valueKey] =
+              point.index;
+
+            row[series.rawKey] =
+              point.e1rm;
+
+            pointsByDate.set(
+              point.date,
+              row,
+            );
+          }
+        }
+
+        return [...pointsByDate.values()].sort(
+          (first, second) =>
+            first.date.localeCompare(
+              second.date,
+            ),
+        );
+      },
+      [benchmarkSeries],
+    );
+
+  const benchmarkProgressDomain =
+    useMemo<[number, number]>(() => {
+      const values =
+        benchmarkSeries.flatMap(
+          (series) =>
+            series.points.map(
+              (point) => point.index,
+            ),
+        );
+
+      if (values.length === 0) {
+        return [90, 110];
+      }
+
+      const minimum = Math.min(
+        ...values,
+        100,
+      );
+
+      const maximum = Math.max(
+        ...values,
+        100,
+      );
+
+      const span = Math.max(
+        maximum - minimum,
+        10,
+      );
+
+      const padding = Math.max(
+        3,
+        span * 0.12,
+      );
+
+      return [
+        Math.max(
+          0,
+          Math.floor(minimum - padding),
+        ),
+        Math.ceil(maximum + padding),
+      ];
+    }, [benchmarkSeries]);
+
+  const averageBenchmarkIndex =
+    benchmarkSeries.length > 0
+      ? benchmarkSeries.reduce(
+          (total, series) =>
+            total + series.latestIndex,
+          0,
+        ) / benchmarkSeries.length
+      : null;
+
+  const strongestBenchmark =
+    benchmarkSeries.length > 0
+      ? benchmarkSeries.reduce(
+          (strongest, series) =>
+            series.gain > strongest.gain
+              ? series
+              : strongest,
+        )
+      : null;
+
+  const benchmarkChartWidth = Math.max(
+    680,
+    benchmarkChartData.length * 48,
+  );
+
+  const benchmarkNeedsScroll =
+    benchmarkChartData.length > 20;
+
+  const benchmarkChartMinWidth =
+    benchmarkNeedsScroll
+      ? benchmarkChartData.length * 48
+      : "100%";
 
   return (
     <section className="page-stack">
@@ -3442,6 +3861,369 @@ const strengthWorkloadData =
               ) : (
                 <div className="empty">
                   No matching strength and workload history.
+                </div>
+              )}
+            </ChartCard>
+
+            <ChartCard
+              wide
+              subtitle="Compare relative e1RM development across exercises with different absolute weights"
+              title="Normalized benchmark progress"
+            >
+              {benchmarkCandidates.length > 0 ? (
+                <>
+                  <section className="benchmark-picker">
+                    <div className="benchmark-picker-heading">
+                      <div>
+                        <strong>Benchmark lifts</strong>
+                        <span>
+                          Select up to five exercises
+                        </span>
+                      </div>
+
+                      <span>
+                        {
+                          selectedBenchmarkExerciseIds
+                            .length
+                        }
+                        /5 selected
+                      </span>
+                    </div>
+
+                    <div className="benchmark-picker-options">
+                      {benchmarkCandidates.map(
+                        (exercise) => {
+                          const isSelected =
+                            selectedBenchmarkExerciseIds.includes(
+                              exercise.exercise_id,
+                            );
+
+                          const maximumReached =
+                            selectedBenchmarkExerciseIds
+                              .length >= 5;
+
+                          const isOnlySelection =
+                            isSelected &&
+                            selectedBenchmarkExerciseIds
+                              .length === 1;
+
+                          return (
+                            <button
+                              aria-pressed={isSelected}
+                              className={
+                                isSelected
+                                  ? "benchmark-picker-button benchmark-picker-button-active"
+                                  : "benchmark-picker-button"
+                              }
+                              disabled={
+                                isOnlySelection ||
+                                (!isSelected &&
+                                  maximumReached)
+                              }
+                              key={
+                                exercise.exercise_id
+                              }
+                              onClick={() =>
+                                toggleBenchmarkExercise(
+                                  exercise.exercise_id,
+                                )
+                              }
+                              type="button"
+                            >
+                              {exercise.name}
+                            </button>
+                          );
+                        },
+                      )}
+                    </div>
+                  </section>
+
+                  {benchmarkSeries.length > 0 &&
+                  benchmarkChartData.length > 0 ? (
+                    <>
+                      <div className="strength-progress-summary">
+                        <div>
+                          <strong>
+                            {benchmarkSeries.length}
+                          </strong>
+                          <span>benchmark lifts</span>
+                        </div>
+
+                        <div>
+                          <strong>
+                            {averageBenchmarkIndex ===
+                            null
+                              ? "—"
+                              : `${formatNumber(
+                                  averageBenchmarkIndex,
+                                  1,
+                                )}%`}
+                          </strong>
+                          <span>
+                            average latest index
+                          </span>
+                        </div>
+
+                        <div>
+                          <strong>
+                            {strongestBenchmark
+                              ? `${
+                                  strongestBenchmark
+                                    .gain >= 0
+                                    ? "+"
+                                    : ""
+                                }${formatNumber(
+                                  strongestBenchmark.gain,
+                                  1,
+                                )}%`
+                              : "—"}
+                          </strong>
+
+                          <span>
+                            {strongestBenchmark
+                              ? `strongest relative gain · ${strongestBenchmark.name}`
+                              : "strongest relative gain"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="benchmark-chart-scroll">
+                        <div
+                          className="benchmark-chart-inner"
+                          style={{
+                            minWidth: benchmarkChartMinWidth,
+                          }}
+                        >
+                          <ResponsiveContainer
+                            height={340}
+                            width="100%"
+                          >
+                            <LineChart
+                              data={
+                                benchmarkChartData
+                              }
+                              margin={{
+                                top: 22,
+                                right: 22,
+                                left: 0,
+                                bottom: 0,
+                              }}
+                            >
+                              <CartesianGrid
+                                stroke={
+                                  chartColors.grid
+                                }
+                                strokeDasharray="3 3"
+                              />
+
+                              <XAxis
+                                dataKey="chartKey"
+                                minTickGap={24}
+                                interval="preserveStartEnd"
+                                stroke={chartColors.muted}
+                                tick={{ fontSize: 12 }}
+                              />
+
+                              <YAxis
+                                domain={
+                                  benchmarkProgressDomain
+                                }
+                                stroke={
+                                  chartColors.muted
+                                }
+                                tick={{
+                                  fontSize: 12,
+                                }}
+                                tickFormatter={(
+                                  value,
+                                ) =>
+                                  `${formatNumber(
+                                    Number(value),
+                                    0,
+                                  )}%`
+                                }
+                                width={52}
+                              />
+
+                              <ReferenceLine
+                                label={{
+                                  value:
+                                    "100% baseline",
+                                  fill:
+                                    chartColors.muted,
+                                  fontSize: 11,
+                                  position:
+                                    "insideTopLeft",
+                                }}
+                                stroke={
+                                  chartColors.muted
+                                }
+                                strokeDasharray="5 5"
+                                y={100}
+                              />
+
+                              <Tooltip
+                                content={
+                                  <BenchmarkProgressTooltip
+                                    series={
+                                      benchmarkSeries
+                                    }
+                                  />
+                                }
+                              />
+
+                              <Legend
+                                wrapperStyle={{
+                                  color:
+                                    chartColors.muted,
+                                }}
+                              />
+
+                              {benchmarkSeries.map(
+                                (series) => (
+                                  <Line
+                                    activeDot={{
+                                      r: 5,
+                                    }}
+                                    connectNulls
+                                    dataKey={
+                                      series.valueKey
+                                    }
+                                    dot={{ r: 3 }}
+                                    key={
+                                      series.exerciseId
+                                    }
+                                    name={series.name}
+                                    stroke={
+                                      series.color
+                                    }
+                                    strokeWidth={2.5}
+                                    type="monotone"
+                                  />
+                                ),
+                              )}
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+
+                      <div className="benchmark-results-grid">
+                        {benchmarkSeries.map(
+                          (series) => (
+                            <div
+                              className="benchmark-result"
+                              key={
+                                series.exerciseId
+                              }
+                            >
+                              <div>
+                                <span
+                                  aria-hidden="true"
+                                  className="benchmark-result-dot"
+                                  style={{
+                                    background:
+                                      series.color,
+                                  }}
+                                />
+
+                                <strong>
+                                  {series.name}
+                                </strong>
+                              </div>
+
+                              <b>
+                                {formatNumber(
+                                  series.latestIndex,
+                                  1,
+                                )}
+                                %
+                              </b>
+
+                              <span>
+                                {series.gain >= 0
+                                  ? "+"
+                                  : ""}
+                                {formatNumber(
+                                  series.gain,
+                                  1,
+                                )}
+                                %
+                                {" · baseline "}
+                                {formatNumber(
+                                  series.baselineE1rm,
+                                  1,
+                                )}{" "}
+                                kg
+                              </span>
+                            </div>
+                          ),
+                        )}
+                      </div>
+
+                      <ChartInsight
+                        question="Which benchmark lifts are progressing fastest relative to their own starting points?"
+                        explanation="Every exercise begins at 100%, allowing relative progress to be compared despite large differences in absolute lifting weight."
+                      >
+                        <div className="chart-insight-details">
+                          <span>
+                            A value of 110% means the
+                            session e1RM is 10% above
+                            that exercise&apos;s first
+                            valid result in the selected
+                            range.
+                          </span>
+
+                          <span>
+                            Compare the slope and total
+                            percentage change, not the
+                            absolute height of the
+                            original e1RM.
+                          </span>
+
+                          <span>
+                            Missing exercise dates are
+                            skipped. The chart does not
+                            generate artificial strength
+                            results for workouts where
+                            the exercise was absent.
+                          </span>
+
+                          <span>
+                            Short-term declines can reflect
+                            fatigue, lighter programming,
+                            or different repetition
+                            targets rather than actual
+                            strength loss.
+                          </span>
+
+                          <span>
+                            Exercises with fewer than two
+                            eligible e1RM results are not
+                            offered as benchmark lifts.
+                          </span>
+                        </div>
+
+                        <p className="chart-insight-footnote">
+                          The 100% baseline is recalculated
+                          from the first valid e1RM inside
+                          the currently selected 10, 30,
+                          90, or All-workout range.
+                          Changing the range may therefore
+                          change both the baseline and the
+                          displayed percentage gain.
+                        </p>
+                      </ChartInsight>
+                    </>
+                  ) : (
+                    <div className="empty">
+                      Select at least one benchmark lift.
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="empty">
+                  At least two eligible strength results
+                  are required for a benchmark exercise.
                 </div>
               )}
             </ChartCard>
