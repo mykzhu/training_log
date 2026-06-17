@@ -1918,19 +1918,6 @@ const strengthWorkloadData =
         )
       : null;
 
-  const benchmarkChartWidth = Math.max(
-    680,
-    benchmarkChartData.length * 48,
-  );
-
-  const benchmarkNeedsScroll =
-    benchmarkChartData.length > 20;
-
-  const benchmarkChartMinWidth =
-    benchmarkNeedsScroll
-      ? benchmarkChartData.length * 48
-      : "100%";
-
   return (
     <section className="page-stack">
       <section className="stats-toolbar" aria-label="Stats range">
@@ -3990,9 +3977,6 @@ const strengthWorkloadData =
                       <div className="benchmark-chart-scroll">
                         <div
                           className="benchmark-chart-inner"
-                          style={{
-                            minWidth: benchmarkChartMinWidth,
-                          }}
                         >
                           <ResponsiveContainer
                             height={340}
@@ -4018,10 +4002,14 @@ const strengthWorkloadData =
 
                               <XAxis
                                 dataKey="chartKey"
-                                minTickGap={24}
                                 interval="preserveStartEnd"
+                                minTickGap={32}
+                                padding={{ left: 10, right: 10 }}
                                 stroke={chartColors.muted}
                                 tick={{ fontSize: 12 }}
+                                tickFormatter={(value) =>
+                                  formatWeekLabel(String(value))
+                                }
                               />
 
                               <YAxis

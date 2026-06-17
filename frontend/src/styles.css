@@ -1988,8 +1988,8 @@ button.load-calendar-cell:focus-visible {
 
 .benchmark-chart-scroll {
   width: 100%;
-  overflow-x: auto;
-  overflow-y: hidden;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .benchmark-chart-inner {
