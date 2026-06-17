@@ -77,6 +77,11 @@ class ExercisesApiTests(unittest.TestCase):
         self.assertEqual(response["exercises"][0]["profile_key"], "deadlift")
         self.assertTrue(response["exercises"][0]["is_active"])
         self.assertIn(100.0, response["exercises"][0]["weights"])
+        for exercise in response["exercises"]:
+            self.assertTrue(
+                exercise["weights"],
+                f"{exercise['name']} has no default weight options",
+            )
 
     def test_create_exercise_strips_name_and_reports_created(self) -> None:
         response = create_exercise_endpoint(

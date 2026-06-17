@@ -19,7 +19,7 @@ DEFAULT_WEIGHT_OPTIONS_BY_PROFILE: dict[str, tuple[float, ...]] = {
     "triceps_extension": (10, 12.5, 15, 17.5, 20, 22.5),
     "lateral_raise": (2.5, 5, 7.5, 10, 12.5, 15),
     "crunches": (0,),
-    "squat": (
+    "squats": (
         20, 25, 30, 35, 40, 45, 50, 55, 60,
         65, 70, 75, 80, 85, 90, 95, 100,
     ),

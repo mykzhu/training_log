@@ -223,7 +223,7 @@ class BackupServiceTests(unittest.TestCase):
             "schema_version": 2,
             "exported_at": "2026-06-01T12:00:00",
             "tables": {
-                "exercises": [{"id": 1, "name": "Goblet Squat"}],
+                "exercises": [{"id": 1, "name": "Squats"}],
                 "workouts": [
                     {
                         "id": 1,
@@ -272,7 +272,7 @@ class BackupServiceTests(unittest.TestCase):
             ]
 
         self.assertIn(18.25, weights)
-        self.assertIn(12.0, weights)
+        self.assertIn(20.0, weights)
 
     def test_invalid_backup_validation_happens_before_destructive_restore(self) -> None:
         self.insert_workout()
