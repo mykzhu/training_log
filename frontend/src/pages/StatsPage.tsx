@@ -516,12 +516,19 @@ export default function StatsPage() {
   );
 
   const bestStrength = useMemo(
-    () => [...(stats?.stats.exercise_stats ?? [])]
-      .filter((exercise): exercise is ExerciseStats & { best_e1rm: number } =>
-        exercise.best_e1rm !== null,
-      )
-      .sort((a, b) => b.best_e1rm - a.best_e1rm)
-      .slice(0, 8),
+    () =>
+      [...(stats?.stats.exercise_stats ?? [])]
+        .filter(
+          (
+            exercise,
+          ): exercise is ExerciseStats & {
+            best_e1rm: number;
+            best_set: NonNullable<ExerciseStats["best_set"]>;
+          } =>
+            exercise.best_e1rm !== null &&
+            exercise.best_set !== null,
+        )
+        .sort((a, b) => b.best_e1rm - a.best_e1rm),
     [stats],
   );
 
@@ -1383,34 +1390,100 @@ export default function StatsPage() {
             </ChartCard>
 
             <ChartCard
-              subtitle="Best estimated 1RM per exercise"
-              title="Strength leaders"
+              wide
+              subtitle="e1RM is shown only for weighted sets with 3–12 reps"
+              title="Best strength estimates"
             >
-              <ResponsiveContainer height={260} width="100%">
-                <BarChart
-                  className="clickable-bar-chart"
-                  data={bestStrength}
-                  layout="vertical"
-                  margin={{ left: 18 }}
-                >
-                  <CartesianGrid stroke={chartColors.grid} strokeDasharray="3 3" />
-                  <XAxis stroke={chartColors.muted} tick={{ fontSize: 12 }} type="number" />
-                  <YAxis
-                    dataKey="name"
-                    stroke={chartColors.muted}
-                    tick={{ fontSize: 12 }}
-                    type="category"
-                    width={116}
-                  />
-                  <Tooltip {...commonTooltipProps()} />
-                  <Bar
-                    dataKey="best_e1rm"
-                    fill={chartColors.green}
-                    onClick={(data: unknown) => openExerciseFromBar(data)}
-                    radius={[0, 8, 8, 0]}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
+              {bestStrength.length > 0 ? (
+                <div className="strength-table-scroll">
+                  <table className="strength-table">
+                    <thead>
+                      <tr>
+                        <th>Exercise</th>
+                        <th>Best e1RM</th>
+                        <th>From set</th>
+                        <th>Date</th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {bestStrength.map((exercise) => (
+                        <tr key={exercise.exercise_id}>
+                          <td>
+                            <button
+                              className="strength-table-link"
+                              onClick={() =>
+                                navigateToExerciseStats(exercise.exercise_id)
+                              }
+                              type="button"
+                            >
+                              {exercise.name}
+                            </button>
+                          </td>
+
+                          <td className="strength-table-value">
+                            {formatNumber(exercise.best_e1rm, 1)} kg
+                          </td>
+
+                          <td className="strength-table-set">
+                            {formatNumber(exercise.best_set.weight, 1)}
+                            {" × "}
+                            {exercise.best_set.reps}
+                          </td>
+
+                          <td>
+                            <button
+                              className="strength-table-link strength-table-date"
+                              onClick={() =>
+                                navigateToWorkout(exercise.best_set.workout_id)
+                              }
+                              type="button"
+                            >
+                              {exercise.best_set.date}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="empty">
+                  No eligible strength estimates yet.
+                </div>
+              )}
+
+              <ChartInsight
+                question="What does the estimated 1RM represent?"
+                explanation="e1RM estimates the maximum weight you could lift once, based on a recorded working set."
+              >
+                <div className="chart-insight-details">
+                  <span>
+                    The estimate is calculated only from weighted sets containing 3–12
+                    repetitions.
+                  </span>
+
+                  <span>
+                    The From set column shows the exact weight and repetitions that produced
+                    the highest estimate for each exercise.
+                  </span>
+
+                  <span>
+                    Compare e1RM changes within the same exercise. Values from different
+                    exercises are not directly comparable.
+                  </span>
+
+                  <span>
+                    Select an exercise to open its statistics, or select the date to open
+                    the source workout.
+                  </span>
+                </div>
+
+                <p className="chart-insight-footnote">
+                  Sets such as 50 × 2, 20 × 15, and bodyweight sets such as 0 × 50 are
+                  intentionally excluded from the e1RM calculation.
+                </p>
+              </ChartInsight>
             </ChartCard>
           </div>
         </>
