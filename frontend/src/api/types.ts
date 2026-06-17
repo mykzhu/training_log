@@ -240,6 +240,20 @@ export type StatsSummary = {
   avg_relative_intensity: number | null;
 };
 
+export type StatsSparkbars = {
+  volume: string;
+  intensity: string;
+  rpe: string;
+  back: string;
+  load: string;
+  compound: string;
+  back_stress: string;
+};
+
+export type StatsCharts = {
+  sparkbars: StatsSparkbars;
+};
+
 export type StatsResponse = {
   limit: number | "all";
   stats: {
@@ -247,5 +261,5 @@ export type StatsResponse = {
     workouts: StatsWorkout[];
     exercise_stats: ExerciseStats[];
   };
-  charts: Record<string, unknown>;
+  charts: StatsCharts;
 };

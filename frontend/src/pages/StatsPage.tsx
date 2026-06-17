@@ -30,8 +30,6 @@ const chartColors = {
   text: "#f2f2f2",
 };
 
-const sparkChars = " ▁▂▃▄▅▆▇█";
-
 type ChartPoint = {
   id: number;
   date: string;
@@ -117,44 +115,6 @@ function formatNumber(value: number | null | undefined, digits = 0) {
 
 function formatKg(value: number | null | undefined) {
   return `${formatNumber(value)} kg`;
-}
-
-function buildSpark(values: Array<number | null | undefined>, width = 14) {
-  const validValues = values
-    .filter((value): value is number => value !== null && value !== undefined)
-    .map(Number);
-
-  if (validValues.length === 0) {
-    return "—";
-  }
-
-  const sampledValues = values.length > width
-    ? Array.from({ length: width }, (_, index) => {
-        const start = Math.floor((index * values.length) / width);
-        const end = Math.floor(((index + 1) * values.length) / width);
-        const bucket = values
-          .slice(start, end)
-          .filter((value): value is number => value !== null && value !== undefined);
-
-        return bucket.length
-          ? bucket.reduce((total, value) => total + Number(value), 0) / bucket.length
-          : null;
-      })
-    : values;
-
-  const maxValue = Math.max(...validValues, 1);
-  const maxIndex = sparkChars.length - 1;
-
-  return sampledValues
-    .map((value) => {
-      if (value === null || value === undefined) {
-        return "·";
-      }
-
-      const ratio = Math.max(0, Math.min(1, Number(value) / maxValue));
-      return sparkChars[Math.round(ratio * maxIndex)];
-    })
-    .join("");
 }
 
 function buildWorkoutData(workouts: StatsWorkout[]): ChartPoint[] {
@@ -342,6 +302,7 @@ export default function StatsPage() {
   );
 
   const summary = stats?.stats.summary;
+  const sparkbars = stats?.charts.sparkbars;
 
   return (
     <section className="page-stack">
@@ -376,7 +337,7 @@ export default function StatsPage() {
             <DashboardCard
               color="blue"
               label="Workouts"
-              spark={buildSpark(workoutData.map((item) => item.load))}
+              spark={sparkbars?.load}
               subvalue={`${formatNumber(summary.total_sets)} sets · ${formatNumber(
                 summary.total_reps,
               )} reps`}
@@ -385,21 +346,21 @@ export default function StatsPage() {
             <DashboardCard
               color="green"
               label="Volume"
-              spark={buildSpark(workoutData.map((item) => item.volume))}
+              spark={sparkbars?.volume}
               subvalue={`${formatKg(summary.avg_intensity)} avg intensity`}
               value={formatKg(summary.total_volume)}
             />
             <DashboardCard
               color="orange"
               label="Load"
-              spark={buildSpark(workoutData.map((item) => item.load))}
+              spark={sparkbars?.load}
               subvalue={`${formatNumber(summary.avg_load_score, 1)} avg load`}
               value={formatNumber(summary.total_load_score, 1)}
             />
             <DashboardCard
               color="red"
               label="Back stress"
-              spark={buildSpark(workoutData.map((item) => item.backStress))}
+              spark={sparkbars?.back_stress}
               subvalue={`${formatNumber(summary.avg_back_pain, 1)} avg pain`}
               tone={
                 summary.avg_back_pain && summary.avg_back_pain >= 7
