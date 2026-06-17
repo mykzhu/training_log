@@ -1,5 +1,4 @@
 import logging
-from copy import deepcopy
 from datetime import datetime
 from threading import RLock
 from typing import Any
@@ -12,24 +11,12 @@ from app.repositories.workouts import get_previous_set_for_exercise
 
 logger = logging.getLogger("training_log")
 
-ACTIVE_WORKOUT_DRAFT: dict[str, Any] | None = None
 DRAFT_LOCK = RLock()
 
 
-def _get_active_workout_draft_locked() -> dict[str, Any] | None:
-    global ACTIVE_WORKOUT_DRAFT
-
-    if ACTIVE_WORKOUT_DRAFT is None:
-        ACTIVE_WORKOUT_DRAFT = draft_repository.get_active_draft()
-
-    return ACTIVE_WORKOUT_DRAFT
-
-
 def create_workout_draft() -> dict[str, Any]:
-    now = datetime.now().isoformat(timespec="seconds")
-
     return {
-        "started_at": now,
+        "started_at": datetime.now().isoformat(timespec="seconds"),
         "session_rpe": None,
         "lower_back_pain": None,
         "workout_exercises": [],
@@ -40,14 +27,11 @@ def create_workout_draft() -> dict[str, Any]:
 
 def get_active_workout_draft() -> dict[str, Any] | None:
     with DRAFT_LOCK:
-        return _get_active_workout_draft_locked()
+        return draft_repository.get_active_draft()
 
 
 def clear_active_workout_draft() -> None:
-    global ACTIVE_WORKOUT_DRAFT
-
     with DRAFT_LOCK:
-        ACTIVE_WORKOUT_DRAFT = None
         draft_repository.clear_active_draft()
 
 
@@ -59,18 +43,16 @@ def draft_has_logged_sets(draft: dict[str, Any]) -> bool:
 
 
 def start_active_workout_draft() -> tuple[dict[str, Any], bool]:
-    global ACTIVE_WORKOUT_DRAFT
-
     with DRAFT_LOCK:
-        existing_draft = _get_active_workout_draft_locked()
+        existing_draft = draft_repository.get_active_draft()
         if existing_draft is None:
-            ACTIVE_WORKOUT_DRAFT = create_workout_draft()
-            draft_repository.replace_active_draft(ACTIVE_WORKOUT_DRAFT)
+            started_at = datetime.now().isoformat(timespec="seconds")
+            draft = draft_repository.create_active_draft(started_at)
             logger.info(
                 "workout.draft.start started_at=%s",
-                ACTIVE_WORKOUT_DRAFT["started_at"],
+                draft["started_at"],
             )
-            return ACTIVE_WORKOUT_DRAFT, True
+            return draft, True
 
         logger.info(
             "workout.draft.start.ignored reason=already_active started_at=%s",
@@ -84,21 +66,22 @@ def update_active_draft_metadata(
     lower_back_pain: int | None,
 ) -> bool:
     with DRAFT_LOCK:
-        draft = _get_active_workout_draft_locked()
+        draft = draft_repository.get_active_draft()
         if draft is None:
             logger.warning("workout.draft.metadata.no_active")
             return False
 
-        draft["session_rpe"] = session_rpe
-        draft["lower_back_pain"] = lower_back_pain
-        draft_repository.replace_active_draft(draft)
+        updated = draft_repository.update_active_draft_metadata(
+            session_rpe,
+            lower_back_pain,
+        )
 
     logger.info(
         "workout.draft.metadata.update session_rpe=%s lower_back_pain=%s",
         session_rpe,
         lower_back_pain,
     )
-    return True
+    return updated
 
 
 def add_exercise_to_active_draft(
@@ -107,25 +90,18 @@ def add_exercise_to_active_draft(
     profile_key: str | None = None,
 ) -> dict[str, Any] | None:
     with DRAFT_LOCK:
-        draft = _get_active_workout_draft_locked()
+        draft = draft_repository.get_active_draft()
         if draft is None:
             logger.warning("workout.draft.exercise.add.no_active exercise_id=%s", exercise_id)
             return None
 
-        draft_exercise_id = int(draft["next_workout_exercise_id"])
-        draft["next_workout_exercise_id"] = draft_exercise_id + 1
-        position = len(draft["workout_exercises"]) + 1
+        updated_draft = draft_repository.insert_draft_exercise(exercise_id)
+        if updated_draft is None:
+            return None
 
-        draft_exercise = {
-            "id": draft_exercise_id,
-            "exercise_id": exercise_id,
-            "exercise_name": exercise_name,
-            "profile_key": profile_key or "accessory",
-            "position": position,
-            "sets": [],
-        }
-        draft["workout_exercises"].append(draft_exercise)
-        draft_repository.replace_active_draft(draft)
+        draft_exercise = updated_draft["workout_exercises"][-1]
+        draft_exercise_id = int(draft_exercise["id"])
+        position = int(draft_exercise["position"])
 
     logger.info(
         "workout.draft.exercise.add draft_exercise_id=%s exercise_id=%s position=%s",
@@ -142,7 +118,7 @@ def add_set_to_active_draft(
     reps: int,
 ) -> dict[str, Any] | None:
     with DRAFT_LOCK:
-        draft = _get_active_workout_draft_locked()
+        draft = draft_repository.get_active_draft()
         if draft is None:
             logger.warning("workout.draft.set.add.no_active draft_exercise_id=%s", draft_exercise_id)
             return None
@@ -152,19 +128,21 @@ def add_set_to_active_draft(
             logger.warning("workout.draft.set.add.exercise_not_found draft_exercise_id=%s", draft_exercise_id)
             return None
 
-        set_id = int(draft["next_set_id"])
-        draft["next_set_id"] = set_id + 1
-        set_number = len(draft_exercise["sets"]) + 1
+        updated_draft = draft_repository.insert_draft_set(
+            draft_exercise_id,
+            weight=weight,
+            reps=reps,
+            created_at=datetime.now().isoformat(timespec="seconds"),
+        )
+        if updated_draft is None:
+            return None
 
-        set_entry = {
-            "id": set_id,
-            "set_number": set_number,
-            "weight": weight,
-            "reps": reps,
-            "created_at": datetime.now().isoformat(timespec="seconds"),
-        }
-        draft_exercise["sets"].append(set_entry)
-        draft_repository.replace_active_draft(draft)
+        found = get_draft_set(updated_draft, int(updated_draft["next_set_id"]) - 1)
+        if found is None:
+            return None
+        _, set_entry = found
+        set_id = int(set_entry["id"])
+        set_number = int(set_entry["set_number"])
 
     logger.info(
         "workout.draft.set.add set_id=%s draft_exercise_id=%s set_number=%s weight=%s reps=%s",
@@ -179,7 +157,7 @@ def add_set_to_active_draft(
 
 def duplicate_active_draft_set(draft_exercise_id: int) -> dict[str, Any] | None:
     with DRAFT_LOCK:
-        draft = _get_active_workout_draft_locked()
+        draft = draft_repository.get_active_draft()
         if draft is None:
             logger.warning("workout.draft.set.duplicate.no_active draft_exercise_id=%s", draft_exercise_id)
             return None
@@ -205,19 +183,21 @@ def duplicate_active_draft_set(draft_exercise_id: int) -> dict[str, Any] | None:
             weight = float(previous_set["weight"])
             reps = int(previous_set["reps"])
 
-        set_id = int(draft["next_set_id"])
-        draft["next_set_id"] = set_id + 1
-        set_number = len(draft_exercise["sets"]) + 1
+        updated_draft = draft_repository.insert_draft_set(
+            draft_exercise_id,
+            weight=weight,
+            reps=reps,
+            created_at=datetime.now().isoformat(timespec="seconds"),
+        )
+        if updated_draft is None:
+            return None
 
-        set_entry = {
-            "id": set_id,
-            "set_number": set_number,
-            "weight": weight,
-            "reps": reps,
-            "created_at": datetime.now().isoformat(timespec="seconds"),
-        }
-        draft_exercise["sets"].append(set_entry)
-        draft_repository.replace_active_draft(draft)
+        found = get_draft_set(updated_draft, int(updated_draft["next_set_id"]) - 1)
+        if found is None:
+            return None
+        _, set_entry = found
+        set_id = int(set_entry["id"])
+        set_number = int(set_entry["set_number"])
 
     logger.info(
         "workout.draft.set.duplicate set_id=%s draft_exercise_id=%s set_number=%s weight=%s reps=%s",
@@ -236,7 +216,7 @@ def update_active_draft_set(
     reps: int | None = None,
 ) -> dict[str, Any] | None:
     with DRAFT_LOCK:
-        draft = _get_active_workout_draft_locked()
+        draft = draft_repository.get_active_draft()
         if draft is None:
             logger.warning("workout.draft.set.update.no_active set_id=%s", draft_set_id)
             return None
@@ -246,15 +226,20 @@ def update_active_draft_set(
             logger.warning("workout.draft.set.update.not_found set_id=%s", draft_set_id)
             return None
 
-        _, set_entry = found
+        if not draft_repository.update_draft_set(
+            draft_set_id,
+            weight=weight,
+            reps=reps,
+        ):
+            return None
 
-        if weight is not None:
-            set_entry["weight"] = weight
-
-        if reps is not None:
-            set_entry["reps"] = reps
-
-        draft_repository.replace_active_draft(draft)
+        updated_draft = draft_repository.get_active_draft()
+        if updated_draft is None:
+            return None
+        updated_found = get_draft_set(updated_draft, draft_set_id)
+        if updated_found is None:
+            return None
+        _, set_entry = updated_found
 
     logger.info(
         "workout.draft.set.update set_id=%s weight=%s reps=%s",
@@ -267,7 +252,7 @@ def update_active_draft_set(
 
 def delete_active_draft_set(draft_set_id: int) -> bool:
     with DRAFT_LOCK:
-        draft = _get_active_workout_draft_locked()
+        draft = draft_repository.get_active_draft()
         if draft is None:
             logger.warning("workout.draft.set.delete.no_active set_id=%s", draft_set_id)
             return False
@@ -277,36 +262,20 @@ def delete_active_draft_set(draft_set_id: int) -> bool:
             logger.warning("workout.draft.set.delete.not_found set_id=%s", draft_set_id)
             return False
 
-        draft_exercise, _ = found
-        draft_exercise["sets"] = [
-            set_entry for set_entry in draft_exercise["sets"]
-            if int(set_entry["id"]) != draft_set_id
-        ]
-        renumber_draft_sets(draft_exercise)
-        draft_repository.replace_active_draft(draft)
+        deleted = draft_repository.delete_draft_set(draft_set_id)
 
     logger.info("workout.draft.set.delete set_id=%s", draft_set_id)
-    return True
+    return deleted
 
 
 def delete_active_draft_exercise(draft_exercise_id: int) -> bool:
     with DRAFT_LOCK:
-        draft = _get_active_workout_draft_locked()
+        draft = draft_repository.get_active_draft()
         if draft is None:
             logger.warning("workout.draft.exercise.delete.no_active draft_exercise_id=%s", draft_exercise_id)
             return False
 
-        before_count = len(draft["workout_exercises"])
-        draft["workout_exercises"] = [
-            item for item in draft["workout_exercises"]
-            if int(item["id"]) != draft_exercise_id
-        ]
-
-        for index, item in enumerate(draft["workout_exercises"], start=1):
-            item["position"] = index
-
-        deleted = before_count != len(draft["workout_exercises"])
-        draft_repository.replace_active_draft(draft)
+        deleted = draft_repository.delete_draft_exercise(draft_exercise_id)
 
     logger.info(
         "workout.draft.exercise.delete draft_exercise_id=%s deleted=%s",
@@ -317,31 +286,24 @@ def delete_active_draft_exercise(draft_exercise_id: int) -> bool:
 
 
 def finish_active_workout() -> int | None:
-    global ACTIVE_WORKOUT_DRAFT
-
     with DRAFT_LOCK:
-        active_draft = _get_active_workout_draft_locked()
+        active_draft = draft_repository.get_active_draft()
         if active_draft is None:
             logger.warning("workout.draft.finish.no_active")
             return None
 
-        draft = deepcopy(active_draft)
-
-        if not draft_has_logged_sets(draft):
+        if not draft_has_logged_sets(active_draft):
             logger.warning("workout.draft.finish.empty_blocked")
             return None
 
         try:
             workout_id = draft_repository.finalize_active_draft()
         except draft_repository.NoActiveDraftError:
-            ACTIVE_WORKOUT_DRAFT = None
             logger.warning("workout.draft.finish.no_active")
             return None
         except draft_repository.EmptyDraftError:
             logger.warning("workout.draft.finish.empty")
             raise
-
-        ACTIVE_WORKOUT_DRAFT = None
 
     logger.info("workout.draft.finish workout_id=%s", workout_id)
     return workout_id

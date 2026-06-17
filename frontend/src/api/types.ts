@@ -185,6 +185,12 @@ export type ExerciseUpdatePayload = {
   profile_key?: string;
 };
 
+export type ExerciseProfile = {
+  key: string;
+  label: string;
+  category: string;
+};
+
 export type StatsWorkout = {
   id: number;
   date: string;

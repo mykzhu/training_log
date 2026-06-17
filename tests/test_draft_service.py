@@ -31,13 +31,11 @@ class DraftServiceTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.original_db_path = config.DB_PATH
-        self.original_active_draft = draft_service.ACTIVE_WORKOUT_DRAFT
         config.DB_PATH = Path(self.temp_dir.name) / "training.db"
         init_db()
         clear_active_workout_draft()
 
     def tearDown(self) -> None:
-        draft_service.ACTIVE_WORKOUT_DRAFT = self.original_active_draft
         config.DB_PATH = self.original_db_path
         self.temp_dir.cleanup()
 
@@ -179,7 +177,7 @@ class DraftServiceTests(unittest.TestCase):
             [(100.0, 5), (90.0, 8)],
         )
 
-    def test_active_draft_operations_manage_single_in_memory_draft(self) -> None:
+    def test_active_draft_operations_reload_from_sqlite(self) -> None:
         deadlift_id = self.exercise_id("Deadlift")
 
         draft, created = start_active_workout_draft()
@@ -187,7 +185,7 @@ class DraftServiceTests(unittest.TestCase):
 
         self.assertTrue(created)
         self.assertFalse(created_again)
-        self.assertIs(same_draft, draft)
+        self.assertEqual(same_draft, draft)
 
         self.assertTrue(update_active_draft_metadata(session_rpe=7, lower_back_pain=3))
         draft_exercise = add_exercise_to_active_draft(
@@ -209,7 +207,11 @@ class DraftServiceTests(unittest.TestCase):
         self.assertEqual(duplicate_set["reps"], 5)
 
         self.assertTrue(delete_active_draft_set(int(first_set["id"])))
-        self.assertEqual(draft_exercise["sets"][0]["set_number"], 1)
+        reloaded = get_active_workout_draft()
+        self.assertEqual(
+            reloaded["workout_exercises"][0]["sets"][0]["set_number"],
+            1,
+        )
 
         self.assertTrue(delete_active_draft_exercise(int(draft_exercise["id"])))
         self.assertEqual(get_active_workout_draft()["workout_exercises"], [])
@@ -298,7 +300,7 @@ class DraftServiceTests(unittest.TestCase):
         self.assertEqual(workout_count, 0)
         self.assertEqual(set_count, 0)
 
-    def test_active_draft_recovers_from_persistent_storage(self) -> None:
+    def test_active_draft_reflects_exercise_rename_and_profile_update(self) -> None:
         deadlift_id = self.exercise_id("Deadlift")
 
         start_active_workout_draft()
@@ -312,12 +314,24 @@ class DraftServiceTests(unittest.TestCase):
             reps=5,
         )
 
-        draft_service.ACTIVE_WORKOUT_DRAFT = None
+        with get_db() as conn:
+            conn.execute(
+                """
+                UPDATE exercises
+                SET name = ?, profile_key = ?
+                WHERE id = ?
+                """,
+                ("Romanian Deadlift", "accessory", deadlift_id),
+            )
 
         recovered = get_active_workout_draft()
 
         self.assertIsNotNone(recovered)
-        self.assertEqual(recovered["workout_exercises"][0]["exercise_name"], "Deadlift")
+        self.assertEqual(
+            recovered["workout_exercises"][0]["exercise_name"],
+            "Romanian Deadlift",
+        )
+        self.assertEqual(recovered["workout_exercises"][0]["profile_key"], "accessory")
         self.assertEqual(recovered["workout_exercises"][0]["sets"][0]["weight"], 100.0)
 
 

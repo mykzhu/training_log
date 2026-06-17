@@ -85,11 +85,10 @@ def get_active_draft() -> dict[str, Any] | None:
         return load_active_draft(conn)
 
 
-def replace_active_draft(draft: dict[str, Any]) -> None:
+def create_active_draft(started_at: str) -> dict[str, Any]:
     updated_at = datetime.now().isoformat(timespec="seconds")
 
     with get_db() as conn:
-        conn.execute("DELETE FROM active_workout_draft WHERE id = 1")
         conn.execute(
             """
             INSERT INTO active_workout_draft (
@@ -104,61 +103,302 @@ def replace_active_draft(draft: dict[str, Any]) -> None:
             VALUES (1, ?, ?, ?, ?, ?, ?)
             """,
             (
-                str(draft["started_at"]),
-                draft.get("session_rpe"),
-                draft.get("lower_back_pain"),
-                int(draft["next_workout_exercise_id"]),
-                int(draft["next_set_id"]),
+                started_at,
+                None,
+                None,
+                1,
+                1,
                 updated_at,
             ),
         )
+        draft = load_active_draft(conn)
 
-        for draft_exercise in sorted(
-            draft["workout_exercises"],
-            key=lambda item: (item["position"], item["id"]),
-        ):
+    if draft is None:
+        raise RuntimeError("Created draft could not be loaded.")
+
+    return draft
+
+
+def update_active_draft_metadata(
+    session_rpe: int | None,
+    lower_back_pain: int | None,
+) -> bool:
+    updated_at = datetime.now().isoformat(timespec="seconds")
+
+    with get_db() as conn:
+        cursor = conn.execute(
+            """
+            UPDATE active_workout_draft
+            SET session_rpe = ?,
+                lower_back_pain = ?,
+                updated_at = ?
+            WHERE id = 1
+            """,
+            (session_rpe, lower_back_pain, updated_at),
+        )
+
+    return cursor.rowcount > 0
+
+
+def insert_draft_exercise(
+    exercise_id: int,
+) -> dict[str, Any] | None:
+    updated_at = datetime.now().isoformat(timespec="seconds")
+
+    with get_db() as conn:
+        draft = conn.execute(
+            """
+            SELECT next_workout_exercise_id
+            FROM active_workout_draft
+            WHERE id = 1
+            """
+        ).fetchone()
+        if draft is None:
+            return None
+
+        draft_exercise_id = int(draft["next_workout_exercise_id"])
+        position = int(
             conn.execute(
                 """
-                INSERT INTO active_draft_exercises (
-                    id,
-                    draft_id,
-                    exercise_id,
-                    position
-                )
-                VALUES (?, 1, ?, ?)
+                SELECT COALESCE(MAX(position), 0) + 1
+                FROM active_draft_exercises
+                WHERE draft_id = 1
+                """
+            ).fetchone()[0]
+        )
+        conn.execute(
+            """
+            INSERT INTO active_draft_exercises (
+                id,
+                draft_id,
+                exercise_id,
+                position
+            )
+            VALUES (?, 1, ?, ?)
+            """,
+            (draft_exercise_id, exercise_id, position),
+        )
+        conn.execute(
+            """
+            UPDATE active_workout_draft
+            SET next_workout_exercise_id = ?,
+                updated_at = ?
+            WHERE id = 1
+            """,
+            (draft_exercise_id + 1, updated_at),
+        )
+
+        return load_active_draft(conn)
+
+
+def insert_draft_set(
+    draft_exercise_id: int,
+    *,
+    weight: float,
+    reps: int,
+    created_at: str,
+) -> dict[str, Any] | None:
+    updated_at = datetime.now().isoformat(timespec="seconds")
+
+    with get_db() as conn:
+        draft = conn.execute(
+            """
+            SELECT next_set_id
+            FROM active_workout_draft
+            WHERE id = 1
+            """
+        ).fetchone()
+        if draft is None:
+            return None
+
+        draft_exercise = conn.execute(
+            """
+            SELECT id
+            FROM active_draft_exercises
+            WHERE id = ? AND draft_id = 1
+            """,
+            (draft_exercise_id,),
+        ).fetchone()
+        if draft_exercise is None:
+            return None
+
+        set_id = int(draft["next_set_id"])
+        set_number = int(
+            conn.execute(
+                """
+                SELECT COALESCE(MAX(set_number), 0) + 1
+                FROM active_draft_sets
+                WHERE draft_exercise_id = ?
                 """,
-                (
-                    int(draft_exercise["id"]),
-                    int(draft_exercise["exercise_id"]),
-                    int(draft_exercise["position"]),
-                ),
+                (draft_exercise_id,),
+            ).fetchone()[0]
+        )
+
+        conn.execute(
+            """
+            INSERT INTO active_draft_sets (
+                id,
+                draft_exercise_id,
+                set_number,
+                weight,
+                reps,
+                created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (set_id, draft_exercise_id, set_number, weight, reps, created_at),
+        )
+        conn.execute(
+            """
+            UPDATE active_workout_draft
+            SET next_set_id = ?,
+                updated_at = ?
+            WHERE id = 1
+            """,
+            (set_id + 1, updated_at),
+        )
+
+        return load_active_draft(conn)
+
+
+def update_draft_set(
+    draft_set_id: int,
+    *,
+    weight: float | None = None,
+    reps: int | None = None,
+) -> bool:
+    assignments = []
+    params: list[Any] = []
+    if weight is not None:
+        assignments.append("weight = ?")
+        params.append(weight)
+    if reps is not None:
+        assignments.append("reps = ?")
+        params.append(reps)
+
+    if not assignments:
+        return False
+
+    updated_at = datetime.now().isoformat(timespec="seconds")
+
+    with get_db() as conn:
+        cursor = conn.execute(
+            f"""
+            UPDATE active_draft_sets
+            SET {", ".join(assignments)}
+            WHERE id = ?
+            """,
+            (*params, draft_set_id),
+        )
+        if cursor.rowcount:
+            conn.execute(
+                """
+                UPDATE active_workout_draft
+                SET updated_at = ?
+                WHERE id = 1
+                """,
+                (updated_at,),
             )
 
-            for set_entry in sorted(
-                draft_exercise["sets"],
-                key=lambda item: (item["set_number"], item["id"]),
-            ):
-                conn.execute(
-                    """
-                    INSERT INTO active_draft_sets (
-                        id,
-                        draft_exercise_id,
-                        set_number,
-                        weight,
-                        reps,
-                        created_at
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        int(set_entry["id"]),
-                        int(draft_exercise["id"]),
-                        int(set_entry["set_number"]),
-                        float(set_entry["weight"]),
-                        int(set_entry["reps"]),
-                        str(set_entry["created_at"]),
-                    ),
-                )
+    return cursor.rowcount > 0
+
+
+def renumber_sets_for_draft_exercise(
+    conn,
+    draft_exercise_id: int,
+) -> None:
+    rows = conn.execute(
+        """
+        SELECT id
+        FROM active_draft_sets
+        WHERE draft_exercise_id = ?
+        ORDER BY set_number ASC, id ASC
+        """,
+        (draft_exercise_id,),
+    ).fetchall()
+
+    for index, row in enumerate(rows, start=1):
+        conn.execute(
+            """
+            UPDATE active_draft_sets
+            SET set_number = ?
+            WHERE id = ?
+            """,
+            (index, int(row["id"])),
+        )
+
+
+def delete_draft_set(draft_set_id: int) -> bool:
+    updated_at = datetime.now().isoformat(timespec="seconds")
+
+    with get_db() as conn:
+        row = conn.execute(
+            """
+            SELECT draft_exercise_id
+            FROM active_draft_sets
+            WHERE id = ?
+            """,
+            (draft_set_id,),
+        ).fetchone()
+        if row is None:
+            return False
+
+        draft_exercise_id = int(row["draft_exercise_id"])
+        conn.execute("DELETE FROM active_draft_sets WHERE id = ?", (draft_set_id,))
+        renumber_sets_for_draft_exercise(conn, draft_exercise_id)
+        conn.execute(
+            """
+            UPDATE active_workout_draft
+            SET updated_at = ?
+            WHERE id = 1
+            """,
+            (updated_at,),
+        )
+
+    return True
+
+
+def delete_draft_exercise(draft_exercise_id: int) -> bool:
+    updated_at = datetime.now().isoformat(timespec="seconds")
+
+    with get_db() as conn:
+        cursor = conn.execute(
+            """
+            DELETE FROM active_draft_exercises
+            WHERE id = ? AND draft_id = 1
+            """,
+            (draft_exercise_id,),
+        )
+        if cursor.rowcount == 0:
+            return False
+
+        rows = conn.execute(
+            """
+            SELECT id
+            FROM active_draft_exercises
+            WHERE draft_id = 1
+            ORDER BY position ASC, id ASC
+            """
+        ).fetchall()
+        for index, row in enumerate(rows, start=1):
+            conn.execute(
+                """
+                UPDATE active_draft_exercises
+                SET position = ?
+                WHERE id = ?
+                """,
+                (index, int(row["id"])),
+            )
+        conn.execute(
+            """
+            UPDATE active_workout_draft
+            SET updated_at = ?
+            WHERE id = 1
+            """,
+            (updated_at,),
+        )
+
+    return True
 
 
 def clear_active_draft() -> None:

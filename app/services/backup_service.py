@@ -5,11 +5,16 @@ from datetime import datetime
 from typing import Any
 
 from app.db import (
+    EXERCISE_SETTINGS_WEIGHT_MIGRATION_KEY,
     get_db,
     initialize_exercise_settings,
     seed_default_exercises,
+    set_metadata,
 )
-from app.services.analysis_service import profile_key_for_exercise_name
+from app.services.analysis_service import (
+    is_supported_profile_key,
+    profile_key_for_exercise_name,
+)
 
 
 logger = logging.getLogger("training_log")
@@ -149,7 +154,14 @@ def validate_backup_payload(payload: Any) -> dict[str, list[dict[str, Any]]]:
 
         validated["exercise_weight_options"] = []
 
-    validate_exercise_weight_options(validated["exercise_weight_options"], validated)
+    validate_table_ids(validated)
+    validate_exercises(validated["exercises"])
+    validate_exercise_weight_options(
+        validated["exercise_weight_options"],
+        validated,
+        enforce_active_weights=schema_version == BACKUP_SCHEMA_VERSION,
+    )
+    validate_workout_graph(validated)
 
     logger.info(
         "backup.validate.success schema_version=%s target_schema_version=%s counts=%s",
@@ -160,32 +172,188 @@ def validate_backup_payload(payload: Any) -> dict[str, list[dict[str, Any]]]:
     return validated
 
 
+def coerce_int(value: Any, context: str) -> int:
+    try:
+        result = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{context} must be an integer.") from exc
+
+    return result
+
+
+def coerce_float(value: Any, context: str) -> float:
+    try:
+        result = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{context} must be numeric.") from exc
+
+    if not math.isfinite(result):
+        raise ValueError(f"{context} must be finite.")
+
+    return result
+
+
+def validate_table_ids(tables: dict[str, list[dict[str, Any]]]) -> None:
+    for table_name, rows in tables.items():
+        seen_ids: set[int] = set()
+        for index, row in enumerate(rows, start=1):
+            row_id = coerce_int(row["id"], f"Row {index} in {table_name} id")
+            if row_id <= 0:
+                raise ValueError(f"Row {index} in {table_name} has an invalid id.")
+            if row_id in seen_ids:
+                raise ValueError(f"Row {index} in {table_name} duplicates an id.")
+            seen_ids.add(row_id)
+
+
+def validate_exercises(rows: list[dict[str, Any]]) -> None:
+    seen_names: set[str] = set()
+    seen_orders: set[int] = set()
+
+    for index, row in enumerate(rows, start=1):
+        name = " ".join(str(row["name"]).strip().split())
+        if not name:
+            raise ValueError(f"Row {index} in exercises has a blank name.")
+        if len(name) > 120:
+            raise ValueError(f"Row {index} in exercises has a name that is too long.")
+
+        normalized_name = name.lower()
+        if normalized_name in seen_names:
+            raise ValueError(
+                f"Row {index} in exercises duplicates a name ignoring case."
+            )
+        seen_names.add(normalized_name)
+        row["name"] = name
+
+        is_active = coerce_int(row["is_active"], f"Row {index} in exercises is_active")
+        if is_active not in (0, 1):
+            raise ValueError(f"Row {index} in exercises has invalid active state.")
+        row["is_active"] = is_active
+
+        sort_order = coerce_int(
+            row["sort_order"],
+            f"Row {index} in exercises sort_order",
+        )
+        if sort_order < 0:
+            raise ValueError(f"Row {index} in exercises has invalid sort order.")
+        if sort_order in seen_orders:
+            raise ValueError(f"Row {index} in exercises duplicates sort order.")
+        seen_orders.add(sort_order)
+        row["sort_order"] = sort_order
+
+        profile_key = str(row["profile_key"] or "").strip()
+        if not is_supported_profile_key(profile_key):
+            raise ValueError(f"Row {index} in exercises has an invalid profile.")
+        row["profile_key"] = profile_key
+
+
 def validate_exercise_weight_options(
     rows: list[dict[str, Any]],
     tables: dict[str, list[dict[str, Any]]],
+    *,
+    enforce_active_weights: bool,
 ) -> None:
     exercise_ids = {int(row["id"]) for row in tables["exercises"]}
+    active_exercise_ids = {
+        int(row["id"])
+        for row in tables["exercises"]
+        if int(row["is_active"]) == 1
+    }
+    weights_by_exercise: dict[int, list[float]] = {
+        exercise_id: []
+        for exercise_id in exercise_ids
+    }
     seen_pairs: set[tuple[int, float]] = set()
 
     for index, row in enumerate(rows, start=1):
-        exercise_id = int(row["exercise_id"])
+        exercise_id = coerce_int(
+            row["exercise_id"],
+            f"Row {index} in exercise_weight_options exercise_id",
+        )
         if exercise_id not in exercise_ids:
             raise ValueError(
                 f"Row {index} in exercise_weight_options references an unknown exercise."
             )
 
-        weight = float(row["weight"])
-        if not math.isfinite(weight) or weight < 0:
+        weight = coerce_float(row["weight"], f"Row {index} in exercise_weight_options weight")
+        if weight < 0:
             raise ValueError(
                 f"Row {index} in exercise_weight_options has an invalid weight."
             )
+        row["exercise_id"] = exercise_id
+        row["weight"] = round(weight, 4)
+        row["sort_order"] = coerce_int(
+            row["sort_order"],
+            f"Row {index} in exercise_weight_options sort_order",
+        )
 
-        pair = (exercise_id, round(weight, 4))
+        pair = (exercise_id, row["weight"])
         if pair in seen_pairs:
             raise ValueError(
                 f"Row {index} in exercise_weight_options duplicates a weight."
             )
         seen_pairs.add(pair)
+        weights_by_exercise[exercise_id].append(row["weight"])
+
+    if enforce_active_weights:
+        for exercise_id in active_exercise_ids:
+            if not weights_by_exercise.get(exercise_id):
+                raise ValueError(
+                    f"Active exercise {exercise_id} must have at least one weight."
+                )
+
+
+def validate_workout_graph(tables: dict[str, list[dict[str, Any]]]) -> None:
+    exercise_ids = {int(row["id"]) for row in tables["exercises"]}
+    workout_ids = {int(row["id"]) for row in tables["workouts"]}
+    workout_exercise_ids = {int(row["id"]) for row in tables["workout_exercises"]}
+
+    for index, row in enumerate(tables["workout_exercises"], start=1):
+        workout_id = coerce_int(
+            row["workout_id"],
+            f"Row {index} in workout_exercises workout_id",
+        )
+        exercise_id = coerce_int(
+            row["exercise_id"],
+            f"Row {index} in workout_exercises exercise_id",
+        )
+        position = coerce_int(row["position"], f"Row {index} in workout_exercises position")
+        if workout_id not in workout_ids:
+            raise ValueError(
+                f"Row {index} in workout_exercises references an unknown workout."
+            )
+        if exercise_id not in exercise_ids:
+            raise ValueError(
+                f"Row {index} in workout_exercises references an unknown exercise."
+            )
+        if position <= 0:
+            raise ValueError(f"Row {index} in workout_exercises has invalid position.")
+        row["workout_id"] = workout_id
+        row["exercise_id"] = exercise_id
+        row["position"] = position
+
+    for index, row in enumerate(tables["set_entries"], start=1):
+        workout_exercise_id = coerce_int(
+            row["workout_exercise_id"],
+            f"Row {index} in set_entries workout_exercise_id",
+        )
+        if workout_exercise_id not in workout_exercise_ids:
+            raise ValueError(
+                f"Row {index} in set_entries references an unknown workout exercise."
+            )
+
+        set_number = coerce_int(row["set_number"], f"Row {index} in set_entries set_number")
+        reps = coerce_int(row["reps"], f"Row {index} in set_entries reps")
+        weight = coerce_float(row["weight"], f"Row {index} in set_entries weight")
+        if set_number <= 0:
+            raise ValueError(f"Row {index} in set_entries has invalid set number.")
+        if reps <= 0 or reps > 100:
+            raise ValueError(f"Row {index} in set_entries has invalid reps.")
+        if weight < 0:
+            raise ValueError(f"Row {index} in set_entries has invalid weight.")
+        row["workout_exercise_id"] = workout_exercise_id
+        row["set_number"] = set_number
+        row["reps"] = reps
+        row["weight"] = weight
 
 
 def reset_sqlite_sequences(conn: sqlite3.Connection) -> None:
@@ -236,10 +404,10 @@ def restore_backup_payload(payload: Any) -> None:
                 conn.execute(insert_sql, tuple(row[column] for column in columns))
 
         reset_sqlite_sequences(conn)
-        initialize_exercise_settings(
-            conn,
-            force_weight_migration=schema_version != BACKUP_SCHEMA_VERSION,
-        )
+        if schema_version == BACKUP_SCHEMA_VERSION:
+            set_metadata(conn, EXERCISE_SETTINGS_WEIGHT_MIGRATION_KEY, "1")
+        else:
+            initialize_exercise_settings(conn, force_weight_migration=True)
 
     logger.warning(
         "backup.restore.done counts=%s",

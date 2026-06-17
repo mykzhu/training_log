@@ -1,13 +1,14 @@
-import { useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import {
   createExercise,
+  getExerciseProfiles,
   getExercises,
   reorderExercises,
   replaceExerciseWeights,
   updateExercise,
 } from "../api/exercises";
-import type { Exercise } from "../api/types";
+import type { Exercise, ExerciseProfile } from "../api/types";
 import { formatSetOption, uniqueSortedNumbers } from "../utils/setOptions";
 
 function normalizeWeights(weights: number[]) {
@@ -18,27 +19,54 @@ function normalizeWeights(weights: number[]) {
   );
 }
 
+function weightsKey(weights: number[]) {
+  return JSON.stringify(normalizeWeights(weights));
+}
+
 function replaceExerciseInList(exercises: Exercise[], updated: Exercise) {
   return exercises.map((exercise) =>
     exercise.id === updated.id ? updated : exercise,
   );
 }
 
+function parseWeight(value: string) {
+  const weight = Number(value);
+  return Number.isFinite(weight) && weight >= 0 ? weight : null;
+}
+
 export default function SettingsPage() {
   const [exercises, setExercises] = useState<Exercise[]>([]);
+  const [profiles, setProfiles] = useState<ExerciseProfile[]>([]);
   const [nameDrafts, setNameDrafts] = useState<Record<number, string>>({});
+  const [profileDrafts, setProfileDrafts] = useState<Record<number, string>>({});
   const [weightDrafts, setWeightDrafts] = useState<Record<number, number[]>>({});
   const [newWeightDrafts, setNewWeightDrafts] = useState<Record<number, string>>({});
   const [newExerciseName, setNewExerciseName] = useState("");
+  const [newExerciseProfile, setNewExerciseProfile] = useState("");
+  const [newExerciseWeight, setNewExerciseWeight] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
+
+  const profileLabels = useMemo(
+    () =>
+      Object.fromEntries(
+        profiles.map((profile) => [profile.key, profile.label]),
+      ),
+    [profiles],
+  );
 
   function hydrate(responseExercises: Exercise[]) {
     setExercises(responseExercises);
     setNameDrafts(
       Object.fromEntries(
         responseExercises.map((exercise) => [exercise.id, exercise.name]),
+      ),
+    );
+    setProfileDrafts(
+      Object.fromEntries(
+        responseExercises.map((exercise) => [exercise.id, exercise.profile_key]),
       ),
     );
     setWeightDrafts(
@@ -49,18 +77,57 @@ export default function SettingsPage() {
   }
 
   async function load() {
-    const response = await getExercises({ includeInactive: true });
-    hydrate(response.exercises);
+    setLoading(true);
+    setError(null);
+    try {
+      const [exerciseResponse, profileResponse] = await Promise.all([
+        getExercises({ includeInactive: true }),
+        getExerciseProfiles(),
+      ]);
+      hydrate(exerciseResponse.exercises);
+      setProfiles(profileResponse.profiles);
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : "Failed to load.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
-    load().catch((reason: unknown) => {
-      setError(reason instanceof Error ? reason.message : "Failed to load.");
-    });
+    load();
   }, []);
 
-  async function runAction(action: () => Promise<void>, successMessage: string) {
-    setPending(true);
+  function isNameDirty(exercise: Exercise) {
+    return (nameDrafts[exercise.id] ?? "") !== exercise.name;
+  }
+
+  function isProfileDirty(exercise: Exercise) {
+    return (profileDrafts[exercise.id] ?? "") !== exercise.profile_key;
+  }
+
+  function isWeightDirty(exercise: Exercise) {
+    return (
+      weightsKey(weightDrafts[exercise.id] ?? []) !== weightsKey(exercise.weights)
+    );
+  }
+
+  function isExerciseDirty(exercise: Exercise) {
+    return (
+      isNameDirty(exercise) ||
+      isProfileDirty(exercise) ||
+      isWeightDirty(exercise)
+    );
+  }
+
+  const hasDirtyDrafts = exercises.some(isExerciseDirty);
+  const isBusy = pendingAction !== null;
+
+  async function runAction(
+    actionKey: string,
+    action: () => Promise<void>,
+    successMessage: string,
+  ) {
+    setPendingAction(actionKey);
     setError(null);
     setMessage(null);
     try {
@@ -69,76 +136,119 @@ export default function SettingsPage() {
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : "Action failed.");
     } finally {
-      setPending(false);
+      setPendingAction(null);
     }
   }
 
-  async function addExercise() {
+  async function addExercise(event?: FormEvent) {
+    event?.preventDefault();
     const name = newExerciseName.trim();
-    if (!name) {
+    const initialWeight = parseWeight(newExerciseWeight);
+    if (!name || initialWeight === null) {
       return;
     }
 
-    await runAction(async () => {
-      const response = await createExercise({ name, is_active: true, weights: [] });
-      setExercises((current) => [...current, response.exercise]);
-      setNameDrafts((current) => ({
-        ...current,
-        [response.exercise.id]: response.exercise.name,
-      }));
-      setWeightDrafts((current) => ({
-        ...current,
-        [response.exercise.id]: response.exercise.weights,
-      }));
-      setNewExerciseName("");
-    }, "Exercise added");
+    await runAction(
+      "create",
+      async () => {
+        const response = await createExercise({
+          name,
+          is_active: true,
+          profile_key: newExerciseProfile || undefined,
+          weights: [initialWeight],
+        });
+        setExercises((current) => [...current, response.exercise]);
+        setNameDrafts((current) => ({
+          ...current,
+          [response.exercise.id]: response.exercise.name,
+        }));
+        setProfileDrafts((current) => ({
+          ...current,
+          [response.exercise.id]: response.exercise.profile_key,
+        }));
+        setWeightDrafts((current) => ({
+          ...current,
+          [response.exercise.id]: response.exercise.weights,
+        }));
+        setNewExerciseName("");
+        setNewExerciseProfile("");
+        setNewExerciseWeight("");
+      },
+      "Exercise added",
+    );
   }
 
-  async function saveName(exercise: Exercise) {
+  async function saveDetails(exercise: Exercise) {
     const name = (nameDrafts[exercise.id] ?? "").trim();
-    if (!name || name === exercise.name) {
+    const profileKey = profileDrafts[exercise.id] ?? exercise.profile_key;
+    if (!name || (!isNameDirty(exercise) && !isProfileDirty(exercise))) {
       return;
     }
 
-    await runAction(async () => {
-      const response = await updateExercise(exercise.id, { name });
-      setExercises((current) => replaceExerciseInList(current, response.exercise));
-      setNameDrafts((current) => ({
-        ...current,
-        [exercise.id]: response.exercise.name,
-      }));
-    }, "Exercise renamed");
+    await runAction(
+      `details:${exercise.id}`,
+      async () => {
+        const response = await updateExercise(exercise.id, {
+          name,
+          profile_key: profileKey,
+        });
+        setExercises((current) => replaceExerciseInList(current, response.exercise));
+        setNameDrafts((current) => ({
+          ...current,
+          [exercise.id]: response.exercise.name,
+        }));
+        setProfileDrafts((current) => ({
+          ...current,
+          [exercise.id]: response.exercise.profile_key,
+        }));
+      },
+      "Exercise saved",
+    );
   }
 
   async function toggleActive(exercise: Exercise) {
-    await runAction(async () => {
-      const response = await updateExercise(exercise.id, {
-        is_active: !exercise.is_active,
-      });
-      setExercises((current) => replaceExerciseInList(current, response.exercise));
-    }, exercise.is_active ? "Exercise deactivated" : "Exercise reactivated");
+    await runAction(
+      `active:${exercise.id}`,
+      async () => {
+        const response = await updateExercise(exercise.id, {
+          is_active: !exercise.is_active,
+        });
+        setExercises((current) => replaceExerciseInList(current, response.exercise));
+      },
+      exercise.is_active ? "Exercise deactivated" : "Exercise reactivated",
+    );
   }
 
   async function moveExercise(index: number, direction: -1 | 1) {
     const targetIndex = index + direction;
-    if (targetIndex < 0 || targetIndex >= exercises.length) {
+    if (
+      targetIndex < 0 ||
+      targetIndex >= exercises.length ||
+      hasDirtyDrafts
+    ) {
       return;
     }
 
-    await runAction(async () => {
-      const reordered = [...exercises];
-      [reordered[index], reordered[targetIndex]] = [
-        reordered[targetIndex],
-        reordered[index],
-      ];
-      const response = await reorderExercises(reordered.map((exercise) => exercise.id));
-      hydrate(response.exercises);
-    }, "Exercise order updated");
+    await runAction(
+      "reorder",
+      async () => {
+        const reordered = [...exercises];
+        [reordered[index], reordered[targetIndex]] = [
+          reordered[targetIndex],
+          reordered[index],
+        ];
+        const response = await reorderExercises(
+          reordered.map((exercise) => exercise.id),
+        );
+        hydrate(response.exercises);
+      },
+      "Exercise order updated",
+    );
   }
 
   function addWeightDraft(exerciseId: number) {
-    const value = Number(newWeightDrafts[exerciseId]);
-    if (!Number.isFinite(value) || value < 0) {
+    const value = parseWeight(newWeightDrafts[exerciseId] ?? "");
+    if (value === null) {
       return;
     }
 
@@ -162,18 +272,22 @@ export default function SettingsPage() {
   async function saveWeights(exercise: Exercise) {
     const weights = normalizeWeights(weightDrafts[exercise.id] ?? []);
 
-    await runAction(async () => {
-      const response = await replaceExerciseWeights(exercise.id, weights);
-      const updated = {
-        ...exercise,
-        weights: response.weights,
-      };
-      setExercises((current) => replaceExerciseInList(current, updated));
-      setWeightDrafts((current) => ({
-        ...current,
-        [exercise.id]: response.weights,
-      }));
-    }, "Weights saved");
+    await runAction(
+      `weights:${exercise.id}`,
+      async () => {
+        const response = await replaceExerciseWeights(exercise.id, weights);
+        const updated = {
+          ...exercise,
+          weights: response.weights,
+        };
+        setExercises((current) => replaceExerciseInList(current, updated));
+        setWeightDrafts((current) => ({
+          ...current,
+          [exercise.id]: response.weights,
+        }));
+      },
+      "Weights saved",
+    );
   }
 
   return (
@@ -188,42 +302,91 @@ export default function SettingsPage() {
       {error && <div className="error-banner">{error}</div>}
       {message && <div className="success-banner">{message}</div>}
 
-      <section className="panel settings-add">
+      <form className="panel settings-add" onSubmit={addExercise}>
         <label>
           Exercise
           <input
-            disabled={pending}
+            disabled={pendingAction === "create"}
             onChange={(event) => setNewExerciseName(event.target.value)}
             placeholder="Exercise name"
             value={newExerciseName}
           />
         </label>
+        <label>
+          Analysis type
+          <select
+            disabled={pendingAction === "create"}
+            onChange={(event) => setNewExerciseProfile(event.target.value)}
+            value={newExerciseProfile}
+          >
+            <option value="">Infer from name</option>
+            {profiles.map((profile) => (
+              <option key={profile.key} value={profile.key}>
+                {profile.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Initial weight
+          <input
+            disabled={pendingAction === "create"}
+            inputMode="decimal"
+            min="0"
+            onChange={(event) => setNewExerciseWeight(event.target.value)}
+            placeholder="0"
+            step="0.25"
+            type="number"
+            value={newExerciseWeight}
+          />
+        </label>
         <button
           className="primary-button"
-          disabled={pending || !newExerciseName.trim()}
-          onClick={addExercise}
-          type="button"
+          disabled={
+            pendingAction === "create" ||
+            !newExerciseName.trim() ||
+            parseWeight(newExerciseWeight) === null
+          }
+          type="submit"
         >
-          Add exercise
+          Add
         </button>
-      </section>
+      </form>
+
+      {loading && <section className="panel muted">Loading settings...</section>}
+      {!loading && exercises.length === 0 && (
+        <section className="panel">
+          <p>No exercises configured.</p>
+          <button className="ghost-button" onClick={load} type="button">
+            Retry
+          </button>
+        </section>
+      )}
+      {hasDirtyDrafts && (
+        <div className="success-banner">
+          Save exercise changes before reordering.
+        </div>
+      )}
 
       <div className="settings-list">
         {exercises.map((exercise, index) => {
           const weights = weightDrafts[exercise.id] ?? [];
-          const weightChanged =
-            JSON.stringify(normalizeWeights(weights)) !==
-            JSON.stringify(exercise.weights);
-          const nameChanged = (nameDrafts[exercise.id] ?? "") !== exercise.name;
+          const detailsChanged =
+            isNameDirty(exercise) || isProfileDirty(exercise);
+          const weightChanged = isWeightDirty(exercise);
+          const detailsPending = pendingAction === `details:${exercise.id}`;
+          const activePending = pendingAction === `active:${exercise.id}`;
+          const weightsPending = pendingAction === `weights:${exercise.id}`;
+          const profileLabel =
+            profileLabels[profileDrafts[exercise.id] ?? exercise.profile_key] ??
+            "Accessory";
 
           return (
             <article className="settings-card" key={exercise.id}>
               <div className="settings-card-header">
                 <div>
                   <h2>{exercise.name}</h2>
-                  <p className="muted">
-                    {exercise.profile_key} · order {exercise.sort_order}
-                  </p>
+                  <p className="muted">{profileLabel}</p>
                 </div>
                 <button
                   className={
@@ -231,7 +394,7 @@ export default function SettingsPage() {
                       ? "secondary-button compact-action"
                       : "ghost-button compact-action"
                   }
-                  disabled={pending}
+                  disabled={activePending || isBusy || (weights.length === 0 && !exercise.is_active)}
                   onClick={() => toggleActive(exercise)}
                   type="button"
                 >
@@ -243,30 +406,59 @@ export default function SettingsPage() {
                 <label>
                   Name
                   <input
-                    disabled={pending}
+                    disabled={detailsPending}
                     onChange={(event) =>
                       setNameDrafts((current) => ({
                         ...current,
                         [exercise.id]: event.target.value,
                       }))
                     }
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        saveDetails(exercise);
+                      }
+                    }}
                     value={nameDrafts[exercise.id] ?? ""}
                   />
                 </label>
+                <label>
+                  Analysis type
+                  <select
+                    disabled={detailsPending}
+                    onChange={(event) =>
+                      setProfileDrafts((current) => ({
+                        ...current,
+                        [exercise.id]: event.target.value,
+                      }))
+                    }
+                    value={profileDrafts[exercise.id] ?? exercise.profile_key}
+                  >
+                    {profiles.map((profile) => (
+                      <option key={profile.key} value={profile.key}>
+                        {profile.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <button
                   className="secondary-button"
-                  disabled={pending || !nameChanged || !nameDrafts[exercise.id]?.trim()}
-                  onClick={() => saveName(exercise)}
+                  disabled={
+                    detailsPending ||
+                    !detailsChanged ||
+                    !nameDrafts[exercise.id]?.trim()
+                  }
+                  onClick={() => saveDetails(exercise)}
                   type="button"
                 >
-                  Save name
+                  Save
                 </button>
               </div>
 
               <div className="settings-order">
                 <button
                   className="ghost-button compact-button"
-                  disabled={pending || index === 0}
+                  disabled={isBusy || hasDirtyDrafts || index === 0}
                   onClick={() => moveExercise(index, -1)}
                   type="button"
                 >
@@ -274,7 +466,7 @@ export default function SettingsPage() {
                 </button>
                 <button
                   className="ghost-button compact-button"
-                  disabled={pending || index === exercises.length - 1}
+                  disabled={isBusy || hasDirtyDrafts || index === exercises.length - 1}
                   onClick={() => moveExercise(index, 1)}
                   type="button"
                 >
@@ -290,8 +482,9 @@ export default function SettingsPage() {
                   )}
                   {weights.map((weight) => (
                     <button
+                      aria-label={`Remove ${formatSetOption(weight)} kg`}
                       className="weight-chip"
-                      disabled={pending}
+                      disabled={weightsPending}
                       key={weight}
                       onClick={() => removeWeightDraft(exercise.id, weight)}
                       type="button"
@@ -305,7 +498,7 @@ export default function SettingsPage() {
                   <label>
                     New weight
                     <input
-                      disabled={pending}
+                      disabled={weightsPending}
                       inputMode="decimal"
                       min="0"
                       onChange={(event) =>
@@ -314,6 +507,12 @@ export default function SettingsPage() {
                           [exercise.id]: event.target.value,
                         }))
                       }
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          addWeightDraft(exercise.id);
+                        }
+                      }}
                       placeholder="0"
                       step="0.25"
                       type="number"
@@ -322,15 +521,22 @@ export default function SettingsPage() {
                   </label>
                   <button
                     className="ghost-button"
-                    disabled={pending || !(newWeightDrafts[exercise.id] ?? "").trim()}
+                    disabled={
+                      weightsPending ||
+                      parseWeight(newWeightDrafts[exercise.id] ?? "") === null
+                    }
                     onClick={() => addWeightDraft(exercise.id)}
                     type="button"
                   >
-                    Add weight
+                    Add
                   </button>
                   <button
                     className="secondary-button"
-                    disabled={pending || !weightChanged}
+                    disabled={
+                      weightsPending ||
+                      !weightChanged ||
+                      (exercise.is_active && normalizeWeights(weights).length === 0)
+                    }
                     onClick={() => saveWeights(exercise)}
                     type="button"
                   >

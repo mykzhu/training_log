@@ -4,6 +4,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 
 from app.repositories.exercises import (
+    ActiveExerciseWeightError,
     create_exercise,
     get_exercise,
     list_exercises,
@@ -12,6 +13,7 @@ from app.repositories.exercises import (
     replace_exercise_weights,
     update_exercise,
 )
+from app.services.analysis_service import list_exercise_profiles
 from app.schemas import (
     ExerciseCreateRequest,
     ExerciseOrderUpdateRequest,
@@ -21,6 +23,7 @@ from app.schemas import (
 
 
 router = APIRouter(prefix="/api/v1/exercises", tags=["exercises"])
+profiles_router = APIRouter(prefix="/api/v1/exercise-profiles", tags=["exercises"])
 
 
 def clean_exercise_name(name: str) -> str:
@@ -51,6 +54,8 @@ def create_exercise_endpoint(
             profile_key=payload.profile_key,
             weights=payload.weights,
         )
+    except ActiveExerciseWeightError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except sqlite3.IntegrityError as exc:
@@ -94,6 +99,10 @@ def update_exercise_endpoint(
                 else None
             ),
         )
+    except ActiveExerciseWeightError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except sqlite3.IntegrityError as exc:
         raise HTTPException(
             status_code=409,
@@ -127,6 +136,8 @@ def replace_exercise_weights_endpoint(
         weights = replace_exercise_weights(exercise_id, payload.weights)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Exercise not found.") from exc
+    except ActiveExerciseWeightError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -134,3 +145,8 @@ def replace_exercise_weights_endpoint(
         "exercise_id": exercise_id,
         "weights": weights,
     }
+
+
+@profiles_router.get("")
+def get_exercise_profiles() -> dict[str, list[dict[str, str]]]:
+    return {"profiles": list_exercise_profiles()}

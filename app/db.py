@@ -2,7 +2,10 @@ import logging
 import sqlite3
 
 from app import config
-from app.services.analysis_service import profile_key_for_exercise_name
+from app.services.analysis_service import (
+    is_supported_profile_key,
+    profile_key_for_exercise_name,
+)
 
 
 logger = logging.getLogger("training_log")
@@ -75,6 +78,29 @@ def ensure_column(
         )
 
 
+def ensure_case_insensitive_exercise_name_index(conn: sqlite3.Connection) -> None:
+    duplicates = conn.execute(
+        """
+        SELECT lower(name) AS normalized_name, COUNT(*) AS count
+        FROM exercises
+        GROUP BY lower(name)
+        HAVING COUNT(*) > 1
+        """
+    ).fetchall()
+    if duplicates:
+        names = ", ".join(str(row["normalized_name"]) for row in duplicates)
+        raise RuntimeError(
+            f"Exercise names must be unique ignoring case before migration: {names}"
+        )
+
+    conn.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_exercises_name_nocase
+        ON exercises(name COLLATE NOCASE)
+        """
+    )
+
+
 def get_metadata(conn: sqlite3.Connection, key: str) -> str | None:
     row = conn.execute(
         "SELECT value FROM app_metadata WHERE key = ?",
@@ -125,18 +151,6 @@ def seed_initial_weight_options(conn: sqlite3.Connection) -> None:
 
     for row in rows:
         exercise_id = int(row["id"])
-        existing_count = conn.execute(
-            """
-            SELECT COUNT(*)
-            FROM exercise_weight_options
-            WHERE exercise_id = ?
-            """,
-            (exercise_id,),
-        ).fetchone()[0]
-
-        if existing_count:
-            continue
-
         profile_key = str(row["profile_key"] or "accessory")
         weights = DEFAULT_WEIGHT_OPTIONS_BY_PROFILE.get(profile_key, ())
         if weights:
@@ -209,7 +223,8 @@ def initialize_exercise_settings(
                 (index * 10, exercise_id),
             )
 
-        if not row["profile_key"]:
+        profile_key = str(row["profile_key"] or "")
+        if not profile_key or not is_supported_profile_key(profile_key):
             conn.execute(
                 """
                 UPDATE exercises
@@ -326,5 +341,6 @@ def init_db() -> None:
 
         seed_default_exercises(conn)
         initialize_exercise_settings(conn)
+        ensure_case_insensitive_exercise_name_index(conn)
 
         logger.info("db.init.done")

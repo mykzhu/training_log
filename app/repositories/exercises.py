@@ -3,11 +3,30 @@ import sqlite3
 from typing import Any
 
 from app.db import get_db
-from app.services.analysis_service import profile_key_for_exercise_name
+from app.services.analysis_service import (
+    is_supported_profile_key,
+    profile_key_for_exercise_name,
+)
+
+
+class ActiveExerciseWeightError(ValueError):
+    pass
 
 
 def normalize_exercise_name(name: str) -> str:
     return " ".join(name.strip().split())
+
+
+def normalize_profile_key(profile_key: str | None, exercise_name: str) -> str:
+    resolved = (
+        profile_key.strip()
+        if profile_key is not None and profile_key.strip()
+        else profile_key_for_exercise_name(exercise_name)
+    )
+    if not is_supported_profile_key(resolved):
+        raise ValueError("Unsupported exercise profile.")
+
+    return resolved
 
 
 def normalize_weights(weights: list[float]) -> list[float]:
@@ -126,7 +145,7 @@ def get_exercise_by_name(name: str) -> dict[str, Any] | None:
             """
             SELECT id, name, is_active, sort_order, profile_key
             FROM exercises
-            WHERE name = ?
+            WHERE lower(name) = lower(?)
             """,
             (normalized_name,),
         ).fetchone()
@@ -149,14 +168,28 @@ def create_exercise(
     name: str,
     *,
     is_active: bool = True,
-    profile_key: str = "accessory",
+    profile_key: str | None = None,
     weights: list[float] | None = None,
 ) -> tuple[dict[str, Any], bool]:
     normalized_name = normalize_exercise_name(name)
     normalized_weights = normalize_weights(weights or [])
-    resolved_profile_key = profile_key or profile_key_for_exercise_name(normalized_name)
+    resolved_profile_key = normalize_profile_key(profile_key, normalized_name)
+
+    if is_active and not normalized_weights:
+        raise ActiveExerciseWeightError("Active exercise must have at least one weight.")
 
     with get_db() as conn:
+        existing = conn.execute(
+            """
+            SELECT id
+            FROM exercises
+            WHERE lower(name) = lower(?)
+            """,
+            (normalized_name,),
+        ).fetchone()
+        if existing is not None:
+            raise sqlite3.IntegrityError("Exercise name already exists.")
+
         try:
             cursor = conn.execute(
                 """
@@ -212,9 +245,39 @@ def update_exercise(
 
     updated_name = current["name"] if name is None else normalize_exercise_name(name)
     updated_active = current["is_active"] if is_active is None else is_active
-    updated_profile_key = current["profile_key"] if profile_key is None else profile_key
+    updated_profile_key = (
+        current["profile_key"]
+        if profile_key is None
+        else normalize_profile_key(profile_key, updated_name)
+    )
 
     with get_db() as conn:
+        existing = conn.execute(
+            """
+            SELECT id
+            FROM exercises
+            WHERE lower(name) = lower(?)
+              AND id != ?
+            """,
+            (updated_name, exercise_id),
+        ).fetchone()
+        if existing is not None:
+            raise sqlite3.IntegrityError("Exercise name already exists.")
+
+        if updated_active:
+            weight_count = conn.execute(
+                """
+                SELECT COUNT(*)
+                FROM exercise_weight_options
+                WHERE exercise_id = ?
+                """,
+                (exercise_id,),
+            ).fetchone()[0]
+            if int(weight_count) == 0:
+                raise ActiveExerciseWeightError(
+                    "Active exercise must have at least one weight."
+                )
+
         try:
             cursor = conn.execute(
                 """
@@ -252,11 +315,15 @@ def replace_exercise_weights(
 
     with get_db() as conn:
         exercise = conn.execute(
-            "SELECT id FROM exercises WHERE id = ?",
+            "SELECT id, is_active FROM exercises WHERE id = ?",
             (exercise_id,),
         ).fetchone()
         if exercise is None:
             raise KeyError("Exercise not found.")
+        if bool(exercise["is_active"]) and not normalized_weights:
+            raise ActiveExerciseWeightError(
+                "Active exercise must have at least one weight."
+            )
 
         conn.execute(
             "DELETE FROM exercise_weight_options WHERE exercise_id = ?",

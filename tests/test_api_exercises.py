@@ -10,6 +10,7 @@ import app.main as main
 from app.routes.api_exercises import (
     create_exercise_endpoint,
     get_exercises,
+    get_exercise_profiles,
     reorder_exercises_endpoint,
     replace_exercise_weights_endpoint,
     update_exercise_endpoint,
@@ -57,6 +58,15 @@ class ExercisesApiTests(unittest.TestCase):
         self.assertIn(("/api/v1/exercises/{exercise_id}", ("PATCH",)), routes)
         self.assertIn(("/api/v1/exercises/{exercise_id}/weights", ("PUT",)), routes)
         self.assertIn(("/api/v1/exercises/order", ("PUT",)), routes)
+        self.assertIn(("/api/v1/exercise-profiles", ("GET",)), routes)
+
+    def test_get_exercise_profiles_returns_friendly_catalog(self) -> None:
+        response = get_exercise_profiles()
+        keys = [profile["key"] for profile in response["profiles"]]
+
+        self.assertIn("deadlift", keys)
+        self.assertIn("accessory", keys)
+        self.assertIn("Deadlift", [profile["label"] for profile in response["profiles"]])
 
     def test_get_exercises_returns_seeded_exercises_by_settings_order(self) -> None:
         response = get_exercises()
@@ -76,9 +86,41 @@ class ExercisesApiTests(unittest.TestCase):
         self.assertTrue(response["created"])
         self.assertEqual(response["exercise"]["name"], "Incline Row")
         self.assertEqual(response["exercise"]["weights"], [15.0, 17.75])
+        self.assertEqual(response["exercise"]["profile_key"], "accessory")
 
         with self.assertRaises(HTTPException) as exc:
             create_exercise_endpoint(ExerciseCreateRequest(name="Incline Row"))
+
+        self.assertEqual(exc.exception.status_code, 409)
+
+    def test_create_exercise_can_infer_profile_from_name(self) -> None:
+        response = create_exercise_endpoint(
+            ExerciseCreateRequest(name="Trap Bar Deadlift", weights=[40])
+        )
+
+        self.assertEqual(response["exercise"]["profile_key"], "deadlift")
+
+    def test_create_exercise_rejects_unknown_profile(self) -> None:
+        with self.assertRaises(HTTPException) as exc:
+            create_exercise_endpoint(
+                ExerciseCreateRequest(
+                    name="Incline Row",
+                    profile_key="not_real",
+                    weights=[20],
+                )
+            )
+
+        self.assertEqual(exc.exception.status_code, 400)
+
+    def test_create_exercise_rejects_case_insensitive_duplicate(self) -> None:
+        create_exercise_endpoint(
+            ExerciseCreateRequest(name="Incline Row", weights=[20])
+        )
+
+        with self.assertRaises(HTTPException) as exc:
+            create_exercise_endpoint(
+                ExerciseCreateRequest(name="incline row", weights=[20])
+            )
 
         self.assertEqual(exc.exception.status_code, 409)
 
@@ -87,6 +129,25 @@ class ExercisesApiTests(unittest.TestCase):
             create_exercise_endpoint(ExerciseCreateRequest(name="   "))
 
         self.assertEqual(exc.exception.status_code, 400)
+
+    def test_active_exercise_requires_at_least_one_weight(self) -> None:
+        with self.assertRaises(HTTPException) as create_exc:
+            create_exercise_endpoint(ExerciseCreateRequest(name="New Active"))
+
+        self.assertEqual(create_exc.exception.status_code, 409)
+
+        response = create_exercise_endpoint(
+            ExerciseCreateRequest(name="Future Exercise", is_active=False)
+        )
+        exercise_id = int(response["exercise"]["id"])
+
+        with self.assertRaises(HTTPException) as activate_exc:
+            update_exercise_endpoint(
+                exercise_id,
+                ExerciseUpdateRequest(is_active=True),
+            )
+
+        self.assertEqual(activate_exc.exception.status_code, 409)
 
     def test_update_exercise_renames_existing_row(self) -> None:
         deadlift_id = self.exercise_id("Deadlift")
@@ -98,6 +159,27 @@ class ExercisesApiTests(unittest.TestCase):
 
         self.assertEqual(response["exercise"]["id"], deadlift_id)
         self.assertEqual(response["exercise"]["name"], "Trap Bar Deadlift")
+
+    def test_update_exercise_allows_capitalization_only_change(self) -> None:
+        deadlift_id = self.exercise_id("Deadlift")
+
+        response = update_exercise_endpoint(
+            deadlift_id,
+            ExerciseUpdateRequest(name="DEADLIFT"),
+        )
+
+        self.assertEqual(response["exercise"]["id"], deadlift_id)
+        self.assertEqual(response["exercise"]["name"], "DEADLIFT")
+
+    def test_update_exercise_can_change_profile(self) -> None:
+        deadlift_id = self.exercise_id("Deadlift")
+
+        response = update_exercise_endpoint(
+            deadlift_id,
+            ExerciseUpdateRequest(profile_key="accessory"),
+        )
+
+        self.assertEqual(response["exercise"]["profile_key"], "accessory")
 
     def test_update_exercise_can_toggle_activity(self) -> None:
         deadlift_id = self.exercise_id("Deadlift")
@@ -125,6 +207,15 @@ class ExercisesApiTests(unittest.TestCase):
         )
 
         self.assertEqual(response["weights"], [0.0, 50.0, 52.5])
+
+    def test_replace_active_exercise_weights_rejects_empty_list(self) -> None:
+        with self.assertRaises(HTTPException) as exc:
+            replace_exercise_weights_endpoint(
+                self.exercise_id("Deadlift"),
+                ExerciseWeightsUpdateRequest(weights=[]),
+            )
+
+        self.assertEqual(exc.exception.status_code, 409)
 
     def test_replace_exercise_weights_rejects_negative_values(self) -> None:
         with self.assertRaises(HTTPException) as exc:
