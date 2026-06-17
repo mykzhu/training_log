@@ -137,7 +137,7 @@ docker build -t training-log:phase1 .
 
 ---
 
-## [ ] Phase 2 — CI and repository guardrails
+## [x] Phase 2 — CI and repository guardrails
 
 Branch:
 
