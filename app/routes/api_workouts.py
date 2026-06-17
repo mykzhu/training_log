@@ -14,6 +14,7 @@ from app.repositories.workouts import (
     get_set_entry,
     get_workout,
     get_workout_details,
+    get_workout_details_batch,
     get_workout_exercise,
     list_recent_workouts,
     update_set_entry,
@@ -26,6 +27,7 @@ from app.schemas import (
     WorkoutUpdateRequest,
 )
 from app.services.stats_service import (
+    build_e1rm_baselines_by_workout,
     build_workout_analysis,
     calculate_workout_load_metrics,
 )
@@ -65,9 +67,14 @@ def serialize_workout_exercise(item: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def build_workout_summary(workout: dict[str, Any]) -> dict[str, Any]:
+def build_workout_summary(
+    workout: dict[str, Any],
+    *,
+    details: list[dict[str, Any]] | None = None,
+    best_e1rm_by_exercise: dict[int, float] | None = None,
+) -> dict[str, Any]:
     workout_id = int(workout["id"])
-    details = get_workout_details(workout_id)
+    details = details if details is not None else get_workout_details(workout_id)
     total_volume = sum(item["total_volume"] for item in details)
     total_reps = sum(item["total_reps"] for item in details)
     total_sets = sum(len(item["sets"]) for item in details)
@@ -76,6 +83,7 @@ def build_workout_summary(workout: dict[str, Any]) -> dict[str, Any]:
         session_rpe=workout["session_rpe"],
         as_of_created_at=workout["created_at"],
         as_of_workout_id=workout_id,
+        best_e1rm_by_exercise=best_e1rm_by_exercise,
     )
 
     return {
@@ -92,6 +100,27 @@ def build_workout_summary(workout: dict[str, Any]) -> dict[str, Any]:
         "exercises_count": len(details),
         "load_metrics": load_metrics,
     }
+
+
+def build_workout_summaries(workouts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    workout_ids = [int(workout["id"]) for workout in workouts]
+    details_by_workout = get_workout_details_batch(workout_ids)
+    e1rm_baselines_by_workout = build_e1rm_baselines_by_workout(
+        workouts=workouts,
+        details_by_workout=details_by_workout,
+    )
+
+    return [
+        build_workout_summary(
+            workout,
+            details=details_by_workout.get(int(workout["id"]), []),
+            best_e1rm_by_exercise=e1rm_baselines_by_workout.get(
+                int(workout["id"]),
+                {},
+            ),
+        )
+        for workout in workouts
+    ]
 
 
 def normalize_created_at(value: str | None) -> str:
@@ -141,7 +170,7 @@ def get_workouts(
     workouts = list_recent_workouts(limit=limit)
     return {
         "limit": limit,
-        "workouts": [build_workout_summary(workout) for workout in workouts],
+        "workouts": build_workout_summaries(workouts),
     }
 
 

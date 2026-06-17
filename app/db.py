@@ -27,7 +27,10 @@ def get_db() -> sqlite3.Connection:
     config.DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(config.DB_PATH)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout = 5000")
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA synchronous = NORMAL")
     return conn
 
 
@@ -97,6 +100,95 @@ def ensure_case_insensitive_exercise_name_index(conn: sqlite3.Connection) -> Non
         """
         CREATE UNIQUE INDEX IF NOT EXISTS idx_exercises_name_nocase
         ON exercises(name COLLATE NOCASE)
+        """
+    )
+
+
+def renumber_grouped_positions(
+    conn: sqlite3.Connection,
+    *,
+    table_name: str,
+    group_column: str,
+    position_column: str,
+) -> None:
+    groups = conn.execute(
+        f"""
+        SELECT DISTINCT {group_column} AS group_id
+        FROM {table_name}
+        ORDER BY {group_column} ASC
+        """
+    ).fetchall()
+
+    for group in groups:
+        group_id = int(group["group_id"])
+        rows = conn.execute(
+            f"""
+            SELECT id
+            FROM {table_name}
+            WHERE {group_column} = ?
+            ORDER BY {position_column} ASC, id ASC
+            """,
+            (group_id,),
+        ).fetchall()
+
+        for index, row in enumerate(rows, start=1):
+            conn.execute(
+                f"""
+                UPDATE {table_name}
+                SET {position_column} = ?
+                WHERE id = ?
+                """,
+                (index, int(row["id"])),
+            )
+
+
+def normalize_ordering_columns(conn: sqlite3.Connection) -> None:
+    renumber_grouped_positions(
+        conn,
+        table_name="workout_exercises",
+        group_column="workout_id",
+        position_column="position",
+    )
+    renumber_grouped_positions(
+        conn,
+        table_name="set_entries",
+        group_column="workout_exercise_id",
+        position_column="set_number",
+    )
+    renumber_grouped_positions(
+        conn,
+        table_name="active_draft_exercises",
+        group_column="draft_id",
+        position_column="position",
+    )
+    renumber_grouped_positions(
+        conn,
+        table_name="active_draft_sets",
+        group_column="draft_exercise_id",
+        position_column="set_number",
+    )
+
+
+def ensure_performance_indexes(conn: sqlite3.Connection) -> None:
+    conn.executescript(
+        """
+        CREATE INDEX IF NOT EXISTS idx_workouts_created_at_id
+        ON workouts(created_at, id);
+
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_workout_exercises_workout_position
+        ON workout_exercises(workout_id, position);
+
+        CREATE INDEX IF NOT EXISTS idx_workout_exercises_exercise_workout
+        ON workout_exercises(exercise_id, workout_id);
+
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_set_entries_exercise_set_number
+        ON set_entries(workout_exercise_id, set_number);
+
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_active_draft_exercises_draft_position
+        ON active_draft_exercises(draft_id, position);
+
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_active_draft_sets_exercise_set_number
+        ON active_draft_sets(draft_exercise_id, set_number);
         """
     )
 
@@ -341,6 +433,8 @@ def init_db() -> None:
 
         seed_default_exercises(conn)
         initialize_exercise_settings(conn)
+        normalize_ordering_columns(conn)
         ensure_case_insensitive_exercise_name_index(conn)
+        ensure_performance_indexes(conn)
 
         logger.info("db.init.done")

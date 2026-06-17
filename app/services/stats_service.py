@@ -2,7 +2,7 @@ from datetime import date, timedelta
 from typing import Any
 
 from app.db import get_db
-from app.repositories.workouts import get_workout_details
+from app.repositories.workouts import get_workout_details_batch
 from app.services.analysis_service import (
     calculate_workout_load_metrics as calculate_load_metrics,
     estimated_1rm,
@@ -101,7 +101,15 @@ def calculate_workout_load_metrics(
     current_workout_id: int | None = None,
     as_of_created_at: str | None = None,
     as_of_workout_id: int | None = None,
+    best_e1rm_by_exercise: dict[int, float] | None = None,
 ) -> dict[str, Any]:
+    if best_e1rm_by_exercise is not None:
+        return calculate_load_metrics(
+            workout_exercises=workout_exercises,
+            session_rpe=session_rpe,
+            best_e1rm_by_exercise=best_e1rm_by_exercise,
+        )
+
     best_e1rm_by_exercise = get_best_e1rm_by_exercise(
         workout_exercises=workout_exercises,
         current_workout_id=current_workout_id,
@@ -114,6 +122,104 @@ def calculate_workout_load_metrics(
         session_rpe=session_rpe,
         best_e1rm_by_exercise=best_e1rm_by_exercise,
     )
+
+
+def workout_created_at(workout: Any) -> str:
+    return str(workout["created_at"])
+
+
+def workout_id(workout: Any) -> int:
+    return int(workout["id"])
+
+
+def workout_sort_key(workout: Any) -> tuple[str, int]:
+    return (workout_created_at(workout), workout_id(workout))
+
+
+def row_is_before_workout(row: Any, workout: Any) -> bool:
+    row_created_at = str(row["created_at"])
+    target_created_at = workout_created_at(workout)
+    row_workout_id = int(row["workout_id"])
+    target_workout_id = workout_id(workout)
+
+    return row_created_at < target_created_at or (
+        row_created_at == target_created_at
+        and row_workout_id < target_workout_id
+    )
+
+
+def build_e1rm_baselines_by_workout(
+    workouts: list[Any],
+    details_by_workout: dict[int, list[dict[str, Any]]],
+) -> dict[int, dict[int, float]]:
+    ordered_workouts = sorted(workouts, key=workout_sort_key)
+    baselines_by_workout: dict[int, dict[int, float]] = {
+        workout_id(workout): {}
+        for workout in ordered_workouts
+    }
+
+    exercise_ids = sorted(
+        {
+            int(item["exercise_id"])
+            for details in details_by_workout.values()
+            for item in details
+            if item.get("exercise_id") is not None
+        }
+    )
+    if not ordered_workouts or not exercise_ids:
+        return baselines_by_workout
+
+    max_workout = ordered_workouts[-1]
+    placeholders = ", ".join("?" for _ in exercise_ids)
+    params: list[Any] = [
+        *exercise_ids,
+        workout_created_at(max_workout),
+        workout_created_at(max_workout),
+        workout_id(max_workout),
+    ]
+
+    with get_db() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT
+                we.exercise_id,
+                w.id AS workout_id,
+                w.created_at,
+                se.weight,
+                se.reps
+            FROM set_entries se
+            JOIN workout_exercises we ON we.id = se.workout_exercise_id
+            JOIN workouts w ON w.id = we.workout_id
+            WHERE we.exercise_id IN ({placeholders})
+              AND (
+                    w.created_at < ?
+                    OR (w.created_at = ? AND w.id < ?)
+              )
+            ORDER BY w.created_at ASC, w.id ASC, se.set_number ASC, se.id ASC
+            """,
+            params,
+        ).fetchall()
+
+    best_by_exercise: dict[int, float] = {}
+    row_index = 0
+
+    for workout in ordered_workouts:
+        while row_index < len(rows) and row_is_before_workout(
+            rows[row_index],
+            workout,
+        ):
+            row = rows[row_index]
+            exercise_id = int(row["exercise_id"])
+            e1rm = estimated_1rm(float(row["weight"]), int(row["reps"]))
+            if e1rm is not None:
+                if exercise_id not in best_by_exercise or e1rm > best_by_exercise[exercise_id]:
+                    best_by_exercise[exercise_id] = e1rm
+
+            row_index += 1
+
+        baselines_by_workout[workout_id(workout)] = dict(best_by_exercise)
+
+    return baselines_by_workout
 
 
 def build_workout_analysis(
@@ -695,11 +801,19 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
                 (limit,),
             ).fetchall()
 
+    workout_ids = [int(workout["id"]) for workout in workouts]
+    details_by_workout = get_workout_details_batch(workout_ids)
+    e1rm_baselines_by_workout = build_e1rm_baselines_by_workout(
+        workouts=list(workouts),
+        details_by_workout=details_by_workout,
+    )
+
     workout_items = []
     exercise_stats: dict[int, dict[str, Any]] = {}
 
     for workout in workouts:
-        details = get_workout_details(workout["id"])
+        current_workout_id = int(workout["id"])
+        details = details_by_workout.get(current_workout_id, [])
 
         total_volume = sum(item["total_volume"] for item in details)
         total_reps = sum(item["total_reps"] for item in details)
@@ -713,12 +827,16 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
             workout_exercises=details,
             session_rpe=workout["session_rpe"],
             as_of_created_at=workout["created_at"],
-            as_of_workout_id=workout["id"],
+            as_of_workout_id=current_workout_id,
+            best_e1rm_by_exercise=e1rm_baselines_by_workout.get(
+                current_workout_id,
+                {},
+            ),
         )
 
         workout_items.append(
             {
-                "id": workout["id"],
+                "id": current_workout_id,
                 "date": workout["created_at"][:10],
                 "created_at": workout["created_at"],
                 "total_volume": total_volume,
@@ -768,7 +886,7 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
                     stats["best_set"] = {
                         "weight": weight,
                         "reps": reps,
-                        "workout_id": workout["id"],
+                        "workout_id": current_workout_id,
                         "date": workout["created_at"][:10],
                     }
 

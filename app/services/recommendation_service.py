@@ -4,7 +4,7 @@ from statistics import median
 from typing import Any
 
 from app.db import get_db
-from app.repositories.workouts import get_workout_details
+from app.repositories.workouts import get_workout_details_batch
 from app.services.analysis_service import estimated_1rm, get_exercise_load_profile
 from app.services.recovery_service import (
     NON_EMPTY_WORKOUT_EXISTS_SQL,
@@ -12,7 +12,10 @@ from app.services.recovery_service import (
     format_time_gap,
     parse_iso_datetime,
 )
-from app.services.stats_service import calculate_workout_load_metrics
+from app.services.stats_service import (
+    build_e1rm_baselines_by_workout,
+    calculate_workout_load_metrics,
+)
 
 
 RECOMMENDATION_STATUS_TITLES: dict[str, str] = {
@@ -143,6 +146,27 @@ def get_recommendation_top_set(sets: list[Any]) -> dict[str, Any] | None:
     return best_set
 
 
+def build_exercise_sets_summary(sets: list[dict[str, Any]]) -> dict[str, Any]:
+    top_set = get_recommendation_top_set(sets)
+
+    total_volume = sum(
+        float(set_row["weight"]) * int(set_row["reps"])
+        for set_row in sets
+    )
+    total_reps = sum(int(set_row["reps"]) for set_row in sets)
+
+    return {
+        "sets": sets,
+        "top_set": top_set,
+        "top_weight": float(top_set["weight"]) if top_set else None,
+        "top_reps": int(top_set["reps"]) if top_set else None,
+        "best_e1rm": float(top_set["e1rm"]) if top_set and top_set["e1rm"] is not None else None,
+        "total_volume": total_volume,
+        "total_reps": total_reps,
+        "total_sets": len(sets),
+    }
+
+
 def build_exercise_progression_trend(
     last_summary: dict[str, Any] | None,
     previous_summary: dict[str, Any] | None,
@@ -270,24 +294,233 @@ def build_exercise_occurrence_summary(
         for row in rows
     ]
 
-    top_set = get_recommendation_top_set(sets)
+    return build_exercise_sets_summary(sets)
 
-    total_volume = sum(
-        float(set_row["weight"]) * int(set_row["reps"])
-        for set_row in sets
-    )
-    total_reps = sum(int(set_row["reps"]) for set_row in sets)
 
+def build_exercise_occurrence_summary_from_details(
+    workout_details: list[dict[str, Any]],
+    exercise_id: int,
+) -> dict[str, Any] | None:
+    sets: list[dict[str, Any]] = []
+    for item in workout_details:
+        if int(item["exercise_id"]) != exercise_id:
+            continue
+
+        for set_row in item["sets"]:
+            sets.append(
+                {
+                    "weight": float(set_row["weight"]),
+                    "reps": int(set_row["reps"]),
+                }
+            )
+
+    if not sets:
+        return None
+
+    return build_exercise_sets_summary(sets)
+
+
+def empty_exercise_history_context() -> dict[str, Any]:
     return {
-        "sets": sets,
-        "top_set": top_set,
-        "top_weight": float(top_set["weight"]) if top_set else None,
-        "top_reps": int(top_set["reps"]) if top_set else None,
-        "best_e1rm": float(top_set["e1rm"]) if top_set and top_set["e1rm"] is not None else None,
-        "total_volume": total_volume,
-        "total_reps": total_reps,
-        "total_sets": len(sets),
+        "has_history": False,
+        "last_workout_id": None,
+        "last_workout_at": None,
+        "previous_workout_id": None,
+        "previous_workout_at": None,
+        "hours_since_same_exercise": None,
+        "days_since_same_exercise": None,
+        "same_exercise_gap_label": "—",
+        "usual_interval_days": None,
+        "usual_interval_label": "—",
+        "gap_status": "unknown",
+        "gap_status_label": "Unknown",
+        "occurrence_count": 0,
+        "last_total_volume": None,
+        "last_total_reps": None,
+        "last_total_sets": None,
+        "last_summary": None,
+        "previous_summary": None,
+        "progression_trend": {
+            "status": "unknown",
+            "label": "Unknown",
+            "e1rm_change_percent": None,
+            "volume_change_percent": None,
+            "same_weight_rep_delta": None,
+            "summary": "Not enough history to compare this exercise.",
+        },
     }
+
+
+def build_exercise_history_contexts(
+    exercise_ids: list[int],
+    as_of: str | None = None,
+    limit: int = 8,
+) -> dict[int, dict[str, Any]]:
+    unique_exercise_ids = sorted({int(exercise_id) for exercise_id in exercise_ids})
+    contexts = {
+        exercise_id: empty_exercise_history_context()
+        for exercise_id in unique_exercise_ids
+    }
+    if not unique_exercise_ids:
+        return contexts
+
+    as_of_dt = parse_iso_datetime(as_of) or datetime.now()
+    as_of_value = as_of_dt.isoformat(timespec="seconds")
+    placeholders = ", ".join("?" for _ in unique_exercise_ids)
+
+    with get_db() as conn:
+        rows = conn.execute(
+            f"""
+            WITH occurrence_totals AS (
+                SELECT
+                    we.exercise_id,
+                    w.id AS workout_id,
+                    w.created_at,
+                    SUM(se.weight * se.reps) AS total_volume,
+                    SUM(se.reps) AS total_reps,
+                    COUNT(se.id) AS total_sets
+                FROM workouts w
+                JOIN workout_exercises we ON we.workout_id = w.id
+                JOIN set_entries se ON se.workout_exercise_id = we.id
+                WHERE we.exercise_id IN ({placeholders})
+                  AND w.created_at < ?
+                GROUP BY we.exercise_id, w.id, w.created_at
+            ),
+            ranked AS (
+                SELECT
+                    *,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY exercise_id
+                        ORDER BY created_at DESC, workout_id DESC
+                    ) AS row_number
+                FROM occurrence_totals
+            )
+            SELECT
+                exercise_id,
+                workout_id,
+                created_at,
+                total_volume,
+                total_reps,
+                total_sets
+            FROM ranked
+            WHERE row_number <= ?
+            ORDER BY exercise_id ASC, created_at DESC, workout_id DESC
+            """,
+            [*unique_exercise_ids, as_of_value, limit],
+        ).fetchall()
+
+    occurrences_by_exercise: dict[int, list[dict[str, Any]]] = {
+        exercise_id: []
+        for exercise_id in unique_exercise_ids
+    }
+    for row in rows:
+        occurrences_by_exercise.setdefault(int(row["exercise_id"]), []).append(
+            dict(row)
+        )
+
+    summary_workout_ids = sorted(
+        {
+            int(occurrence["workout_id"])
+            for occurrences in occurrences_by_exercise.values()
+            for occurrence in occurrences[:2]
+        }
+    )
+    details_by_workout = get_workout_details_batch(summary_workout_ids)
+
+    for exercise_id, occurrences in occurrences_by_exercise.items():
+        if not occurrences:
+            continue
+
+        last_occurrence = occurrences[0]
+        previous_occurrence = occurrences[1] if len(occurrences) > 1 else None
+
+        last_summary = build_exercise_occurrence_summary_from_details(
+            details_by_workout.get(int(last_occurrence["workout_id"]), []),
+            exercise_id,
+        )
+
+        previous_summary = (
+            build_exercise_occurrence_summary_from_details(
+                details_by_workout.get(int(previous_occurrence["workout_id"]), []),
+                exercise_id,
+            )
+            if previous_occurrence
+            else None
+        )
+
+        progression_trend = build_exercise_progression_trend(
+            last_summary=last_summary,
+            previous_summary=previous_summary,
+        )
+
+        last_dt = parse_iso_datetime(str(last_occurrence["created_at"]))
+
+        hours_since_same_exercise = None
+        days_since_same_exercise = None
+
+        if last_dt is not None:
+            hours_since_same_exercise = max(
+                0.0,
+                (as_of_dt - last_dt).total_seconds() / 3600,
+            )
+            days_since_same_exercise = hours_since_same_exercise / 24
+
+        chronological = list(reversed(occurrences))
+        intervals: list[float] = []
+
+        for previous, current in zip(chronological, chronological[1:]):
+            previous_dt = parse_iso_datetime(str(previous["created_at"]))
+            current_dt = parse_iso_datetime(str(current["created_at"]))
+
+            if previous_dt is None or current_dt is None:
+                continue
+
+            interval_days = (current_dt - previous_dt).total_seconds() / 86400
+
+            if interval_days > 0:
+                intervals.append(interval_days)
+
+        usual_interval_days = median(intervals) if intervals else None
+        gap_status = exercise_gap_status(
+            days_since_same_exercise=days_since_same_exercise,
+            usual_interval_days=usual_interval_days,
+        )
+
+        contexts[exercise_id] = {
+            "has_history": True,
+            "last_workout_id": int(last_occurrence["workout_id"]),
+            "last_workout_at": last_occurrence["created_at"],
+            "previous_workout_id": (
+                int(previous_occurrence["workout_id"])
+                if previous_occurrence
+                else None
+            ),
+            "previous_workout_at": (
+                previous_occurrence["created_at"]
+                if previous_occurrence
+                else None
+            ),
+            "hours_since_same_exercise": hours_since_same_exercise,
+            "days_since_same_exercise": days_since_same_exercise,
+            "same_exercise_gap_label": format_time_gap(hours_since_same_exercise),
+            "usual_interval_days": usual_interval_days,
+            "usual_interval_label": (
+                f"{usual_interval_days:.1f}d"
+                if usual_interval_days is not None
+                else "—"
+            ),
+            "gap_status": gap_status,
+            "gap_status_label": exercise_gap_label(gap_status),
+            "occurrence_count": len(occurrences),
+            "last_total_volume": float(last_occurrence["total_volume"] or 0),
+            "last_total_reps": int(last_occurrence["total_reps"] or 0),
+            "last_total_sets": int(last_occurrence["total_sets"] or 0),
+            "last_summary": last_summary,
+            "previous_summary": previous_summary,
+            "progression_trend": progression_trend,
+        }
+
+    return contexts
 
 
 def build_exercise_history_context(
@@ -295,153 +528,11 @@ def build_exercise_history_context(
     as_of: str | None = None,
     limit: int = 8,
 ) -> dict[str, Any]:
-    as_of_dt = parse_iso_datetime(as_of) or datetime.now()
-    as_of_value = as_of_dt.isoformat(timespec="seconds")
-
-    with get_db() as conn:
-        rows = conn.execute(
-            """
-            SELECT
-                w.id AS workout_id,
-                w.created_at,
-                SUM(se.weight * se.reps) AS total_volume,
-                SUM(se.reps) AS total_reps,
-                COUNT(se.id) AS total_sets
-            FROM workouts w
-            JOIN workout_exercises we ON we.workout_id = w.id
-            JOIN set_entries se ON se.workout_exercise_id = we.id
-            WHERE we.exercise_id = ?
-              AND w.created_at < ?
-            GROUP BY w.id, w.created_at
-            ORDER BY w.created_at DESC, w.id DESC
-            LIMIT ?
-            """,
-            (
-                exercise_id,
-                as_of_value,
-                limit,
-            ),
-        ).fetchall()
-
-    if not rows:
-        return {
-            "has_history": False,
-            "last_workout_id": None,
-            "last_workout_at": None,
-            "previous_workout_id": None,
-            "previous_workout_at": None,
-            "hours_since_same_exercise": None,
-            "days_since_same_exercise": None,
-            "same_exercise_gap_label": "—",
-            "usual_interval_days": None,
-            "usual_interval_label": "—",
-            "gap_status": "unknown",
-            "gap_status_label": "Unknown",
-            "occurrence_count": 0,
-            "last_total_volume": None,
-            "last_total_reps": None,
-            "last_total_sets": None,
-            "last_summary": None,
-            "previous_summary": None,
-            "progression_trend": {
-                "status": "unknown",
-                "label": "Unknown",
-                "e1rm_change_percent": None,
-                "volume_change_percent": None,
-                "same_weight_rep_delta": None,
-                "summary": "Not enough history to compare this exercise.",
-            },
-        }
-
-    occurrences = [dict(row) for row in rows]
-    last_occurrence = occurrences[0]
-    previous_occurrence = occurrences[1] if len(occurrences) > 1 else None
-
-    last_summary = build_exercise_occurrence_summary(
-        exercise_id=exercise_id,
-        workout_id=int(last_occurrence["workout_id"]),
-    )
-
-    previous_summary = (
-        build_exercise_occurrence_summary(
-            exercise_id=exercise_id,
-            workout_id=int(previous_occurrence["workout_id"]),
-        )
-        if previous_occurrence
-        else None
-    )
-
-    progression_trend = build_exercise_progression_trend(
-        last_summary=last_summary,
-        previous_summary=previous_summary,
-    )
-
-    last_dt = parse_iso_datetime(str(last_occurrence["created_at"]))
-
-    hours_since_same_exercise = None
-    days_since_same_exercise = None
-
-    if last_dt is not None:
-        hours_since_same_exercise = max(
-            0.0,
-            (as_of_dt - last_dt).total_seconds() / 3600,
-        )
-        days_since_same_exercise = hours_since_same_exercise / 24
-
-    chronological = list(reversed(occurrences))
-    intervals: list[float] = []
-
-    for previous, current in zip(chronological, chronological[1:]):
-        previous_dt = parse_iso_datetime(str(previous["created_at"]))
-        current_dt = parse_iso_datetime(str(current["created_at"]))
-
-        if previous_dt is None or current_dt is None:
-            continue
-
-        interval_days = (current_dt - previous_dt).total_seconds() / 86400
-
-        if interval_days > 0:
-            intervals.append(interval_days)
-
-    usual_interval_days = median(intervals) if intervals else None
-    gap_status = exercise_gap_status(
-        days_since_same_exercise=days_since_same_exercise,
-        usual_interval_days=usual_interval_days,
-    )
-
-    return {
-        "has_history": True,
-        "last_workout_id": int(last_occurrence["workout_id"]),
-        "last_workout_at": last_occurrence["created_at"],
-        "previous_workout_id": (
-            int(previous_occurrence["workout_id"])
-            if previous_occurrence
-            else None
-        ),
-        "previous_workout_at": (
-            previous_occurrence["created_at"]
-            if previous_occurrence
-            else None
-        ),
-        "hours_since_same_exercise": hours_since_same_exercise,
-        "days_since_same_exercise": days_since_same_exercise,
-        "same_exercise_gap_label": format_time_gap(hours_since_same_exercise),
-        "usual_interval_days": usual_interval_days,
-        "usual_interval_label": (
-            f"{usual_interval_days:.1f}d"
-            if usual_interval_days is not None
-            else "—"
-        ),
-        "gap_status": gap_status,
-        "gap_status_label": exercise_gap_label(gap_status),
-        "occurrence_count": len(occurrences),
-        "last_total_volume": float(last_occurrence["total_volume"] or 0),
-        "last_total_reps": int(last_occurrence["total_reps"] or 0),
-        "last_total_sets": int(last_occurrence["total_sets"] or 0),
-        "last_summary": last_summary,
-        "previous_summary": previous_summary,
-        "progression_trend": progression_trend,
-    }
+    return build_exercise_history_contexts(
+        [exercise_id],
+        as_of=as_of,
+        limit=limit,
+    ).get(exercise_id, empty_exercise_history_context())
 
 
 def calculate_readiness_status(
@@ -847,7 +938,9 @@ def build_next_workout_recommendation(
             "exercise_recommendations": [],
         }
 
-    details = get_workout_details(int(last_workout["id"]))
+    last_workout_id = int(last_workout["id"])
+    details_by_workout = get_workout_details_batch([last_workout_id])
+    details = details_by_workout.get(last_workout_id, [])
 
     if not details:
         return {
@@ -858,15 +951,23 @@ def build_next_workout_recommendation(
             "reasons": [
                 "Last workout has no logged sets.",
             ],
-            "last_workout_id": int(last_workout["id"]),
+            "last_workout_id": last_workout_id,
             "exercise_recommendations": [],
         }
 
+    e1rm_baselines_by_workout = build_e1rm_baselines_by_workout(
+        workouts=[last_workout],
+        details_by_workout=details_by_workout,
+    )
     last_load_metrics = calculate_workout_load_metrics(
         workout_exercises=details,
         session_rpe=last_workout["session_rpe"],
         as_of_created_at=last_workout["created_at"],
-        as_of_workout_id=int(last_workout["id"]),
+        as_of_workout_id=last_workout_id,
+        best_e1rm_by_exercise=e1rm_baselines_by_workout.get(
+            last_workout_id,
+            {},
+        ),
     )
 
     readiness = calculate_readiness_status(
@@ -886,12 +987,17 @@ def build_next_workout_recommendation(
         or datetime.now().isoformat(timespec="seconds")
     )
 
+    exercise_contexts = build_exercise_history_contexts(
+        [int(item["exercise_id"]) for item in details],
+        as_of=recommendation_as_of,
+    )
     exercise_recommendations = []
 
     for item in details:
-        exercise_context = build_exercise_history_context(
-            exercise_id=int(item["exercise_id"]),
-            as_of=recommendation_as_of,
+        exercise_id = int(item["exercise_id"])
+        exercise_context = exercise_contexts.get(
+            exercise_id,
+            empty_exercise_history_context(),
         )
 
         exercise_recommendations.append(
@@ -920,7 +1026,7 @@ def build_next_workout_recommendation(
         "score": readiness["score"],
         "summary": summary,
         "reasons": readiness["reasons"][:5],
-        "last_workout_id": int(last_workout["id"]),
+        "last_workout_id": last_workout_id,
         "last_workout_at": last_workout["created_at"],
         "exercise_recommendations": exercise_recommendations,
     }
