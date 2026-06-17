@@ -1140,3 +1140,81 @@ label {
     letter-spacing: 0;
   }
 }
+
+.stats-summary-panel {
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 14px;
+  background: var(--card);
+}
+
+.stats-summary-panel h2 {
+  margin: 0 0 12px;
+  color: var(--blue);
+}
+
+.stats-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.stats-summary-metric {
+  display: grid;
+  place-content: center;
+  min-height: 82px;
+  border: 1px solid transparent;
+  border-radius: 16px;
+  padding: 10px;
+  background: var(--card2);
+  text-align: center;
+}
+
+.stats-summary-metric strong {
+  font-size: 20px;
+  line-height: 1.15;
+}
+
+.stats-summary-metric span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.stats-summary-metric small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.stats-summary-metric.metric-green {
+  border-color: rgba(48, 209, 88, 0.65);
+  background: rgba(48, 209, 88, 0.12);
+}
+
+.stats-summary-metric.metric-yellow {
+  border-color: rgba(255, 214, 10, 0.7);
+  background: rgba(255, 214, 10, 0.1);
+}
+
+.stats-summary-metric.metric-orange {
+  border-color: rgba(255, 159, 10, 0.7);
+  background: rgba(255, 159, 10, 0.11);
+}
+
+.stats-summary-metric.metric-red {
+  border-color: rgba(255, 69, 58, 0.75);
+  background: rgba(255, 69, 58, 0.12);
+}
+
+@media (max-width: 720px) {
+  .stats-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 420px) {
+  .stats-summary-grid {
+    grid-template-columns: 1fr;
+  }
+}

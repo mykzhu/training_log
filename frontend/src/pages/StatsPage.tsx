@@ -214,6 +214,70 @@ function commonTooltipProps() {
   };
 }
 
+type MetricTone = "green" | "yellow" | "orange" | "red";
+
+type SummaryMetricProps = {
+  label: string;
+  value: ReactNode;
+  detail?: string;
+  tone?: MetricTone;
+};
+
+function SummaryMetric({
+  detail,
+  label,
+  tone,
+  value,
+}: SummaryMetricProps) {
+  return (
+    <div
+      className={
+        tone
+          ? `stats-summary-metric metric-${tone}`
+          : "stats-summary-metric"
+      }
+    >
+      <strong>{value}</strong>
+      <span>{label}</span>
+      {detail && <small>{detail}</small>}
+    </div>
+  );
+}
+
+function rpeTone(value: number | null | undefined): MetricTone | undefined {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+  if (value <= 4) {
+    return "green";
+  }
+  if (value <= 6) {
+    return "yellow";
+  }
+  if (value <= 8) {
+    return "orange";
+  }
+  return "red";
+}
+
+function backPainTone(
+  value: number | null | undefined,
+): MetricTone | undefined {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+  if (value <= 2) {
+    return "green";
+  }
+  if (value <= 4) {
+    return "yellow";
+  }
+  if (value <= 6) {
+    return "orange";
+  }
+  return "red";
+}
+
 export default function StatsPage() {
   const [statsLimit, setStatsLimit] = useState<StatsLimit>(() => readStatsLimitFromUrl());
   const [stats, setStats] = useState<StatsResponse | null>(null);
@@ -303,6 +367,29 @@ export default function StatsPage() {
 
   const summary = stats?.stats.summary;
   const sparkbars = stats?.charts.sparkbars;
+  const workouts = stats?.stats.workouts ?? [];
+  const workoutCount = summary?.workout_count ?? 0;
+
+  const uniqueExerciseCount =
+    stats?.stats.exercise_stats.length ?? 0;
+
+  const setsPerWorkout =
+    workoutCount > 0 && summary
+      ? summary.total_sets / workoutCount
+      : null;
+
+  const repsPerWorkout =
+    workoutCount > 0 && summary
+      ? summary.total_reps / workoutCount
+      : null;
+
+  const rpeLoggedCount = workouts.filter(
+    (workout) => workout.session_rpe !== null,
+  ).length;
+
+  const backPainLoggedCount = workouts.filter(
+    (workout) => workout.lower_back_pain !== null,
+  ).length;
 
   return (
     <section className="page-stack">
@@ -347,7 +434,7 @@ export default function StatsPage() {
               color="green"
               label="Volume"
               spark={sparkbars?.volume}
-              subvalue={`${formatKg(summary.avg_intensity)} avg intensity`}
+              subvalue={`${formatNumber(summary.avg_intensity, 1)} kg volume / rep`}
               value={formatKg(summary.total_volume)}
             />
             <DashboardCard
@@ -371,6 +458,61 @@ export default function StatsPage() {
               }
               value={formatNumber(summary.total_back_stress_score, 1)}
             />
+          </section>
+
+          <section className="stats-summary-panel">
+            <h2>Summary</h2>
+
+            <div className="stats-summary-grid">
+              <SummaryMetric
+                label="unique exercises"
+                value={formatNumber(uniqueExerciseCount)}
+              />
+
+              <SummaryMetric
+                detail={`${formatNumber(setsPerWorkout, 1)} per workout`}
+                label="sets"
+                value={formatNumber(summary.total_sets)}
+              />
+
+              <SummaryMetric
+                detail={`${formatNumber(repsPerWorkout, 1)} per workout`}
+                label="reps"
+                value={formatNumber(summary.total_reps)}
+              />
+
+              <SummaryMetric
+                label="kg volume / rep"
+                value={formatNumber(summary.avg_intensity, 1)}
+              />
+
+              <SummaryMetric
+                label="avg compound"
+                value={formatNumber(summary.avg_compound_score, 1)}
+              />
+
+              <SummaryMetric
+                detail={`${rpeLoggedCount}/${workoutCount} workouts logged`}
+                label="avg RPE"
+                tone={rpeTone(summary.avg_rpe)}
+                value={
+                  summary.avg_rpe === null
+                    ? "—"
+                    : `${formatNumber(summary.avg_rpe, 1)}/10`
+                }
+              />
+
+              <SummaryMetric
+                detail={`${backPainLoggedCount}/${workoutCount} workouts logged`}
+                label="avg back pain"
+                tone={backPainTone(summary.avg_back_pain)}
+                value={
+                  summary.avg_back_pain === null
+                    ? "—"
+                    : `${formatNumber(summary.avg_back_pain, 1)}/10`
+                }
+              />
+            </div>
           </section>
 
           <div className="stats-chart-grid">
