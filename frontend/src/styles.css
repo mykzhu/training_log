@@ -761,6 +761,10 @@ label {
   background: var(--card);
 }
 
+.chart-card-wide {
+  grid-column: 1 / -1;
+}
+
 .chart-card:first-child {
   grid-column: 1 / -1;
 }
@@ -778,6 +782,87 @@ label {
 
 .chart-frame {
   min-height: 240px;
+}
+
+.chart-insight {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.chart-insight-heading {
+  display: grid;
+  gap: 3px;
+}
+
+.chart-insight-heading strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.chart-insight-heading span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.chart-insight-details {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.chart-insight-details span {
+  position: relative;
+  padding-left: 14px;
+}
+
+.chart-insight-details span::before {
+  position: absolute;
+  left: 2px;
+  content: "•";
+  color: var(--blue);
+}
+
+.chart-insight-scale {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.chart-insight-scale > div {
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 8px 10px;
+  background: var(--card2);
+}
+
+.chart-insight-scale strong {
+  font-size: 14px;
+}
+
+.chart-insight-scale span {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.chart-insight-footnote {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+@media (max-width: 520px) {
+  .chart-insight-scale {
+    grid-template-columns: 1fr;
+  }
 }
 
 .clickable-chart,

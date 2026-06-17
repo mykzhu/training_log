@@ -9,6 +9,8 @@ import {
   Legend,
   Line,
   LineChart,
+  ReferenceDot,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -34,10 +36,11 @@ type ChartPoint = {
   id: number;
   date: string;
   volume: number;
+  volumePerRep: number | null;
+  relativeIntensity: number | null;
   load: number;
   compound: number;
   backStress: number;
-  intensity: number | null;
   rpe: number | null;
   backPain: number | null;
 };
@@ -122,10 +125,11 @@ function buildWorkoutData(workouts: StatsWorkout[]): ChartPoint[] {
     id: workout.id,
     date: workout.date,
     volume: workout.total_volume,
+    volumePerRep: workout.avg_intensity,
+    relativeIntensity: workout.intensity_score,
     load: workout.load_score,
     compound: workout.compound_score,
     backStress: workout.back_stress_score,
-    intensity: workout.intensity_score,
     rpe: workout.session_rpe,
     backPain: workout.lower_back_pain,
   }));
@@ -180,19 +184,49 @@ function DashboardCard({
   );
 }
 
+type ChartInsightProps = {
+  question: string;
+  explanation: string;
+  children?: ReactNode;
+};
+
+function ChartInsight({
+  children,
+  explanation,
+  question,
+}: ChartInsightProps) {
+  return (
+    <div className="chart-insight">
+      <div className="chart-insight-heading">
+        <strong>{question}</strong>
+        <span>{explanation}</span>
+      </div>
+
+      {children}
+    </div>
+  );
+}
+
 type ChartCardProps = {
   title: string;
   subtitle?: string;
   children: ReactNode;
+  wide?: boolean;
 };
 
-function ChartCard({ children, subtitle, title }: ChartCardProps) {
+function ChartCard({
+  children,
+  subtitle,
+  title,
+  wide = false,
+}: ChartCardProps) {
   return (
-    <section className="chart-card">
+    <section className={wide ? "chart-card chart-card-wide" : "chart-card"}>
       <div className="chart-heading">
         <h2>{title}</h2>
         {subtitle && <p className="muted">{subtitle}</p>}
       </div>
+
       <div className="chart-frame">{children}</div>
     </section>
   );
@@ -349,12 +383,24 @@ export default function StatsPage() {
     () => buildWorkoutData(stats?.stats.workouts ?? []),
     [stats],
   );
+
+  const topVolumePoint = useMemo(() => {
+    if (workoutData.length === 0) {
+      return null;
+    }
+
+    return workoutData.reduce((highest, workout) =>
+      workout.volume > highest.volume ? workout : highest,
+    );
+  }, [workoutData]);
+
   const topExercises = useMemo(
     () => [...(stats?.stats.exercise_stats ?? [])]
       .sort((a, b) => b.total_volume - a.total_volume)
       .slice(0, 8),
     [stats],
   );
+
   const bestStrength = useMemo(
     () => [...(stats?.stats.exercise_stats ?? [])]
       .filter((exercise): exercise is ExerciseStats & { best_e1rm: number } =>
@@ -517,6 +563,7 @@ export default function StatsPage() {
 
           <div className="stats-chart-grid">
             <ChartCard
+              wide
               subtitle="Total training volume by workout"
               title="Volume trend"
             >
@@ -524,18 +571,52 @@ export default function StatsPage() {
                 <AreaChart
                   className="clickable-chart"
                   data={workoutData}
+                  margin={{ top: 18, right: 18, left: 0, bottom: 0 }}
                   onClick={openWorkoutFromChart}
                 >
                   <defs>
-                    <linearGradient id="volumeGradient" x1="0" x2="0" y1="0" y2="1">
-                      <stop offset="5%" stopColor={chartColors.blue} stopOpacity={0.55} />
-                      <stop offset="95%" stopColor={chartColors.blue} stopOpacity={0.04} />
+                    <linearGradient
+                      id="volumeGradient"
+                      x1="0"
+                      x2="0"
+                      y1="0"
+                      y2="1"
+                    >
+                      <stop
+                        offset="5%"
+                        stopColor={chartColors.blue}
+                        stopOpacity={0.55}
+                      />
+                      <stop
+                        offset="95%"
+                        stopColor={chartColors.blue}
+                        stopOpacity={0.04}
+                      />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid stroke={chartColors.grid} strokeDasharray="3 3" />
-                  <XAxis dataKey="date" stroke={chartColors.muted} tick={{ fontSize: 12 }} />
-                  <YAxis stroke={chartColors.muted} tick={{ fontSize: 12 }} />
+
+                  <CartesianGrid
+                    stroke={chartColors.grid}
+                    strokeDasharray="3 3"
+                  />
+
+                  <XAxis
+                    dataKey="date"
+                    stroke={chartColors.muted}
+                    tick={{ fontSize: 12 }}
+                  />
+
+                  <YAxis
+                    domain={[
+                      0,
+                      (dataMax: number) => Math.max(1, dataMax * 1.1),
+                    ]}
+                    stroke={chartColors.muted}
+                    tick={{ fontSize: 12 }}
+                  />
+
                   <Tooltip {...commonTooltipProps()} />
+
                   <Area
                     dataKey="volume"
                     fill="url(#volumeGradient)"
@@ -543,8 +624,218 @@ export default function StatsPage() {
                     strokeWidth={2}
                     type="monotone"
                   />
+
+                  {topVolumePoint && (
+                    <>
+                      <ReferenceLine
+                        label={{
+                          value: `Peak ${formatNumber(topVolumePoint.volume)} kg`,
+                          position: "insideTopRight",
+                          fill: chartColors.orange,
+                          fontSize: 12,
+                        }}
+                        stroke={chartColors.orange}
+                        strokeDasharray="5 5"
+                        y={topVolumePoint.volume}
+                      />
+
+                      <ReferenceDot
+                        fill={chartColors.orange}
+                        r={5}
+                        stroke={chartColors.card}
+                        strokeWidth={2}
+                        x={topVolumePoint.date}
+                        y={topVolumePoint.volume}
+                      />
+                    </>
+                  )}
                 </AreaChart>
               </ResponsiveContainer>
+
+              <ChartInsight
+                question="How much weighted work was logged?"
+                explanation="Higher values mean a larger sum of weight × repetitions across the workout."
+              >
+                <div className="chart-insight-details">
+                  <span>
+                    Volume is calculated as weight × repetitions across all weighted sets.
+                  </span>
+
+                  <span>
+                    It can increase through heavier weights, more repetitions, more sets,
+                    or additional exercises.
+                  </span>
+
+                  <span>
+                    Compare workouts with a similar exercise mix; higher volume does not
+                    necessarily mean greater strength or a better workout.
+                  </span>
+                </div>
+              </ChartInsight>
+            </ChartCard>
+
+            <ChartCard
+              subtitle="Average recorded weight per repetition"
+              title="Volume per rep"
+            >
+              <ResponsiveContainer height={240} width="100%">
+                <LineChart
+                  className="clickable-chart"
+                  data={workoutData}
+                  onClick={openWorkoutFromChart}
+                >
+                  <CartesianGrid
+                    stroke={chartColors.grid}
+                    strokeDasharray="3 3"
+                  />
+
+                  <XAxis
+                    dataKey="date"
+                    stroke={chartColors.muted}
+                    tick={{ fontSize: 12 }}
+                  />
+
+                  <YAxis
+                    stroke={chartColors.muted}
+                    tick={{ fontSize: 12 }}
+                    tickFormatter={(value) => `${formatNumber(value, 1)}`}
+                  />
+
+                  <Tooltip
+                    {...commonTooltipProps()}
+                    formatter={(value: unknown) => [
+                      `${formatNumber(Number(value), 1)} kg/rep`,
+                      "Volume per rep",
+                    ]}
+                  />
+
+                  <Line
+                    activeDot={{ r: 5 }}
+                    dataKey="volumePerRep"
+                    dot={{ r: 3 }}
+                    stroke={chartColors.green}
+                    strokeWidth={2}
+                    type="monotone"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+              <ChartInsight
+                question="Was the session generally heavier or lighter?"
+                explanation="Volume per rep shows the average recorded weight moved per repetition."
+              >
+                <div className="chart-insight-scale">
+                  <div>
+                    <strong>Lower</strong>
+                    <span>Lighter weights or more high-rep work</span>
+                  </div>
+
+                  <div>
+                    <strong>Stable</strong>
+                    <span>Similar average loading to recent workouts</span>
+                  </div>
+
+                  <div>
+                    <strong>Higher</strong>
+                    <span>Heavier weights or more low-rep work</span>
+                  </div>
+                </div>
+
+                <p className="chart-insight-footnote">
+                  Compare this with total volume: a workout can have high total volume but
+                  low volume per rep when many lighter repetitions were performed.
+                </p>
+              </ChartInsight>
+            </ChartCard>
+
+            <ChartCard
+              subtitle="Average estimated intensity versus previous personal bests"
+              title="Relative intensity"
+            >
+              <ResponsiveContainer height={240} width="100%">
+                <LineChart
+                  className="clickable-chart"
+                  data={workoutData}
+                  margin={{ top: 12, right: 12, left: 0, bottom: 0 }}
+                  onClick={openWorkoutFromChart}
+                >
+                  <CartesianGrid
+                    stroke={chartColors.grid}
+                    strokeDasharray="3 3"
+                  />
+
+                  <XAxis
+                    dataKey="date"
+                    stroke={chartColors.muted}
+                    tick={{ fontSize: 12 }}
+                  />
+
+                  <YAxis
+                    domain={[
+                      0,
+                      (dataMax: number) => Math.max(110, dataMax * 1.05),
+                    ]}
+                    stroke={chartColors.muted}
+                    tick={{ fontSize: 12 }}
+                    tickFormatter={(value) => `${formatNumber(value)}%`}
+                  />
+
+                  <Tooltip
+                    {...commonTooltipProps()}
+                    formatter={(value: unknown) => [
+                      `${formatNumber(Number(value), 1)}%`,
+                      "Relative intensity",
+                    ]}
+                  />
+
+                  <ReferenceLine
+                    label={{
+                      value: "Previous best",
+                      position: "insideTopRight",
+                      fill: chartColors.muted,
+                      fontSize: 11,
+                    }}
+                    stroke={chartColors.muted}
+                    strokeDasharray="4 4"
+                    y={100}
+                  />
+
+                  <Line
+                    activeDot={{ r: 5 }}
+                    dataKey="relativeIntensity"
+                    dot={{ r: 3 }}
+                    stroke={chartColors.purple}
+                    strokeWidth={2}
+                    type="monotone"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+              <ChartInsight
+                question="How close were working sets to previous strength levels?"
+                explanation="Relative intensity compares estimated set strength with the best historical e1RM available before that workout."
+              >
+                <div className="chart-insight-scale">
+                  <div>
+                    <strong>&lt;100%</strong>
+                    <span>Below the prior e1RM baseline</span>
+                  </div>
+
+                  <div>
+                    <strong>≈100%</strong>
+                    <span>Near the prior e1RM baseline</span>
+                  </div>
+
+                  <div>
+                    <strong>&gt;100%</strong>
+                    <span>Above the prior e1RM baseline</span>
+                  </div>
+                </div>
+
+                <p className="chart-insight-footnote">
+                  Each workout is compared with the best estimated 1RM recorded before that
+                  workout. Sessions without enough previous exercise history may have missing
+                  values.
+                </p>
+              </ChartInsight>
             </ChartCard>
 
             <ChartCard
