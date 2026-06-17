@@ -2,18 +2,153 @@
 
 All notable changes to this project.
 
-## Unreleased
+## 1.0.0 - 2026-06-18
+
+Training Log 1.0.0 is a major application rewrite. The legacy server-rendered interface has been replaced by a React frontend backed by a modular FastAPI API, with persistent workout drafts, configurable exercises, expanded analytics, safer backups, and improved Home Assistant deployment support.
+
+### Highlights
+
+* Complete React and TypeScript frontend built with Vite.
+* Modular FastAPI backend with separate routes, services, repositories, schemas, and database initialization.
+* Persistent current-workout drafts that survive page reloads and application restarts.
+* Full exercise settings and weight-option management.
+* Expanded workout history, analysis, progress charts, recommendations, and recovery insights.
+* Backup schema version 3 with exercise configuration and weight options.
+* New default exercise catalog for strength training.
+* Automated backend, frontend, and Docker build checks.
 
 ### Added
-- CI workflow for backend tests, frontend install/typecheck/build, and Docker build.
-- Top-level development, test, Docker, and Home Assistant add-on documentation.
+
+* React-only application interface with Home Assistant ingress-compatible routing.
+* REST APIs for:
+
+  * Current workouts and persistent drafts.
+  * Exercise management.
+  * Workout history and workout editing.
+  * Statistics and analytics.
+  * Backup export, validation, restore, and reset.
+* Persistent active-workout draft storage, including:
+
+  * Exercises and sets.
+  * Exercise order.
+  * Set order.
+  * Session RPE.
+  * Lower-back pain.
+  * Workout start time and duration.
+* Exercise settings page with support for:
+
+  * Creating and renaming exercises.
+  * Activating and deactivating exercises.
+  * Reordering exercises.
+  * Assigning analysis profiles.
+  * Configuring selectable weight options.
+* Case-insensitive exercise-name validation.
+* Profile-based exercise load analysis.
+* New default exercise catalog:
+
+  * Deadlift.
+  * Squats.
+  * DB Squats.
+  * Bench Press.
+  * 45-Degree Bench Press.
+  * DB Bench Press.
+  * Shoulder Press.
+  * DB Shoulder Press.
+  * EZ Biceps.
+  * Triceps Pushdown.
+  * Crunches.
+* Expanded workout details with:
+
+  * Total volume, sets, and repetitions.
+  * Exercise-level volume.
+  * Estimated one-repetition maximum.
+  * Personal-record indicators.
+  * Load, intensity, compound-load, and lower-back-load analysis.
+* Recharts-based statistics dashboard.
+* Normalized benchmark progress chart.
+* Calendar and trend visualizations.
+* Exercise progress and personal-record badges.
+* Current-workout recommendations and recovery context.
+* Backup schema version 3 containing:
+
+  * Exercise active state.
+  * Exercise ordering.
+  * Analysis profile keys.
+  * Exercise weight options.
+* Validation for backup table IDs, relationships, exercise names, profiles, weights, sets, and repetitions.
+* Compatibility when restoring older schema version 1 and 2 backups.
+* SQLite indexes and query optimizations.
+* Automated tests for APIs, repositories, services, backups, drafts, analytics, recovery, recommendations, and database behavior.
+* GitHub Actions workflow for:
+
+  * Backend tests.
+  * Frontend dependency installation.
+  * TypeScript checks.
+  * Frontend production build.
+  * Docker image build.
+* Development, testing, Docker, and Home Assistant documentation.
 
 ### Changed
-- Docker frontend build stage now uses Node 22 LTS.
-- Git ignores now cover runtime DB, WAL/SHM, SQLite, and token files.
+
+* Replaced the legacy Jinja/HTML frontend with a React and TypeScript single-page application.
+* Reorganized the backend from a large application module into dedicated:
+
+  * API route modules.
+  * Repository modules.
+  * Service modules.
+  * Request and response schemas.
+  * Database initialization and migration logic.
+* Reworked workout creation, editing, set duplication, deletion, and ordering.
+* Reworked workout history and workout-detail navigation.
+* Improved the mobile and Home Assistant ingress experience.
+* Updated the Docker build to compile the frontend in a dedicated Node.js build stage.
+* Updated the frontend build stage to Node.js 22 LTS.
+* Improved SQLite connection settings, indexes, foreign-key handling, ordering normalization, and query efficiency.
+* Changed default exercise seeding to use explicit analysis-profile mappings.
+* Changed the barbell squat profile key to `squats`.
+* Changed the dumbbell squat profile key to `db_squats`.
+* Improved load, intensity, recovery, readiness, recommendation, and progress calculations.
+* Improved chart layouts, labels, responsive behavior, and visual consistency.
+* Improved exercise and workout data hydration to reduce repeated database queries.
+* Improved backup restore behavior to reset SQLite sequences correctly.
+* Expanded runtime logging for database initialization, backup operations, and application behavior.
+* Expanded ignored runtime files to cover SQLite databases, WAL/SHM files, tokens, frontend builds, and development artifacts.
+
+### Fixed
+
+* Fixed exercise weight seeding so every active default exercise receives selectable weights.
+* Fixed the `Squats` profile and default-weight key mismatch.
+* Fixed case-insensitive duplicate exercise handling.
+* Fixed workout exercise and set ordering consistency.
+* Fixed active-workout draft consistency after exercise settings changes.
+* Fixed backup consistency after exercise activation, removal, or reordering.
+* Fixed destructive backup validation by validating payloads before replacing existing data.
+* Fixed workout mutation and deletion correctness.
+* Fixed workout-detail navigation and history-page behavior.
+* Fixed history-card and history-header layout regressions.
+* Fixed session metadata type handling.
+* Fixed several analytics, chart, and normalized benchmark calculation issues.
+* Fixed SQLite query-count and performance regressions.
 
 ### Removed
-- Runtime SQLite database tracking from the repository index.
+
+* Removed the legacy server-rendered templates.
+* Removed the tracked runtime SQLite database from the repository.
+* Removed the old default exercise catalog.
+* Removed Goblet Squat from the default exercise list and profile catalog.
+* Removed direct coupling between page rendering and database operations in the main application module.
+
+### Upgrade Notes
+
+* Change the Home Assistant add-on version in `config.yaml` to `1.0.0`.
+* Create a backup before upgrading from `0.2.0`.
+* Backup schema version 3 includes exercise settings and selectable weights.
+* Older schema version 1 and 2 backups remain accepted, but converting important production backups to schema version 3 before restore is recommended.
+* Existing databases keep their current exercise records during normal startup.
+* The new default exercise catalog is applied to fresh databases and database resets.
+* Rebuild the Home Assistant add-on image after deploying the new source.
+* Verify exercise settings and selectable weights after restoring an older backup.
+
 
 ---
 
