@@ -13,11 +13,28 @@ FRONTEND_DIST_DIR = Path(
 
 DEFAULT_EXERCISES = (
     "Deadlift",
-    "Goblet Squat",
+    "Squats",
+    "DB Squats",
+    "Bench Press",
+    "45-Degree Bench Press",
     "DB Bench Press",
-    "DB Row",
-    "EZ Curl",
-    "Triceps Extension",
-    "Lateral Raise",
+    "Shoulder Press",
+    "DB Shoulder Press",
+    "EZ Biceps",
+    "Triceps Pushdown",
     "Crunches",
 )
+
+DEFAULT_EXERCISE_PROFILE_KEYS = {
+    "Deadlift": "deadlift",
+    "Squats": "squats",
+    "DB Squats": "db_squats",
+    "Bench Press": "bench_press",
+    "45-Degree Bench Press": "incline_bench_press",
+    "DB Bench Press": "db_bench_press",
+    "Shoulder Press": "shoulder_press",
+    "DB Shoulder Press": "db_shoulder_press",
+    "EZ Biceps": "ez_curl",
+    "Triceps Pushdown": "triceps_pushdown",
+    "Crunches": "crunches",
+}

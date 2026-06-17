@@ -266,7 +266,7 @@ class ExercisesApiTests(unittest.TestCase):
         with self.assertRaises(HTTPException) as exc:
             update_exercise_endpoint(
                 deadlift_id,
-                ExerciseUpdateRequest(name="Goblet Squat"),
+                ExerciseUpdateRequest(name="Squats"),
             )
 
         self.assertEqual(exc.exception.status_code, 409)

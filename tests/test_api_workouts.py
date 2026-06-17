@@ -186,8 +186,8 @@ class WorkoutsApiTests(unittest.TestCase):
             lower_back_pain=None,
             exercises=[
                 {
-                    "name": "Goblet Squat",
-                    "sets": [{"weight": 32, "reps": 10}],
+                    "name": "Squats",
+                    "sets": [{"weight": 40, "reps": 10}],
                 },
             ],
         )
@@ -199,7 +199,7 @@ class WorkoutsApiTests(unittest.TestCase):
             [workout["id"] for workout in response["workouts"]],
             [second_id, first_id],
         )
-        self.assertEqual(response["workouts"][0]["total_volume"], 320.0)
+        self.assertEqual(response["workouts"][0]["total_volume"], 400.0)
         self.assertEqual(response["workouts"][0]["total_reps"], 10)
         self.assertEqual(response["workouts"][0]["total_sets"], 1)
         self.assertEqual(response["workouts"][0]["exercises_count"], 1)
@@ -542,8 +542,8 @@ class WorkoutsApiTests(unittest.TestCase):
                     "sets": [{"weight": 100, "reps": 5}],
                 },
                 {
-                    "name": "Goblet Squat",
-                    "sets": [{"weight": 32, "reps": 10}],
+                    "name": "Squats",
+                    "sets": [{"weight": 40, "reps": 10}],
                 },
             ],
         )
@@ -553,8 +553,8 @@ class WorkoutsApiTests(unittest.TestCase):
         response = delete_workout_exercise_endpoint(workout_id, workout_exercise_id)
 
         self.assertEqual(len(response["exercises"]), 1)
-        self.assertEqual(response["exercises"][0]["exercise_name"], "Goblet Squat")
-        self.assertEqual(response["total_volume"], 320.0)
+        self.assertEqual(response["exercises"][0]["exercise_name"], "Squats")
+        self.assertEqual(response["total_volume"], 400.0)
 
         with get_db() as conn:
             set_count = conn.execute("SELECT COUNT(*) FROM set_entries").fetchone()[0]

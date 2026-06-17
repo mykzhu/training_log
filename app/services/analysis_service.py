@@ -9,12 +9,6 @@ LOAD_PROFILES_BY_KEY: dict[str, dict[str, float | str]] = {
         "compound_factor": 1.8,
         "back_factor": 1.8,
     },
-    "goblet_squat": {
-        "category": "legs compound",
-        "exercise_factor": 1.5,
-        "compound_factor": 1.5,
-        "back_factor": 1.1,
-    },
     "db_bench_press": {
         "category": "upper compound",
         "exercise_factor": 1.2,
@@ -51,6 +45,48 @@ LOAD_PROFILES_BY_KEY: dict[str, dict[str, float | str]] = {
         "compound_factor": 0.2,
         "back_factor": 0.25,
     },
+    "squats": {
+        "category": "legs compound",
+        "exercise_factor": 1.7,
+        "compound_factor": 1.7,
+        "back_factor": 1.2,
+    },
+    "db_squats": {
+        "category": "legs compound",
+        "exercise_factor": 1.4,
+        "compound_factor": 1.4,
+        "back_factor": 0.8,
+    },
+    "bench_press": {
+        "category": "upper compound",
+        "exercise_factor": 1.4,
+        "compound_factor": 1.4,
+        "back_factor": 0.2,
+    },
+    "incline_bench_press": {
+        "category": "upper compound",
+        "exercise_factor": 1.3,
+        "compound_factor": 1.3,
+        "back_factor": 0.2,
+    },
+    "shoulder_press": {
+        "category": "shoulders compound",
+        "exercise_factor": 1.3,
+        "compound_factor": 1.2,
+        "back_factor": 0.35,
+    },
+    "db_shoulder_press": {
+        "category": "shoulders compound",
+        "exercise_factor": 1.15,
+        "compound_factor": 1.0,
+        "back_factor": 0.25,
+    },
+    "triceps_pushdown": {
+        "category": "arms",
+        "exercise_factor": 0.7,
+        "compound_factor": 0.2,
+        "back_factor": 0.05,
+    },
 }
 
 DEFAULT_LOAD_PROFILE = {
@@ -63,26 +99,45 @@ LOAD_PROFILES_BY_KEY["accessory"] = DEFAULT_LOAD_PROFILE
 
 PROFILE_LABELS_BY_KEY = {
     "deadlift": "Deadlift",
-    "goblet_squat": "Goblet squat",
+    "squats": "Squats",
+    "db_squats": "DB squats",
+    "bench_press": "Bench press",
+    "incline_bench_press": "Incline bench press",
     "db_bench_press": "DB bench press",
-    "db_row": "DB row",
+    "shoulder_press": "Shoulder press",
+    "db_shoulder_press": "DB shoulder press",
     "ez_curl": "EZ curl",
+    "triceps_pushdown": "Triceps pushdown",
+    "crunches": "Crunches",
+
+    # Keep old profiles for compatibility.
+    "db_row": "DB row",
     "triceps_extension": "Triceps extension",
     "lateral_raise": "Lateral raise",
-    "crunches": "Crunches",
     "accessory": "Accessory",
 }
 SUPPORTED_PROFILE_KEYS = tuple(PROFILE_LABELS_BY_KEY)
 
 EXERCISE_PROFILE_KEYS_BY_NAME = {
-    "deadlift": "deadlift",
-    "goblet squat": "goblet_squat",
+    # Specific squat variants
+    "db squats": "db_squats",
+    "dumbbell squats": "db_squats",
+
+    # Other exercises
+    "45-degree bench press": "incline_bench_press",
+    "incline bench press": "incline_bench_press",
+    "db shoulder press": "db_shoulder_press",
+    "dumbbell shoulder press": "db_shoulder_press",
     "db bench press": "db_bench_press",
-    "db row": "db_row",
+    "dumbbell bench press": "db_bench_press",
+    "triceps pushdown": "triceps_pushdown",
+    "shoulder press": "shoulder_press",
+    "bench press": "bench_press",
+    "ez biceps": "ez_curl",
     "ez curl": "ez_curl",
-    "triceps extension": "triceps_extension",
-    "lateral raise": "lateral_raise",
+    "deadlift": "deadlift",
     "crunches": "crunches",
+    "squats": "squats",
 }
 
 EXERCISE_LOAD_PROFILES = {

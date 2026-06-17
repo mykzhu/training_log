@@ -13,13 +13,40 @@ logger = logging.getLogger("training_log")
 EXERCISE_SETTINGS_WEIGHT_MIGRATION_KEY = "exercise_settings_weight_migration_v1"
 DEFAULT_WEIGHT_OPTIONS_BY_PROFILE: dict[str, tuple[float, ...]] = {
     "deadlift": (40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100),
-    "goblet_squat": (12, 16, 20, 24, 28, 32),
     "db_bench_press": (10, 12.5, 15, 17.5, 20, 22.5, 25),
     "db_row": (10, 12.5, 15, 17.5, 20, 22.5, 25, 30),
     "ez_curl": (10, 12.5, 15, 17.5, 20, 22.5),
     "triceps_extension": (10, 12.5, 15, 17.5, 20, 22.5),
     "lateral_raise": (2.5, 5, 7.5, 10, 12.5, 15),
     "crunches": (0,),
+    "squat": (
+        20, 25, 30, 35, 40, 45, 50, 55, 60,
+        65, 70, 75, 80, 85, 90, 95, 100,
+    ),
+    "db_squats": (
+        5, 7.5, 10, 12.5, 15, 17.5, 20,
+        22.5, 25, 27.5, 30, 32.5, 35,
+    ),
+    "bench_press": (
+        20, 25, 30, 35, 40, 45, 50, 55,
+        60, 65, 70, 75, 80, 85, 90, 95, 100,
+    ),
+    "incline_bench_press": (
+        20, 25, 30, 35, 40, 45, 50,
+        55, 60, 65, 70, 75, 80,
+    ),
+    "shoulder_press": (
+        10, 15, 20, 25, 30, 35,
+        40, 45, 50, 55, 60,
+    ),
+    "db_shoulder_press": (
+        5, 7.5, 10, 12.5, 15, 17.5,
+        20, 22.5, 25, 27.5, 30,
+    ),
+    "triceps_pushdown": (
+        5, 10, 15, 20, 25,
+        30, 35, 40, 45, 50,
+    ),
 }
 
 
@@ -53,7 +80,7 @@ def seed_default_exercises(conn: sqlite3.Connection) -> None:
             (
                 exercise,
                 index * 10,
-                profile_key_for_exercise_name(exercise),
+                config.DEFAULT_EXERCISE_PROFILE_KEYS[exercise],
             ),
         )
 
