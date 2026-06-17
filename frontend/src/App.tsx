@@ -25,7 +25,6 @@ const historyNavItems: Array<{
 }> = [
   { key: "current", label: "Current", page: "current", path: "/" },
   { key: "stats", label: "Stats", page: "stats", path: "/stats" },
-  { key: "stats2", label: "Stats 2", page: "stats", path: "/stats2" },
   { key: "backup", label: "Backup", page: "backup", path: "/backup" },
   { key: "settings", label: "Settings", page: "settings", path: "/settings" },
 ];
