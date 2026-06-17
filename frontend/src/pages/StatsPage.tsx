@@ -18,7 +18,12 @@ import {
 } from "recharts";
 
 import { getStats } from "../api/stats";
-import type { ExerciseStats, StatsResponse, StatsWorkout } from "../api/types";
+import type {
+  ExerciseStats,
+  ExerciseStrengthPoint,
+  StatsResponse,
+  StatsWorkout,
+} from "../api/types";
 
 const chartColors = {
   blue: "#0a84ff",
@@ -96,6 +101,11 @@ function loadCalendarDescription(day: LoadCalendarDay) {
 
   return `${day.date} · ${score} · ${workoutText}`;
 }
+
+type StrengthChartPoint = ExerciseStrengthPoint & {
+  id: number;
+  chartKey: string;
+};
 
 type ChartPoint = {
   id: number;
@@ -276,10 +286,12 @@ type ChartCardProps = {
   title: string;
   subtitle?: string;
   children: ReactNode;
+  actions?: ReactNode;
   wide?: boolean;
 };
 
 function ChartCard({
+  actions,
   children,
   subtitle,
   title,
@@ -287,13 +299,74 @@ function ChartCard({
 }: ChartCardProps) {
   return (
     <section className={wide ? "chart-card chart-card-wide" : "chart-card"}>
-      <div className="chart-heading">
-        <h2>{title}</h2>
-        {subtitle && <p className="muted">{subtitle}</p>}
+      <div
+        className={
+          actions
+            ? "chart-heading chart-heading-with-actions"
+            : "chart-heading"
+        }
+      >
+        <div>
+          <h2>{title}</h2>
+          {subtitle && <p className="muted">{subtitle}</p>}
+        </div>
+
+        {actions && (
+          <div className="chart-heading-actions">
+            {actions}
+          </div>
+        )}
       </div>
 
       <div className="chart-frame">{children}</div>
     </section>
+  );
+}
+
+type StrengthTooltipProps = {
+  active?: boolean;
+  payload?: Array<{
+    payload?: StrengthChartPoint;
+  }>;
+};
+
+function StrengthProgressTooltip({
+  active,
+  payload,
+}: StrengthTooltipProps) {
+  const point = payload?.[0]?.payload;
+
+  if (!active || !point) {
+    return null;
+  }
+
+  return (
+    <div className="strength-progress-tooltip">
+      <strong>{point.date}</strong>
+
+      <div>
+        <span>Session e1RM</span>
+        <b>{formatNumber(point.e1rm, 1)} kg</b>
+      </div>
+
+      <div>
+        <span>Rolling best</span>
+        <b>{formatNumber(point.rolling_best, 1)} kg</b>
+      </div>
+
+      <div>
+        <span>From set</span>
+        <b>
+          {formatNumber(point.weight, 1)} × {point.reps}
+        </b>
+      </div>
+
+      {point.is_pr && (
+        <div className="strength-progress-pr">
+          New e1RM PR
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -381,6 +454,8 @@ export default function StatsPage() {
   const [statsLimit, setStatsLimit] = useState<StatsLimit>(() => readStatsLimitFromUrl());
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [selectedStrengthExerciseId, setSelectedStrengthExerciseId] =
+  useState<number | null>(null);
 
   useEffect(() => {
     function syncLimitFromUrl() {
@@ -531,6 +606,83 @@ export default function StatsPage() {
         .sort((a, b) => b.best_e1rm - a.best_e1rm),
     [stats],
   );
+
+  const exerciseProgress = useMemo(
+    () => stats?.stats.exercise_progress ?? [],
+    [stats],
+  );
+
+  useEffect(() => {
+    if (exerciseProgress.length === 0) {
+      setSelectedStrengthExerciseId(null);
+      return;
+    }
+
+    setSelectedStrengthExerciseId((current) => {
+      const currentStillExists = exerciseProgress.some(
+        (exercise) => exercise.exercise_id === current,
+      );
+
+      return currentStillExists
+        ? current
+        : exerciseProgress[0].exercise_id;
+    });
+  }, [exerciseProgress]);
+
+  const selectedStrengthProgress = useMemo(
+    () =>
+      exerciseProgress.find(
+        (exercise) =>
+          exercise.exercise_id === selectedStrengthExerciseId,
+      ) ??
+      exerciseProgress[0] ??
+      null,
+    [exerciseProgress, selectedStrengthExerciseId],
+  );
+
+  const strengthChartData = useMemo<StrengthChartPoint[]>(
+    () =>
+      (selectedStrengthProgress?.points ?? []).map((point) => ({
+        ...point,
+        id: point.workout_id,
+        chartKey: `${point.date}-${point.workout_id}`,
+      })),
+    [selectedStrengthProgress],
+  );
+
+  const strengthProgressDomain = useMemo<[number, number]>(() => {
+    const values = strengthChartData.flatMap((point) => [
+      point.e1rm,
+      point.rolling_best,
+    ]);
+
+    if (values.length === 0) {
+      return [0, 1];
+    }
+
+    const minimum = Math.min(...values);
+    const maximum = Math.max(...values);
+    const minimumSpan = Math.max(maximum * 0.08, 2);
+    const span = Math.max(maximum - minimum, minimumSpan);
+    const padding = span * 0.15;
+
+    return [
+      Math.max(
+        0,
+        Math.floor((minimum - padding) * 10) / 10,
+      ),
+      Math.ceil((maximum + padding) * 10) / 10,
+    ];
+  }, [strengthChartData]);
+
+  const firstStrengthPoint = strengthChartData[0] ?? null;
+  const latestStrengthPoint =
+    strengthChartData[strengthChartData.length - 1] ?? null;
+
+  const visibleStrengthChange =
+    firstStrengthPoint && latestStrengthPoint
+      ? latestStrengthPoint.e1rm - firstStrengthPoint.e1rm
+      : null;
 
   const summary = stats?.stats.summary;
   const sparkbars = stats?.charts.sparkbars;
@@ -1485,6 +1637,192 @@ export default function StatsPage() {
                 </p>
               </ChartInsight>
             </ChartCard>
+
+            <ChartCard
+              wide
+              actions={
+                selectedStrengthProgress ? (
+                  <label className="chart-exercise-select">
+                    <span>Exercise</span>
+
+                    <select
+                      onChange={(event) =>
+                        setSelectedStrengthExerciseId(
+                          Number(event.target.value),
+                        )
+                      }
+                      value={
+                        selectedStrengthExerciseId ??
+                        selectedStrengthProgress.exercise_id
+                      }
+                    >
+                      {exerciseProgress.map((exercise) => (
+                        <option
+                          key={exercise.exercise_id}
+                          value={exercise.exercise_id}
+                        >
+                          {exercise.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null
+              }
+              subtitle="Best valid e1RM from each workout, compared with the historical all-time best"
+              title="Exercise strength progress"
+            >
+              {selectedStrengthProgress && strengthChartData.length > 0 ? (
+                <>
+                  <div className="strength-progress-summary">
+                    <div>
+                      <strong>
+                        {formatNumber(latestStrengthPoint?.e1rm, 1)} kg
+                      </strong>
+                      <span>latest session e1RM</span>
+                    </div>
+
+                    <div>
+                      <strong>
+                        {formatNumber(
+                          latestStrengthPoint?.rolling_best,
+                          1,
+                        )}{" "}
+                        kg
+                      </strong>
+                      <span>historical rolling best</span>
+                    </div>
+
+                    <div>
+                      <strong>
+                        {visibleStrengthChange === null
+                          ? "—"
+                          : `${visibleStrengthChange >= 0 ? "+" : ""}${formatNumber(
+                              visibleStrengthChange,
+                              1,
+                            )} kg`}
+                      </strong>
+                      <span>change in selected range</span>
+                    </div>
+                  </div>
+
+                  <ResponsiveContainer height={300} width="100%">
+                    <LineChart
+                      className="clickable-chart"
+                      data={strengthChartData}
+                      margin={{
+                        top: 18,
+                        right: 18,
+                        left: 0,
+                        bottom: 0,
+                      }}
+                      onClick={openWorkoutFromChart}
+                    >
+                      <CartesianGrid
+                        stroke={chartColors.grid}
+                        strokeDasharray="3 3"
+                      />
+
+                      <XAxis
+                        dataKey="chartKey"
+                        stroke={chartColors.muted}
+                        tick={{ fontSize: 12 }}
+                        tickFormatter={(value) =>
+                          String(value).slice(0, 10)
+                        }
+                      />
+
+                      <YAxis
+                        domain={strengthProgressDomain}
+                        stroke={chartColors.muted}
+                        tick={{ fontSize: 12 }}
+                        tickFormatter={(value) =>
+                          formatNumber(Number(value), 1)
+                        }
+                      />
+
+                      <Tooltip content={<StrengthProgressTooltip />} />
+
+                      <Legend
+                        wrapperStyle={{ color: chartColors.muted }}
+                      />
+
+                      <Line
+                        activeDot={{ r: 5 }}
+                        dataKey="e1rm"
+                        dot={{ r: 3 }}
+                        name="Session e1RM"
+                        stroke={chartColors.blue}
+                        strokeWidth={2}
+                        type="monotone"
+                      />
+
+                      <Line
+                        activeDot={false}
+                        dataKey="rolling_best"
+                        dot={false}
+                        name="Rolling best"
+                        stroke={chartColors.green}
+                        strokeWidth={3}
+                        type="stepAfter"
+                      />
+
+                      {strengthChartData
+                        .filter((point) => point.is_pr)
+                        .map((point) => (
+                          <ReferenceDot
+                            fill={chartColors.orange}
+                            key={`pr-${point.workout_id}`}
+                            r={6}
+                            stroke={chartColors.card}
+                            strokeWidth={2}
+                            x={point.chartKey}
+                            y={point.e1rm}
+                          />
+                        ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+
+                  <ChartInsight
+                    question="Am I becoming stronger at this exercise?"
+                    explanation="The blue line shows the best estimated 1RM achieved in each workout. The green stepped line shows the historical all-time best available after that workout."
+                  >
+                    <div className="chart-insight-details">
+                      <span>
+                        Orange markers identify genuine new e1RM personal
+                        records. The first valid result establishes the
+                        baseline and is not marked as a PR.
+                      </span>
+
+                      <span>
+                        A rising green line is the clearest indication of
+                        measurable strength progress.
+                      </span>
+
+                      <span>
+                        Temporary drops in the blue line are normal and may
+                        reflect fatigue, lighter programming, or different
+                        repetition targets.
+                      </span>
+
+                      <span>
+                        Select a chart point to open its source workout.
+                      </span>
+                    </div>
+
+                    <p className="chart-insight-footnote">
+                      e1RM is calculated only from weighted sets containing
+                      3–12 repetitions. The rolling best includes workouts
+                      before the selected 10, 30, or 90-workout range.
+                    </p>
+                  </ChartInsight>
+                </>
+              ) : (
+                <div className="empty">
+                  No eligible exercise strength history yet.
+                </div>
+              )}
+            </ChartCard>
+
           </div>
         </>
       )}

@@ -810,6 +810,7 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
 
     workout_items = []
     exercise_stats: dict[int, dict[str, Any]] = {}
+    exercise_progress: dict[int, dict[str, Any]] = {}
 
     for workout in workouts:
         current_workout_id = int(workout["id"])
@@ -853,6 +854,8 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
             }
         )
 
+        workout_strength_best: dict[int, dict[str, Any]] = {}
+
         for item in details:
             exercise_id = int(item["exercise_id"])
             exercise_name = item["exercise_name"]
@@ -881,6 +884,20 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
                 if e1rm is None:
                     continue
 
+                current_workout_best = workout_strength_best.get(exercise_id)
+
+                if (
+                    current_workout_best is None
+                    or e1rm > current_workout_best["e1rm"]
+                ):
+                    workout_strength_best[exercise_id] = {
+                        "exercise_id": exercise_id,
+                        "name": exercise_name,
+                        "e1rm": e1rm,
+                        "weight": weight,
+                        "reps": reps,
+                    }
+
                 if stats["best_e1rm"] is None or e1rm > stats["best_e1rm"]:
                     stats["best_e1rm"] = e1rm
                     stats["best_set"] = {
@@ -889,6 +906,44 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
                         "workout_id": current_workout_id,
                         "date": workout["created_at"][:10],
                     }
+
+        historical_baselines = e1rm_baselines_by_workout.get(
+            current_workout_id,
+            {},
+        )
+
+        for exercise_id, point in workout_strength_best.items():
+            previous_best = historical_baselines.get(exercise_id)
+
+            rolling_best = point["e1rm"]
+            if previous_best is not None:
+                rolling_best = max(previous_best, point["e1rm"])
+
+            progress = exercise_progress.setdefault(
+                exercise_id,
+                {
+                    "exercise_id": exercise_id,
+                    "name": point["name"],
+                    "points": [],
+                },
+            )
+
+            progress["points"].append(
+                {
+                    "workout_id": current_workout_id,
+                    "date": workout["created_at"][:10],
+                    "e1rm": point["e1rm"],
+                    "rolling_best": rolling_best,
+                    "weight": point["weight"],
+                    "reps": point["reps"],
+                    # The first-ever valid result establishes the baseline.
+                    # Only later improvements are marked as PRs.
+                    "is_pr": (
+                        previous_best is not None
+                        and point["e1rm"] > previous_best + 1e-9
+                    ),
+                }
+            )
 
     total_volume = sum(item["total_volume"] for item in workout_items)
     total_reps = sum(item["total_reps"] for item in workout_items)
@@ -915,13 +970,22 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
         if item["intensity_score"] is not None
     ]
 
+    sorted_exercise_stats = sorted(
+        exercise_stats.values(),
+        key=lambda item: item["total_volume"],
+        reverse=True,
+    )
+
+    sorted_exercise_progress = [
+        exercise_progress[item["exercise_id"]]
+        for item in sorted_exercise_stats
+        if item["exercise_id"] in exercise_progress
+    ]
+
     return {
         "workouts": workout_items,
-        "exercise_stats": sorted(
-            exercise_stats.values(),
-            key=lambda item: item["total_volume"],
-            reverse=True,
-        ),
+        "exercise_stats": sorted_exercise_stats,
+        "exercise_progress": sorted_exercise_progress,
         "summary": {
             "workout_count": len(workout_items),
             "total_volume": total_volume,

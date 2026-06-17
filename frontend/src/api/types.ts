@@ -223,6 +223,22 @@ export type ExerciseStats = {
   } | null;
 };
 
+export type ExerciseStrengthPoint = {
+  workout_id: number;
+  date: string;
+  e1rm: number;
+  rolling_best: number;
+  weight: number;
+  reps: number;
+  is_pr: boolean;
+};
+
+export type ExerciseStrengthProgress = {
+  exercise_id: number;
+  name: string;
+  points: ExerciseStrengthPoint[];
+};
+
 export type StatsSummary = {
   workout_count: number;
   total_volume: number;
@@ -260,6 +276,7 @@ export type StatsResponse = {
     summary: StatsSummary;
     workouts: StatsWorkout[];
     exercise_stats: ExerciseStats[];
+    exercise_progress: ExerciseStrengthProgress[];
   };
   charts: StatsCharts;
 };

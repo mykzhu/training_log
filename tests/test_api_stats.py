@@ -256,6 +256,99 @@ class StatsApiTests(unittest.TestCase):
         self.assertEqual(response["limit"], 30)
         self.assertEqual(response["stats"]["summary"]["workout_count"], 2)
 
+    def test_stats_includes_exercise_strength_progress(self) -> None:
+        first_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [{"weight": 100, "reps": 5}],
+                },
+            ],
+        )
+        second_id = self.insert_workout(
+            created_at="2026-06-08T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [{"weight": 95, "reps": 5}],
+                },
+            ],
+        )
+        third_id = self.insert_workout(
+            created_at="2026-06-15T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [{"weight": 110, "reps": 5}],
+                },
+            ],
+        )
+
+        response = get_stats(limit="all")
+
+        progress = next(
+            item
+            for item in response["stats"]["exercise_progress"]
+            if item["name"] == "Deadlift"
+        )
+
+        self.assertEqual(
+            [point["workout_id"] for point in progress["points"]],
+            [first_id, second_id, third_id],
+        )
+
+        first, second, third = progress["points"]
+
+        self.assertAlmostEqual(first["e1rm"], 116.6667, places=3)
+        self.assertAlmostEqual(first["rolling_best"], 116.6667, places=3)
+        self.assertFalse(first["is_pr"])
+
+        self.assertAlmostEqual(second["e1rm"], 110.8333, places=3)
+        self.assertAlmostEqual(second["rolling_best"], 116.6667, places=3)
+        self.assertFalse(second["is_pr"])
+
+        self.assertAlmostEqual(third["e1rm"], 128.3333, places=3)
+        self.assertAlmostEqual(third["rolling_best"], 128.3333, places=3)
+        self.assertTrue(third["is_pr"])
+
+    def test_strength_progress_uses_history_before_selected_range(self) -> None:
+        self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [{"weight": 120, "reps": 5}],
+                },
+            ],
+        )
+
+        latest_id = self.insert_workout(
+            created_at="2026-06-08T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [{"weight": 110, "reps": 5}],
+                },
+            ],
+        )
+
+        response = get_stats(limit="1")
+
+        progress = next(
+            item
+            for item in response["stats"]["exercise_progress"]
+            if item["name"] == "Deadlift"
+        )
+
+        self.assertEqual(len(progress["points"]), 1)
+
+        point = progress["points"][0]
+
+        self.assertEqual(point["workout_id"], latest_id)
+        self.assertAlmostEqual(point["e1rm"], 128.3333, places=3)
+        self.assertAlmostEqual(point["rolling_best"], 140.0, places=3)
+        self.assertFalse(point["is_pr"])
 
 if __name__ == "__main__":
     unittest.main()
