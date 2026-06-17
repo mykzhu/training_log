@@ -2,6 +2,21 @@
 
 All notable changes to this project.
 
+## Unreleased
+
+### Added
+- CI workflow for backend tests, frontend install/typecheck/build, and Docker build.
+- Top-level development, test, Docker, and Home Assistant add-on documentation.
+
+### Changed
+- Docker frontend build stage now uses Node 22 LTS.
+- Git ignores now cover runtime DB, WAL/SHM, SQLite, and token files.
+
+### Removed
+- Runtime SQLite database tracking from the repository index.
+
+---
+
 ## 0.2.0 - 2026-06-09
 
 ### Added
@@ -122,4 +137,3 @@ Commits included (newest first):
 - 74ef2c8 — Logger update
 
 Generated from commits since version 0.1.3.
-
