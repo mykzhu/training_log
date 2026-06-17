@@ -394,6 +394,55 @@ export default function StatsPage() {
     );
   }, [workoutData]);
 
+  const topVolumePerRepPoint = useMemo(() => {
+    const validPoints = workoutData.filter(
+      (
+        point,
+      ): point is ChartPoint & {
+        volumePerRep: number;
+      } =>
+        point.volumePerRep !== null &&
+        Number.isFinite(point.volumePerRep),
+    );
+
+    if (validPoints.length === 0) {
+      return null;
+    }
+
+    return validPoints.reduce((highest, point) =>
+      point.volumePerRep > highest.volumePerRep
+        ? point
+        : highest,
+    );
+  }, [workoutData]);
+
+  const relativeIntensityDomain = useMemo<[number, number]>(() => {
+    const values = workoutData
+      .map((point) => point.relativeIntensity)
+      .filter(
+        (value): value is number =>
+          value !== null && Number.isFinite(value),
+      );
+
+    if (values.length === 0) {
+      return [0, 110];
+    }
+
+    /*
+    * Include the 100% historical baseline, but avoid always displaying
+    * the full 0–110 range. This makes small changes easier to see.
+    */
+    const minimum = Math.min(...values, 100);
+    const maximum = Math.max(...values, 100);
+    const span = Math.max(maximum - minimum, 5);
+    const padding = Math.max(2, span * 0.12);
+
+    return [
+      Math.max(0, Math.floor(minimum - padding)),
+      Math.ceil(maximum + padding),
+    ];
+  }, [workoutData]);
+
   const topExercises = useMemo(
     () => [...(stats?.stats.exercise_stats ?? [])]
       .sort((a, b) => b.total_volume - a.total_volume)
@@ -675,13 +724,15 @@ export default function StatsPage() {
             </ChartCard>
 
             <ChartCard
-              subtitle="Average recorded weight per repetition"
+              wide
+              subtitle="Average recorded weight moved per repetition"
               title="Volume per rep"
             >
               <ResponsiveContainer height={240} width="100%">
                 <LineChart
                   className="clickable-chart"
                   data={workoutData}
+                  margin={{ top: 18, right: 18, left: 0, bottom: 0 }}
                   onClick={openWorkoutFromChart}
                 >
                   <CartesianGrid
@@ -696,9 +747,13 @@ export default function StatsPage() {
                   />
 
                   <YAxis
+                    domain={[
+                      0,
+                      (dataMax: number) => Math.max(1, dataMax * 1.1),
+                    ]}
                     stroke={chartColors.muted}
                     tick={{ fontSize: 12 }}
-                    tickFormatter={(value) => `${formatNumber(value, 1)}`}
+                    tickFormatter={(value) => formatNumber(value, 1)}
                   />
 
                   <Tooltip
@@ -717,8 +772,37 @@ export default function StatsPage() {
                     strokeWidth={2}
                     type="monotone"
                   />
+
+                  {topVolumePerRepPoint && (
+                    <>
+                      <ReferenceLine
+                        label={{
+                          value: `Peak ${formatNumber(
+                            topVolumePerRepPoint.volumePerRep,
+                            1,
+                          )} kg/rep`,
+                          position: "insideTopRight",
+                          fill: chartColors.orange,
+                          fontSize: 12,
+                        }}
+                        stroke={chartColors.orange}
+                        strokeDasharray="5 5"
+                        y={topVolumePerRepPoint.volumePerRep}
+                      />
+
+                      <ReferenceDot
+                        fill={chartColors.orange}
+                        r={5}
+                        stroke={chartColors.card}
+                        strokeWidth={2}
+                        x={topVolumePerRepPoint.date}
+                        y={topVolumePerRepPoint.volumePerRep}
+                      />
+                    </>
+                  )}
                 </LineChart>
               </ResponsiveContainer>
+
               <ChartInsight
                 question="Was the session generally heavier or lighter?"
                 explanation="Volume per rep shows the average recorded weight moved per repetition."
@@ -726,28 +810,30 @@ export default function StatsPage() {
                 <div className="chart-insight-scale">
                   <div>
                     <strong>Lower</strong>
-                    <span>Lighter weights or more high-rep work</span>
+                    <span>Lighter weights or more high-repetition work</span>
                   </div>
 
                   <div>
                     <strong>Stable</strong>
-                    <span>Similar average loading to recent workouts</span>
+                    <span>Similar average loading to nearby workouts</span>
                   </div>
 
                   <div>
                     <strong>Higher</strong>
-                    <span>Heavier weights or more low-rep work</span>
+                    <span>Heavier weights or more low-repetition work</span>
                   </div>
                 </div>
 
                 <p className="chart-insight-footnote">
-                  Compare this with total volume: a workout can have high total volume but
-                  low volume per rep when many lighter repetitions were performed.
+                  Compare workouts with a similar exercise mix. A workout may have high
+                  total volume but low volume per rep when it contains many lighter
+                  repetitions.
                 </p>
               </ChartInsight>
             </ChartCard>
 
             <ChartCard
+              wide
               subtitle="Average estimated intensity versus previous personal bests"
               title="Relative intensity"
             >
@@ -755,7 +841,7 @@ export default function StatsPage() {
                 <LineChart
                   className="clickable-chart"
                   data={workoutData}
-                  margin={{ top: 12, right: 12, left: 0, bottom: 0 }}
+                  margin={{ top: 18, right: 18, left: 0, bottom: 0 }}
                   onClick={openWorkoutFromChart}
                 >
                   <CartesianGrid
@@ -770,10 +856,8 @@ export default function StatsPage() {
                   />
 
                   <YAxis
-                    domain={[
-                      0,
-                      (dataMax: number) => Math.max(110, dataMax * 1.05),
-                    ]}
+                    allowDecimals={false}
+                    domain={relativeIntensityDomain}
                     stroke={chartColors.muted}
                     tick={{ fontSize: 12 }}
                     tickFormatter={(value) => `${formatNumber(value)}%`}
@@ -787,9 +871,19 @@ export default function StatsPage() {
                     ]}
                   />
 
+                  <Line
+                    activeDot={{ r: 5 }}
+                    connectNulls={false}
+                    dataKey="relativeIntensity"
+                    dot={{ r: 3 }}
+                    stroke={chartColors.purple}
+                    strokeWidth={2}
+                    type="monotone"
+                  />
+
                   <ReferenceLine
                     label={{
-                      value: "Previous best",
+                      value: "100% prior best",
                       position: "insideTopRight",
                       fill: chartColors.muted,
                       fontSize: 11,
@@ -797,15 +891,6 @@ export default function StatsPage() {
                     stroke={chartColors.muted}
                     strokeDasharray="4 4"
                     y={100}
-                  />
-
-                  <Line
-                    activeDot={{ r: 5 }}
-                    dataKey="relativeIntensity"
-                    dot={{ r: 3 }}
-                    stroke={chartColors.purple}
-                    strokeWidth={2}
-                    type="monotone"
                   />
                 </LineChart>
               </ResponsiveContainer>
