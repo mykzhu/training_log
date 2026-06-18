@@ -347,9 +347,6 @@ function RecoveryContextCard({ context }: RecoveryContextCardProps) {
           value={formatNumber(context.last_7d.back_stress_score)}
           label="7d back stress"
         />
-      </div>
-
-      <div className="recovery-grid">
         <MetricTile
           className={metricClassForRatio(context.relative_load.acute_to_baseline)}
           value={formatRatio(context.relative_load.acute_to_baseline)}
@@ -367,9 +364,6 @@ function RecoveryContextCard({ context }: RecoveryContextCardProps) {
           value={context.relative_load.baseline_confidence}
           label="baseline confidence"
         />
-      </div>
-
-      <div className="recovery-grid">
         <MetricTile
           value={context.last_7d.workout_count}
           label="workouts in 7d"
@@ -384,9 +378,6 @@ function RecoveryContextCard({ context }: RecoveryContextCardProps) {
           value={formatNumber(context.last_7d.avg_back_pain)}
           label="avg back"
         />
-      </div>
-
-      <div className="recovery-grid">
         <MetricTile
           value={formatNumber(context.previous_21d.weekly_load_equivalent)}
           label="21d weekly load"
