@@ -6,25 +6,19 @@ import {
   clearCurrentWorkout,
   deleteCurrentWorkoutExercise,
   deleteCurrentWorkoutSet,
-  duplicateCurrentWorkoutSet,
   finishCurrentWorkout,
   getCurrentWorkout,
   startCurrentWorkout,
   updateCurrentWorkoutMetadata,
-  updateCurrentWorkoutSet,
 } from "../api/currentWorkout";
-import { getExercises } from "../api/exercises";
+import { createExercise, getExercises } from "../api/exercises";
 import type {
   CurrentWorkout,
   NextWorkoutRecommendation,
   RecoveryContext,
   Exercise,
 } from "../api/types";
-import ExerciseCard from "../components/ExerciseCard";
-import StatCard from "../components/StatCard";
-import StatusBadge from "../components/StatusBadge";
-import WorkoutTimer from "../components/WorkoutTimer";
-import { rpeOptionLabel } from "../utils/rpeLabels";
+import LegacyActiveWorkoutView from "../components/LegacyActiveWorkoutView";
 
 function formatNumber(value: number | null | undefined, digits = 1) {
   if (value === null || value === undefined || Number.isNaN(value)) {
@@ -183,8 +177,6 @@ export default function CurrentWorkoutPage() {
     return () => window.clearInterval(interval);
   }, [currentWorkout?.active]);
 
-  const rpeValue = currentWorkout?.session_rpe ?? "";
-  const painValue = currentWorkout?.lower_back_pain ?? "";
   const disabled = pending || currentWorkout === null;
 
   const exerciseOptions = useMemo(
@@ -214,9 +206,24 @@ export default function CurrentWorkoutPage() {
     await runAction(() => addCurrentWorkoutExercise(exerciseId));
   }
 
-  function openSettings() {
-    window.history.pushState(null, "", "/settings");
-    window.dispatchEvent(new PopStateEvent("popstate"));
+  async function createNewExercise(name: string) {
+    const cleanName = name.trim();
+    if (!cleanName) {
+      return;
+    }
+
+    setPending(true);
+    setError(null);
+    try {
+      const response = await createExercise({ name: cleanName });
+      const exerciseResponse = await getExercises();
+      setExercises(exerciseResponse.exercises);
+      setSelectedExerciseId(String(response.exercise.id));
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : "Action failed.");
+    } finally {
+      setPending(false);
+    }
   }
 
   async function finishWorkout() {
@@ -276,150 +283,34 @@ export default function CurrentWorkoutPage() {
   }
 
   return (
-    <section className="page-stack">
-      {error && <div className="error-banner">{error}</div>}
-
-      <section className="summary-band">
-        <div>
-          <StatusBadge tone="danger">Active</StatusBadge>
-          <WorkoutTimer elapsedSeconds={elapsedSeconds} />
-        </div>
-        <div className="summary-actions">
-          <button
-            className="ghost-button cancel-workout-button"
-            disabled={pending}
-            onClick={cancelWorkout}
-            type="button"
-          >
-            Cancel
-          </button>
-          <button
-            className="primary-button finish-button"
-            disabled={pending}
-            onClick={finishWorkout}
-            type="button"
-          >
-            Finish workout
-          </button>
-        </div>
-      </section>
-
-      <div className="stat-grid">
-        <StatCard label="Volume" value={`${currentWorkout.total_volume.toFixed(0)} kg`} />
-        <StatCard label="Sets" value={currentWorkout.total_sets} />
-        <StatCard label="Reps" value={currentWorkout.total_reps} />
-        <StatCard
-          label="Load"
-          value={currentWorkout.load_metrics?.load_label ?? "—"}
-        />
-      </div>
-
-      <section className="panel controls-grid">
-        <label>
-          RPE
-          <select
-            disabled={pending}
-            onChange={(event) =>
-              runAction(() =>
-                updateCurrentWorkoutMetadata({
-                  session_rpe: event.target.value ? Number(event.target.value) : null,
-                  lower_back_pain: currentWorkout.lower_back_pain,
-                }),
-              )
-            }
-            value={rpeValue}
-          >
-            <option value="">RPE</option>
-            {Array.from({ length: 10 }, (_, index) => index + 1).map((value) => (
-              <option key={value} value={value}>
-                {rpeOptionLabel(value)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Back
-          <select
-            disabled={pending}
-            onChange={(event) =>
-              runAction(() =>
-                updateCurrentWorkoutMetadata({
-                  session_rpe: currentWorkout.session_rpe,
-                  lower_back_pain: event.target.value
-                    ? Number(event.target.value)
-                    : null,
-                }),
-              )
-            }
-            value={painValue}
-          >
-            <option value="">Back Pain</option>
-            {Array.from({ length: 11 }, (_, index) => index).map((value) => (
-              <option key={value} value={value}>
-                Back Pain {value}/10
-              </option>
-            ))}
-          </select>
-        </label>
-      </section>
-
-      <section className="panel add-exercise">
-        <label>
-          Exercise
-          <select
-            disabled={pending || exerciseOptions.length === 0}
-            onChange={(event) => setSelectedExerciseId(event.target.value)}
-            value={selectedExerciseId}
-          >
-            {exerciseOptions.map((exercise) => (
-              <option key={exercise.value} value={exercise.value}>
-                {exercise.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          className="secondary-button"
-          disabled={disabled || !selectedExerciseId}
-          onClick={addSelectedExercise}
-          type="button"
-        >
-          Add
-        </button>
-        <button
-          className="ghost-button"
-          disabled={pending}
-          onClick={openSettings}
-          type="button"
-        >
-          Settings
-        </button>
-      </section>
-
-      <div className="exercise-list">
-        {currentWorkout.exercises.map((exercise) => (
-          <ExerciseCard
-            disabled={pending}
-            exercise={exercise}
-            key={exercise.draft_exercise_id}
-            setEditorMode="select"
-            onAddSet={(exerciseId, weight, reps) =>
-              runAction(() => addCurrentWorkoutSet(exerciseId, { weight, reps }))
-            }
-            onDeleteExercise={(exerciseId) =>
-              runAction(() => deleteCurrentWorkoutExercise(exerciseId))
-            }
-            onDeleteSet={(setId) => runAction(() => deleteCurrentWorkoutSet(setId))}
-            onDuplicateSet={(exerciseId) =>
-              runAction(() => duplicateCurrentWorkoutSet(exerciseId))
-            }
-            onUpdateSet={(setId, payload) =>
-              runAction(() => updateCurrentWorkoutSet(setId, payload))
-            }
-          />
-        ))}
-      </div>
-    </section>
+    <LegacyActiveWorkoutView
+      currentWorkout={currentWorkout}
+      disabled={disabled}
+      elapsedSeconds={elapsedSeconds}
+      error={error}
+      exerciseOptions={exerciseOptions}
+      selectedExerciseId={selectedExerciseId}
+      onAddExercise={addSelectedExercise}
+      onAddSet={(exerciseId, weight, reps) =>
+        runAction(() => addCurrentWorkoutSet(exerciseId, { weight, reps }))
+      }
+      onCancel={cancelWorkout}
+      onCreateExercise={createNewExercise}
+      onDeleteExercise={(exerciseId) =>
+        runAction(() => deleteCurrentWorkoutExercise(exerciseId))
+      }
+      onDeleteSet={(setId) => runAction(() => deleteCurrentWorkoutSet(setId))}
+      onFinish={finishWorkout}
+      onSaveMetadata={(sessionRpe, lowerBackPain) =>
+        runAction(() =>
+          updateCurrentWorkoutMetadata({
+            session_rpe: sessionRpe,
+            lower_back_pain: lowerBackPain,
+          }),
+        )
+      }
+      onSelectExercise={setSelectedExerciseId}
+    />
   );
 }
 
