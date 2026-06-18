@@ -1,13 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { getBackup, resetBackupData, restoreBackup } from "../api/backup";
 import type { BackupPayload } from "../api/backup";
 
 export default function BackupPage() {
   const [backupPayload, setBackupPayload] = useState<BackupPayload | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const counts = useMemo(() => {
     if (!backupPayload) {
       return {
@@ -37,21 +40,30 @@ export default function BackupPage() {
     });
   }, []);
 
-  async function downloadBackup() {
+  function beginAction() {
     setPending(true);
     setError(null);
+    setMessage(null);
+  }
+
+  async function downloadBackup() {
+    beginAction();
+
     try {
       const payload = await getBackup();
       setBackupPayload(payload);
+
       const blob = new Blob([JSON.stringify(payload, null, 2)], {
         type: "application/json",
       });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
+
       link.href = url;
       link.download = `training-log-backup-${payload.exported_at.replace(/:/g, "")}.json`;
       link.click();
       URL.revokeObjectURL(url);
+
       setMessage("Backup ready");
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : "Action failed.");
@@ -60,13 +72,52 @@ export default function BackupPage() {
     }
   }
 
-  async function resetData() {
-    if (!window.confirm("Reset all training data?")) {
+  async function restoreSelectedBackup() {
+    if (!selectedFile) {
+      setError("Choose a JSON backup first.");
       return;
     }
 
-    setPending(true);
-    setError(null);
+    if (
+      !window.confirm(
+        "Restore this backup and replace the current database?",
+      )
+    ) {
+      return;
+    }
+
+    beginAction();
+
+    try {
+      const text = await selectedFile.text();
+      const payload = JSON.parse(text) as BackupPayload;
+      const response = await restoreBackup(payload);
+
+      await loadBackupSummary();
+      setSelectedFile(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+
+      setMessage(`Restore complete · ${response.counts.workouts} workouts`);
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : "Restore failed.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function resetData() {
+    if (
+      !window.confirm(
+        "Reset the whole database? This cannot be undone unless you have a backup.",
+      )
+    ) {
+      return;
+    }
+
+    beginAction();
+
     try {
       const response = await resetBackupData();
       await loadBackupSummary();
@@ -78,32 +129,12 @@ export default function BackupPage() {
     }
   }
 
-  async function importBackup(file: File | null) {
-    if (!file) {
-      return;
-    }
-
-    setPending(true);
-    setError(null);
-    try {
-      const text = await file.text();
-      const payload = JSON.parse(text) as BackupPayload;
-      const response = await restoreBackup(payload);
-      await loadBackupSummary();
-      setMessage(`Restore complete · ${response.counts.workouts} workouts`);
-    } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : "Restore failed.");
-    } finally {
-      setPending(false);
-    }
-  }
-
   return (
-    <section className="page-stack">
+    <section className="page-stack backup-page">
       {error && <div className="error-banner">{error}</div>}
       {message && <div className="success-banner">{message}</div>}
 
-      <section className="panel">
+      <section className="panel backup-summary-card">
         <h2>Current database</h2>
         <div className="stat-grid backup-counts">
           <Stat label="exercises" value={counts.exercises} />
@@ -116,47 +147,59 @@ export default function BackupPage() {
       <section className="panel backup-card">
         <h2>Export</h2>
         <p className="muted">
-          JSON is best for full backup because it preserves IDs and links.
+          JSON is best for full backup because it preserves IDs and links between
+          workouts, exercises, and sets.
         </p>
         <button
-          className="primary-button"
+          className="backup-action-button backup-export-button"
           disabled={pending}
           onClick={downloadBackup}
           type="button"
         >
-          Download JSON
+          Download JSON backup
         </button>
       </section>
 
       <section className="panel backup-card">
         <h2>Restore</h2>
-        <p className="muted">
+        <p className="backup-warning">
           Restore replaces the current database with the uploaded backup.
         </p>
-        <label className="file-control">
+        <input
+          accept="application/json,.json"
+          aria-label="Choose JSON backup"
+          disabled={pending}
+          onChange={(event) => {
+            setSelectedFile(event.target.files?.[0] ?? null);
+            setError(null);
+            setMessage(null);
+          }}
+          ref={fileInputRef}
+          type="file"
+        />
+        <button
+          className="danger-button backup-action-button"
+          disabled={pending || !selectedFile}
+          onClick={restoreSelectedBackup}
+          type="button"
+        >
           Restore JSON backup
-          <input
-            accept="application/json,.json"
-            disabled={pending}
-            onChange={(event) => importBackup(event.target.files?.[0] ?? null)}
-            type="file"
-          />
-        </label>
+        </button>
       </section>
 
       <section className="panel backup-card">
         <h2>Reset database</h2>
-        <p className="muted">
+        <p className="backup-warning">
           This deletes all workouts, sets, and custom exercises, then recreates
           the default exercise list.
         </p>
         <button
-          className="secondary-button danger-text"
+          className="danger-button backup-action-button"
           disabled={pending}
           onClick={resetData}
           type="button"
         >
-          Reset Data
+          Reset database
         </button>
       </section>
     </section>

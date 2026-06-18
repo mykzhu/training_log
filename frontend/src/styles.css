@@ -537,9 +537,33 @@ label {
   padding: 8px;
 }
 
+.backup-page {
+  gap: 14px;
+}
+
 .backup-card {
   display: grid;
   gap: 12px;
+}
+
+.backup-card p {
+  line-height: 1.45;
+}
+
+.backup-warning {
+  color: var(--red) !important;
+}
+
+.backup-action-button {
+  width: 100%;
+  min-height: 50px;
+  padding: 14px;
+  font-size: 17px;
+}
+
+.backup-export-button {
+  background: var(--green);
+  color: #ffffff;
 }
 
 .backup-counts {
@@ -547,7 +571,24 @@ label {
 }
 
 .backup-counts .stat-card {
+  min-height: 64px;
+  border-radius: 14px;
+  padding: 10px;
   background: var(--card2);
+}
+
+.backup-counts .stat-card strong {
+  font-size: 18px;
+}
+
+.backup-summary-card h2,
+.backup-card h2 {
+  margin-bottom: 10px;
+}
+
+.backup-card input[type="file"] {
+  padding: 12px;
+  font-size: 16px;
 }
 
 .settings-add,

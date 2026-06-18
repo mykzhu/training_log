@@ -84,10 +84,17 @@ export default function App() {
   }
 
   const isHistoryList = activePage === "history" && initialWorkoutId === null;
-  const headerTitle = isHistoryList ? "History" : "Training Log";
+  const isBackupPage = activePage === "backup";
+  const headerTitle = isHistoryList
+    ? "History"
+    : isBackupPage
+      ? "Backup"
+      : "Training Log";
   const headerSubtitle = isHistoryList
     ? "Last 30 workouts"
-    : pages.find((page) => page.key === activePage)?.label;
+    : isBackupPage
+      ? "Export, restore, or reset training history"
+      : pages.find((page) => page.key === activePage)?.label;
   const navItems = isHistoryList
     ? historyNavItems
     : pages.map((page) => ({
