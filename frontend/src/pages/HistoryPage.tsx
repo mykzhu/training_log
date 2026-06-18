@@ -324,7 +324,7 @@ export default function HistoryPage({ initialWorkoutId }: HistoryPageProps) {
       {message && <div className="success-banner">{message}</div>}
 
       {selectedWorkoutId === null && (
-        <div className="table-list">
+        <div className="table-list history-list">
           {workouts.map((workout) => (
             <article className="history-card" key={workout.id}>
               <div className="history-card-header">
@@ -358,7 +358,7 @@ export default function HistoryPage({ initialWorkoutId }: HistoryPageProps) {
 
               <div className="history-meta">
                 <span>{formatDateTime(workout.created_at)}</span>
-                <StatusBadge tone="good">finished</StatusBadge>
+                <span>finished</span>
                 <span
                   className={`status-badge ${loadMetricClass(
                     workout.load_metrics.load_label,
