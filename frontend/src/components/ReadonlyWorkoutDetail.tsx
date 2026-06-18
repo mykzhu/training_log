@@ -91,6 +91,105 @@ function scoreMetricClass(value: number | null | undefined) {
   return "metric-red";
 }
 
+type RecommendationTone = "good" | "warning" | "danger";
+
+type PostWorkoutRecommendation = {
+  tone: RecommendationTone;
+  title: string;
+  message: string;
+};
+
+function buildPostWorkoutRecommendation(
+  detail: WorkoutDetail,
+): PostWorkoutRecommendation {
+  const rpe = detail.workout.session_rpe;
+  const backPain = detail.workout.lower_back_pain;
+  const {
+    back_stress_score: backStress,
+    intensity_score: intensityScore,
+    load_label: loadLabel,
+    load_score: loadScore,
+  } = detail.load_metrics;
+
+  if (backPain !== null && backPain >= 3) {
+    return {
+      tone: "danger",
+      title: "⛔ Progression paused.",
+      message: `Back pain is ${backPain}/10. Keep the next session conservative and avoid increasing deadlift, squat or back-loading work.`,
+    };
+  }
+
+  if (loadLabel === "Very hard" || loadScore >= 14) {
+    return {
+      tone: "danger",
+      title: "⛔ No progression after very hard session.",
+      message: `This workout was ${loadLabel} with load score ${formatNumber(loadScore)}. Even with low RPE and calm back pain, repeat or reduce the next session instead of adding weight or reps.`,
+    };
+  }
+
+  if (backStress >= 8) {
+    return {
+      tone: "warning",
+      title: "⚠️ Back stress is high.",
+      message: `Back pain is low, but calculated back stress is ${formatNumber(backStress)}. Keep the next lower-back-loading work stable and avoid adding deadlift, squat or row volume.`,
+    };
+  }
+
+  if (rpe !== null && rpe >= 8) {
+    return {
+      tone: "warning",
+      title: "⚠️ Keep load stable.",
+      message: `RPE is ${rpe}/10. This was hard enough; repeat the same load or add only a small rep if back stays calm.`,
+    };
+  }
+
+  if (intensityScore !== null && intensityScore >= 95) {
+    return {
+      tone: "warning",
+      title: "⚠️ High relative intensity.",
+      message: `Intensity was around ${formatNumber(intensityScore, 0)}% of your recent history. Do not increase weight next time; repeat the same loads or add only easy reps.`,
+    };
+  }
+
+  if (detail.total_reps === 0) {
+    return {
+      tone: "warning",
+      title: "ℹ️ No training stimulus yet.",
+      message: "Add working sets before judging progression.",
+    };
+  }
+
+  if (loadLabel === "Hard" || loadScore >= 8) {
+    return {
+      tone: "warning",
+      title: "⚠️ Progress carefully.",
+      message:
+        "This was a hard session. If back stays calm, add only a small amount to one main exercise, not to the whole workout.",
+    };
+  }
+
+  if (
+    rpe !== null &&
+    backPain !== null &&
+    rpe <= 7 &&
+    backPain <= 2
+  ) {
+    return {
+      tone: "good",
+      title: "✅ Progress allowed.",
+      message:
+        "RPE, back pain and calculated load are in a safe range. Next time you can add a small amount of weight or 1–2 reps to one main exercise.",
+    };
+  }
+
+  return {
+    tone: "warning",
+    title: "ℹ️ Progress unclear.",
+    message:
+      "Log RPE and Back Pain to make the next-session recommendation more reliable.",
+  };
+}
+
 type ExerciseAnalysis = WorkoutDetail["analysis"]["exercises"][number];
 
 export default function ReadonlyWorkoutDetail({
@@ -243,6 +342,8 @@ export default function ReadonlyWorkoutDetail({
 }
 
 function WorkoutAnalysis({ detail }: { detail: WorkoutDetail }) {
+  const recommendation = buildPostWorkoutRecommendation(detail);
+
   return (
     <section className="panel analysis-card">
       <h2>Analysis</h2>
@@ -356,6 +457,13 @@ function WorkoutAnalysis({ detail }: { detail: WorkoutDetail }) {
           />
         </section>
       </div>
+        <section
+          aria-label="Post-workout recommendation"
+          className={`analysis-recommendation ${recommendation.tone}`}
+        >
+          <strong>{recommendation.title}</strong>
+          <p>{recommendation.message}</p>
+        </section>
     </section>
   );
 }

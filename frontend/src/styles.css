@@ -2289,6 +2289,41 @@ button.load-calendar-cell:focus-visible {
   min-height: 46px;
 }
 
+.analysis-recommendation {
+  display: grid;
+  gap: 4px;
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 12px;
+  background: var(--card2);
+  line-height: 1.4;
+}
+
+.analysis-recommendation strong {
+  font-size: 15px;
+}
+
+.analysis-recommendation p {
+  margin: 0;
+  color: var(--text);
+}
+
+.analysis-recommendation.good {
+  border-color: rgba(48, 209, 88, 0.65);
+  background: rgba(48, 209, 88, 0.14);
+}
+
+.analysis-recommendation.warning {
+  border-color: rgba(255, 159, 10, 0.7);
+  background: rgba(255, 159, 10, 0.14);
+}
+
+.analysis-recommendation.danger {
+  border-color: rgba(255, 69, 58, 0.75);
+  background: rgba(255, 69, 58, 0.16);
+}
+
 .readonly-exercise-list {
   display: grid;
   gap: 14px;
