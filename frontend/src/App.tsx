@@ -59,6 +59,10 @@ function workoutIdFromPath(pathname: string): number | null {
   return match ? Number(match[1]) : null;
 }
 
+function workoutEditModeFromPath(pathname: string): boolean {
+  return /^\/workouts\/\d+\/edit\/?$/.test(pathname);
+}
+
 export default function App() {
   const [activePage, setActivePage] = useState<PageKey>(() =>
     pageFromPath(window.location.pathname),
@@ -66,11 +70,15 @@ export default function App() {
   const [initialWorkoutId, setInitialWorkoutId] = useState<number | null>(() =>
     workoutIdFromPath(window.location.pathname),
   );
+  const [initialWorkoutEditMode, setInitialWorkoutEditMode] = useState(() =>
+    workoutEditModeFromPath(window.location.pathname),
+  );
 
   useEffect(() => {
     function syncFromPath() {
       setActivePage(pageFromPath(window.location.pathname));
       setInitialWorkoutId(workoutIdFromPath(window.location.pathname));
+      setInitialWorkoutEditMode(workoutEditModeFromPath(window.location.pathname));
     }
 
     window.addEventListener("popstate", syncFromPath);
@@ -80,21 +88,30 @@ export default function App() {
   function navigate(page: PageKey, path = pathForPage(page)) {
     setActivePage(page);
     setInitialWorkoutId(null);
+    setInitialWorkoutEditMode(false);
     window.history.pushState(null, "", path);
   }
 
   const isHistoryList = activePage === "history" && initialWorkoutId === null;
+  const isReadonlyWorkout =
+    activePage === "history" &&
+    initialWorkoutId !== null &&
+    !initialWorkoutEditMode;
   const isBackupPage = activePage === "backup";
   const headerTitle = isHistoryList
     ? "History"
-    : isBackupPage
-      ? "Backup"
-      : "Training Log";
+    : isReadonlyWorkout
+      ? `Workout #${initialWorkoutId}`
+      : isBackupPage
+        ? "Backup"
+        : "Training Log";
   const headerSubtitle = isHistoryList
     ? "Last 30 workouts"
-    : isBackupPage
-      ? "Export, restore, or reset training history"
-      : pages.find((page) => page.key === activePage)?.label;
+    : isReadonlyWorkout
+      ? null
+      : isBackupPage
+        ? "Export, restore, or reset training history"
+        : pages.find((page) => page.key === activePage)?.label;
   const navItems = isHistoryList
     ? historyNavItems
     : pages.map((page) => ({
@@ -109,7 +126,9 @@ export default function App() {
       <header className="app-header">
         <div>
           <h1>{headerTitle}</h1>
-          <p className="muted active-label">{headerSubtitle}</p>
+          {headerSubtitle && (
+            <p className="muted active-label">{headerSubtitle}</p>
+          )}
         </div>
         <nav className="tabs" aria-label="Main navigation">
           {navItems.map((item) => (
@@ -126,7 +145,12 @@ export default function App() {
       </header>
 
       {activePage === "current" && <CurrentWorkoutPage />}
-      {activePage === "history" && <HistoryPage initialWorkoutId={initialWorkoutId} />}
+      {activePage === "history" && (
+        <HistoryPage
+          initialEditMode={initialWorkoutEditMode}
+          initialWorkoutId={initialWorkoutId}
+        />
+      )}
       {activePage === "stats" && (
         <Suspense fallback={<section className="panel">Loading</section>}>
           <StatsPage />

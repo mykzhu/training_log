@@ -15,6 +15,7 @@ import {
   updateWorkoutSet,
 } from "../api/workouts";
 import ExerciseCard from "../components/ExerciseCard";
+import ReadonlyWorkoutDetail from "../components/ReadonlyWorkoutDetail";
 import StatCard from "../components/StatCard";
 import StatusBadge from "../components/StatusBadge";
 import { rpeOptionLabel } from "../utils/rpeLabels";
@@ -136,10 +137,14 @@ function pushHistoryRoute(path: string) {
 }
 
 type HistoryPageProps = {
+  initialEditMode: boolean;
   initialWorkoutId: number | null;
 };
 
-export default function HistoryPage({ initialWorkoutId }: HistoryPageProps) {
+export default function HistoryPage({
+  initialEditMode,
+  initialWorkoutId,
+}: HistoryPageProps) {
   const [workouts, setWorkouts] = useState<WorkoutSummary[]>([]);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<number | null>(
@@ -268,9 +273,11 @@ export default function HistoryPage({ initialWorkoutId }: HistoryPageProps) {
     }
   }
 
-  function openWorkout(workoutId: number) {
+  function openWorkout(workoutId: number, editMode = false) {
     setSelectedWorkoutId(workoutId);
-    pushHistoryRoute(`/workouts/${workoutId}`);
+    pushHistoryRoute(
+      editMode ? `/workouts/${workoutId}/edit` : `/workouts/${workoutId}`,
+    );
   }
 
   function backToHistory() {
@@ -340,7 +347,7 @@ export default function HistoryPage({ initialWorkoutId }: HistoryPageProps) {
                   <button
                     className="primary-button compact-action"
                     disabled={pending}
-                    onClick={() => openWorkout(workout.id)}
+                    onClick={() => openWorkout(workout.id, true)}
                     type="button"
                   >
                     Edit
@@ -398,7 +405,16 @@ export default function HistoryPage({ initialWorkoutId }: HistoryPageProps) {
         <section className="panel">Loading workout</section>
       )}
 
-      {selectedWorkoutId !== null && detail && (
+      {selectedWorkoutId !== null && detail && !initialEditMode && (
+        <ReadonlyWorkoutDetail
+          detail={detail}
+          disabled={pending}
+          onDelete={deleteSelectedWorkout}
+          onEdit={() => openWorkout(detail.workout.id, true)}
+        />
+      )}
+
+      {selectedWorkoutId !== null && detail && initialEditMode && (
         <section className="page-stack">
           <div className="row-actions">
             <button
