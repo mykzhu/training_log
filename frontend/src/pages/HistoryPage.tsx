@@ -15,10 +15,13 @@ import {
   updateWorkoutSet,
 } from "../api/workouts";
 import ExerciseCard from "../components/ExerciseCard";
-import ReadonlyWorkoutDetail from "../components/ReadonlyWorkoutDetail";
+import ReadonlyWorkoutDetail, {
+  PostWorkoutRecommendationCard,
+} from "../components/ReadonlyWorkoutDetail";
 import StatCard from "../components/StatCard";
 import StatusBadge from "../components/StatusBadge";
 import { rpeOptionLabel } from "../utils/rpeLabels";
+import "../edit-workout-legacy.css";
 
 function toDateTimeLocal(value: string) {
   return value.slice(0, 16);
@@ -415,67 +418,29 @@ export default function HistoryPage({
       )}
 
       {selectedWorkoutId !== null && detail && initialEditMode && (
-        <section className="page-stack">
-          <div className="row-actions">
-            <button
-              className="ghost-button"
-              disabled={pending}
-              onClick={backToHistory}
-              type="button"
-            >
-              Back to history
-            </button>
+        <section className="page-stack edit-workout-page">
+          <div className="edit-workout-meta">
+            <span>{formatDateTime(detail.workout.created_at)}</span>
+            <span>{detail.workout.finished_at ? "finished" : "active"}</span>
           </div>
 
-          <section className="summary-band">
-            <div>
-              <StatusBadge>{detail.load_metrics.load_label}</StatusBadge>
-              <div>
-                <h2>{detail.workout.workout_date}</h2>
-                <p>
-                  {detail.total_sets} sets · {detail.total_reps} reps ·{" "}
-                  {detail.total_volume.toFixed(0)} kg
-                </p>
-              </div>
-            </div>
-            <button
-              className="ghost-button danger-text"
-              disabled={pending}
-              onClick={deleteSelectedWorkout}
-              type="button"
-            >
-              Delete
-            </button>
-          </section>
-
-          <div className="stat-grid">
+          <div className="edit-workout-stat-grid">
             <StatCard
-              label="Duration"
-              value={formatDuration(detail.workout.duration_seconds)}
+              label="duration"
+              value={formatClockDuration(detail.workout.duration_seconds)}
             />
-            <StatCard label="Volume" value={`${detail.total_volume.toFixed(0)} kg`} />
-            <StatCard label="Sets" value={detail.total_sets} />
-            <StatCard label="Reps" value={detail.total_reps} />
+            <StatCard label="sets" value={detail.total_sets} />
+            <StatCard label="reps" value={detail.total_reps} />
+            <StatCard label="kg volume" value={detail.total_volume.toFixed(1)} />
             <StatCard
-              label="Avg Load"
-              value={
-                detail.total_reps
-                  ? `${formatNumber(detail.total_volume / detail.total_reps)} kg`
-                  : "—"
-              }
-            />
-            <StatCard label="Load" value={detail.load_metrics.load_label} />
-            <StatCard
-              label="Back Stress"
-              value={formatNumber(detail.load_metrics.back_stress_score)}
-            />
-            <StatCard
+              className={scoreMetricClass(detail.workout.session_rpe)}
               label="RPE"
-              value={formatOptionalScore(detail.workout.session_rpe)}
+              value={formatScoreOutOfTen(detail.workout.session_rpe)}
             />
             <StatCard
+              className={scoreMetricClass(detail.workout.lower_back_pain)}
               label="Back Pain"
-              value={formatOptionalScore(detail.workout.lower_back_pain)}
+              value={formatScoreOutOfTen(detail.workout.lower_back_pain)}
             />
           </div>
 
@@ -619,11 +584,13 @@ export default function HistoryPage({
                 </div>
               </section>
             </div>
+            <PostWorkoutRecommendationCard detail={detail} />
           </section>
 
-          <section className="panel controls-grid">
+          <section className="panel edit-workout-info-card">
+            <h2>Workout info</h2>
             <label>
-              Started
+              Date and time
               <input
                 disabled={pending}
                 onChange={(event) => setCreatedAt(event.target.value)}
@@ -631,50 +598,63 @@ export default function HistoryPage({
                 value={createdAt}
               />
             </label>
-            <label>
-              RPE
-              <select
-                disabled={pending}
-                onChange={(event) => setSessionRpe(event.target.value)}
-                value={sessionRpe}
-              >
-                <option value="">-</option>
-                {Array.from({ length: 10 }, (_, index) => index + 1).map((value) => (
-                  <option key={value} value={value}>
-                    {rpeOptionLabel(value)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Back
-              <select
-                disabled={pending}
-                onChange={(event) => setLowerBackPain(event.target.value)}
-                value={lowerBackPain}
-              >
-                <option value="">-</option>
-                {Array.from({ length: 11 }, (_, index) => index).map((value) => (
-                  <option key={value} value={value}>
-                    {value}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="edit-workout-two-column">
+              <label>
+                Session RPE
+                <select
+                  className={scoreMetricClass(
+                    sessionRpe ? Number(sessionRpe) : null,
+                  )}
+                  disabled={pending}
+                  onChange={(event) => setSessionRpe(event.target.value)}
+                  value={sessionRpe}
+                >
+                  <option value="">—</option>
+                  {Array.from({ length: 10 }, (_, index) => index + 1).map(
+                    (value) => (
+                      <option key={value} value={value}>
+                        {rpeOptionLabel(value)}
+                      </option>
+                    ),
+                  )}
+                </select>
+              </label>
+              <label>
+                Back Pain
+                <select
+                  className={scoreMetricClass(
+                    lowerBackPain ? Number(lowerBackPain) : null,
+                  )}
+                  disabled={pending}
+                  onChange={(event) => setLowerBackPain(event.target.value)}
+                  value={lowerBackPain}
+                >
+                  <option value="">—</option>
+                  {Array.from({ length: 11 }, (_, index) => index).map(
+                    (value) => (
+                      <option key={value} value={value}>
+                        Back Pain {value}/10
+                      </option>
+                    ),
+                  )}
+                </select>
+              </label>
+            </div>
             <button
-              className="primary-button"
+              className="primary-button edit-workout-full-button"
               disabled={pending || !createdAt}
               onClick={saveMetadata}
               type="button"
             >
-              Save
+              Save workout info
             </button>
           </section>
 
-          <section className="panel add-exercise">
-            <label>
-              Exercise
+          <section className="panel edit-add-exercise-card">
+            <h2>Add exercise</h2>
+            <div className="edit-add-exercise-row">
               <select
+                aria-label="Exercise"
                 disabled={pending || exerciseOptions.length === 0}
                 onChange={(event) => setSelectedExerciseId(event.target.value)}
                 value={selectedExerciseId}
@@ -685,29 +665,26 @@ export default function HistoryPage({
                   </option>
                 ))}
               </select>
-            </label>
-            <button
-              className="secondary-button"
-              disabled={pending || !selectedExerciseId}
-              onClick={addSelectedExercise}
-              type="button"
-            >
-              Add
-            </button>
-            <button
-              className="ghost-button"
-              disabled={pending}
-              onClick={openSettings}
-              type="button"
-            >
-              Settings
-            </button>
+              <button
+                className="secondary-button"
+                disabled={pending || !selectedExerciseId}
+                onClick={addSelectedExercise}
+                type="button"
+              >
+                Add
+              </button>
+            </div>
           </section>
 
           <div className="exercise-list">
             {detail.exercises.map((exercise) => (
               <ExerciseCard
                 badges={prFlagsByExercise.get(exercise.exercise_id) ?? []}
+                bestE1rm={
+                  detail.analysis.exercises.find(
+                    (candidate) => candidate.exercise_id === exercise.exercise_id,
+                  )?.best_e1rm ?? null
+                }
                 disabled={pending}
                 exercise={exercise}
                 key={exercise.workout_exercise_id}
@@ -728,9 +705,42 @@ export default function HistoryPage({
                 onUpdateSet={(setId, payload) =>
                   runDetailAction(() => updateWorkoutSet(setId, payload))
                 }
+                setEditorMode="select"
+                variant="legacy-edit"
               />
             ))}
           </div>
+
+          <section className="panel edit-workout-navigation">
+            <button
+              className="ghost-button"
+              disabled={pending}
+              onClick={backToHistory}
+              type="button"
+            >
+              Back to history
+            </button>
+            <button
+              className="ghost-button"
+              disabled={pending}
+              onClick={() => openWorkout(detail.workout.id)}
+              type="button"
+            >
+              View summary
+            </button>
+          </section>
+
+          <section className="panel edit-workout-danger">
+            <h2>Danger zone</h2>
+            <button
+              className="danger-button"
+              disabled={pending}
+              onClick={deleteSelectedWorkout}
+              type="button"
+            >
+              Delete workout
+            </button>
+          </section>
         </section>
       )}
     </section>

@@ -8,12 +8,14 @@ import {
 } from "../utils/setOptions";
 
 type SetEditorMode = "input" | "select";
+type SetRowVariant = "default" | "legacy-edit";
 
 type SetRowProps = {
   disabled: boolean;
   editorMode?: SetEditorMode;
   repsOptions?: number[];
   setEntry: SetEntry;
+  variant?: SetRowVariant;
   weightOptions?: number[];
   onDelete: (setId: number) => void;
   onUpdate?: (setId: number, payload: { weight?: number; reps?: number }) => void;
@@ -26,10 +28,12 @@ export default function SetRow({
   onUpdate,
   repsOptions,
   setEntry,
+  variant = "default",
   weightOptions,
 }: SetRowProps) {
   const [weight, setWeight] = useState(String(setEntry.weight));
   const [reps, setReps] = useState(String(setEntry.reps));
+  const isLegacyEdit = variant === "legacy-edit";
 
   useEffect(() => {
     setWeight(String(setEntry.weight));
@@ -38,23 +42,39 @@ export default function SetRow({
 
   const parsedWeight = Number(weight);
   const parsedReps = Number(reps);
-  const canSave =
-    onUpdate !== undefined &&
+  const valuesAreValid =
     Number.isFinite(parsedWeight) &&
     Number.isInteger(parsedReps) &&
     parsedWeight >= 0 &&
-    parsedReps >= 1 &&
-    (parsedWeight !== setEntry.weight || parsedReps !== setEntry.reps);
+    parsedReps >= 1;
+  const valuesChanged =
+    parsedWeight !== setEntry.weight || parsedReps !== setEntry.reps;
+  const canSave =
+    onUpdate !== undefined &&
+    valuesAreValid &&
+    (isLegacyEdit || valuesChanged);
   const selectWeightOptions = weightOptions ?? buildWeightOptions(setEntry.weight);
   const selectRepsOptions = repsOptions ?? buildRepsOptions(setEntry.reps);
 
+  function deleteSet() {
+    if (
+      isLegacyEdit &&
+      !window.confirm(`Delete set #${setEntry.set_number}?`)
+    ) {
+      return;
+    }
+
+    onDelete(setEntry.id);
+  }
+
   return (
-    <div className="set-row">
+    <div className={`set-row ${isLegacyEdit ? "edit-set-row" : ""}`.trim()}>
       <span>#{setEntry.set_number}</span>
       <label>
         Kg
         {editorMode === "select" ? (
           <select
+            aria-label={isLegacyEdit ? `Set ${setEntry.set_number} weight` : undefined}
             className="scroll-select"
             disabled={disabled || !onUpdate}
             onChange={(event) => setWeight(event.target.value)}
@@ -82,6 +102,7 @@ export default function SetRow({
         Reps
         {editorMode === "select" ? (
           <select
+            aria-label={isLegacyEdit ? `Set ${setEntry.set_number} repetitions` : undefined}
             className="scroll-select"
             disabled={disabled || !onUpdate}
             onChange={(event) => setReps(event.target.value)}
@@ -107,7 +128,11 @@ export default function SetRow({
       </label>
       {onUpdate && (
         <button
-          className="secondary-button compact-button"
+          className={
+            isLegacyEdit
+              ? "edit-set-save-button"
+              : "secondary-button compact-button"
+          }
           disabled={disabled || !canSave}
           onClick={() =>
             onUpdate(setEntry.id, {
@@ -121,12 +146,16 @@ export default function SetRow({
         </button>
       )}
       <button
-        className="ghost-button compact-button danger-text"
+        className={
+          isLegacyEdit
+            ? "edit-set-delete-button"
+            : "ghost-button compact-button danger-text"
+        }
         disabled={disabled}
-        onClick={() => onDelete(setEntry.id)}
+        onClick={deleteSet}
         type="button"
       >
-        Delete
+        {isLegacyEdit ? "×" : "Delete"}
       </button>
     </div>
   );

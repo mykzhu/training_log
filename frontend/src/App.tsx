@@ -97,17 +97,23 @@ export default function App() {
     activePage === "history" &&
     initialWorkoutId !== null &&
     !initialWorkoutEditMode;
+  const isEditWorkout =
+    activePage === "history" &&
+    initialWorkoutId !== null &&
+    initialWorkoutEditMode;
   const isBackupPage = activePage === "backup";
   const headerTitle = isHistoryList
     ? "History"
     : isReadonlyWorkout
       ? `Workout #${initialWorkoutId}`
-      : isBackupPage
-        ? "Backup"
-        : "Training Log";
+      : isEditWorkout
+        ? `Edit Workout #${initialWorkoutId}`
+        : isBackupPage
+          ? "Backup"
+          : "Training Log";
   const headerSubtitle = isHistoryList
     ? "Last 30 workouts"
-    : isReadonlyWorkout
+    : isReadonlyWorkout || isEditWorkout
       ? null
       : isBackupPage
         ? "Export, restore, or reset training history"

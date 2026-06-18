@@ -190,6 +190,24 @@ function buildPostWorkoutRecommendation(
   };
 }
 
+export function PostWorkoutRecommendationCard({
+  detail,
+}: {
+  detail: WorkoutDetail;
+}) {
+  const recommendation = buildPostWorkoutRecommendation(detail);
+
+  return (
+    <section
+      aria-label="Post-workout recommendation"
+      className={`analysis-recommendation ${recommendation.tone}`}
+    >
+      <strong>{recommendation.title}</strong>
+      <p>{recommendation.message}</p>
+    </section>
+  );
+}
+
 type ExerciseAnalysis = WorkoutDetail["analysis"]["exercises"][number];
 
 export default function ReadonlyWorkoutDetail({
@@ -342,8 +360,6 @@ export default function ReadonlyWorkoutDetail({
 }
 
 function WorkoutAnalysis({ detail }: { detail: WorkoutDetail }) {
-  const recommendation = buildPostWorkoutRecommendation(detail);
-
   return (
     <section className="panel analysis-card">
       <h2>Analysis</h2>
@@ -457,13 +473,7 @@ function WorkoutAnalysis({ detail }: { detail: WorkoutDetail }) {
           />
         </section>
       </div>
-        <section
-          aria-label="Post-workout recommendation"
-          className={`analysis-recommendation ${recommendation.tone}`}
-        >
-          <strong>{recommendation.title}</strong>
-          <p>{recommendation.message}</p>
-        </section>
+        <PostWorkoutRecommendationCard detail={detail} />
     </section>
   );
 }
