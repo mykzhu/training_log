@@ -2,6 +2,52 @@
 
 All notable changes to this project.
 
+## 1.0.1 - 2026-06-18
+
+Training Log 1.0.1 is a UI polish and Home Assistant usability release. It keeps the React/FastAPI architecture from 1.0.0, restores the practical legacy workout workflow where it was faster to use, and fixes mobile layout issues found during phone testing.
+
+### Added
+
+* Read-only workout detail view with the legacy summary layout, analysis card, exercise tables, personal-record badges, estimated 1RM values, and full-width Edit/Delete actions.
+* Post-workout recommendation card on read-only workout details.
+* Legacy-style edit workout page at `/workouts/{id}/edit` with old-style workout info, add-exercise controls, editable set rows, save buttons, navigation, and danger zone.
+* Legacy-style active workout page with old-style stats, analysis, session status, add-exercise controls, inline exercise creation, set tables, and full-width Finish workout action.
+* Active-workout support for creating a new exercise while logging a workout.
+
+### Changed
+
+* Workout history now separates read-only and edit flows:
+
+  * Clicking a workout title opens the read-only summary.
+  * Clicking Edit opens the dedicated editable route.
+* Restored the old visual density for active, read-only, and edit workout pages while keeping the newer React data model and APIs.
+* Improved mobile grids so key metric cards remain two per row where useful:
+
+  * Stats dashboard cards.
+  * Stats summary cards.
+  * Recovery context cards.
+  * Next workout recommendation cards.
+  * Active workout summary cards.
+* Removed horizontal mobile scrolling from the Weekly exercise workload and Strength versus workload charts.
+* Improved mobile layout for edit workout controls, exercise headers, set rows, save/delete actions, and navigation buttons.
+
+### Fixed
+
+* Fixed recovery context mobile gaps by rendering the metrics in one continuous grid instead of several three-item grids.
+* Fixed chart overflow on mobile for weekly exercise workload and strength-versus-workload charts.
+* Fixed edit workout mobile rows where selectors and action buttons could wrap into an awkward layout.
+* Fixed active workout mobile summary and recovery cards collapsing to a single column too early.
+* Fixed UI regressions from the 1.0.0 React rewrite where legacy workout pages were faster and clearer for phone use.
+
+### Upgrade Notes
+
+* Change the Home Assistant add-on version in `config.yaml` to `1.0.1`.
+* Rebuild or update the Home Assistant add-on image after pulling this release.
+* No database migration is required from `1.0.0`.
+* Create a backup before upgrading, especially when updating the production Home Assistant add-on.
+
+---
+
 ## 1.0.0 - 2026-06-18
 
 Training Log 1.0.0 is a major application rewrite. The legacy server-rendered interface has been replaced by a React frontend backed by a modular FastAPI API, with persistent workout drafts, configurable exercises, expanded analytics, safer backups, and improved Home Assistant deployment support.
