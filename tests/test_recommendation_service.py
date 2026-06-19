@@ -351,7 +351,7 @@ class RecommendationDatabaseTests(unittest.TestCase):
         self.assertEqual(recommendation["last_workout_id"], past_workout_id)
         self.assertEqual(
             recommendation["exercise_recommendations"][0]["target"],
-            "100 kg × 6",
+            "Add 1 rep to the lowest-rep set",
         )
 
     def test_missing_latest_feedback_returns_needs_feedback(self) -> None:
@@ -503,6 +503,61 @@ class RecommendationDatabaseTests(unittest.TestCase):
         )
         self.assertTrue(
             any("relative to your baseline" in reason for reason in heavy["reasons"])
+        )
+
+    def test_short_gap_absolute_fallback_uses_previous_session_load(self) -> None:
+        base_context = {
+            "hours_since_previous_workout": 12,
+            "last_7d": {
+                "load_score": 10,
+                "back_stress_score": 4,
+            },
+            "previous_21d": {
+                "avg_load_per_workout": 0,
+                "avg_back_stress_per_workout": 0,
+            },
+            "last_42d": {
+                "avg_load_per_workout": 0,
+                "avg_back_stress_per_workout": 0,
+            },
+            "relative_load": {
+                "baseline_confidence": "low",
+                "acute_to_baseline": None,
+                "acute_back_to_baseline": None,
+            },
+            "overall_interval": {
+                "confidence": "low",
+                "current_ratio": None,
+            },
+        }
+        last_workout = {
+            "session_rpe": 4,
+            "lower_back_pain": 1,
+        }
+
+        light = calculate_readiness_status(
+            recovery_context=base_context,
+            last_workout=last_workout,
+            last_load_metrics={
+                "load_score": 2,
+                "back_stress_score": 1,
+            },
+        )
+        heavy = calculate_readiness_status(
+            recovery_context=base_context,
+            last_workout=last_workout,
+            last_load_metrics={
+                "load_score": 20,
+                "back_stress_score": 10,
+            },
+        )
+
+        self.assertGreater(light["score"], heavy["score"])
+        self.assertTrue(
+            any(
+                "hard/back-stressful" in reason
+                for reason in heavy["reasons"]
+            )
         )
 
     def test_long_layoff_caps_low_confidence_and_personal_interval(self) -> None:

@@ -705,9 +705,9 @@ def calculate_readiness_status(
             previous_session_stress_level = "hard"
         elif max_session_ratio >= 1.10:
             previous_session_stress_level = "moderate"
-    elif previous_session_stress_level == "hard":
+    elif last_load_score >= 14 or last_back_stress_score >= 8:
         previous_session_stress_level = "hard"
-    elif previous_session_stress_level == "moderate":
+    elif last_load_score >= 8 or last_back_stress_score >= 4:
         previous_session_stress_level = "moderate"
 
     overall_interval = recovery_context.get("overall_interval", {})
