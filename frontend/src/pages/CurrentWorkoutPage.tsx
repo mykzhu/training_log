@@ -17,6 +17,7 @@ import type {
   NextWorkoutRecommendation,
   RecoveryContext,
   Exercise,
+  SuggestedSet,
 } from "../api/types";
 import LegacyActiveWorkoutView from "../components/LegacyActiveWorkoutView";
 
@@ -34,6 +35,22 @@ function formatRatio(value: number | null | undefined) {
   }
 
   return `${Number(value).toFixed(2)}×`;
+}
+
+function formatSuggestedWeight(value: number) {
+  if (Number.isInteger(value)) {
+    return String(value);
+  }
+
+  return Number(value).toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+function formatSuggestedSet(set: SuggestedSet) {
+  if (set.weight <= 0) {
+    return `${set.set_number}) ${set.reps} reps`;
+  }
+
+  return `${set.set_number}) ${formatSuggestedWeight(set.weight)} kg × ${set.reps}`;
 }
 
 function metricClassForLoad(loadLabel: string | null | undefined) {
@@ -536,6 +553,12 @@ function NextWorkoutCard({ recommendation }: NextWorkoutCardProps) {
                 Strategy: {exercise.target_strategy} · sets:{" "}
                 {exercise.suggested_sets.length}
               </div>
+              {exercise.suggested_sets.length > 0 && (
+                <div className="recommendation-reason">
+                  Suggested:{" "}
+                  {exercise.suggested_sets.map(formatSuggestedSet).join(" · ")}
+                </div>
+              )}
               <div className="recommendation-reason">
                 Trend: {exercise.progression_label} · e1RM{" "}
                 {exercise.e1rm_change_label} · volume{" "}

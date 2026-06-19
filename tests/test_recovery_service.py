@@ -272,6 +272,39 @@ class RecoveryServiceTests(unittest.TestCase):
         self.assertEqual(context["overall_interval"]["sample_count"], 5)
         self.assertEqual(context["overall_interval"]["confidence"], "high")
 
+    def test_clustered_history_keeps_baseline_confidence_low(self) -> None:
+        for day in range(1, 7):
+            self.insert_workout(
+                created_at=f"2026-05-{day:02d}T10:00:00",
+                session_rpe=5,
+                lower_back_pain=1,
+            )
+
+        context = build_recovery_context(as_of="2026-05-15T10:00:00")
+
+        self.assertEqual(context["last_42d"]["workout_count"], 6)
+        self.assertLess(context["last_42d"]["coverage_days"], 14)
+        self.assertEqual(context["relative_load"]["baseline_confidence"], "low")
+        self.assertFalse(context["relative_load"]["baseline_is_reliable"])
+        self.assertIsNone(context["relative_load"]["display_acute_to_baseline"])
+
+    def test_sparse_overall_interval_confidence_remains_low(self) -> None:
+        self.insert_workout(
+            created_at="2026-05-01T10:00:00",
+            session_rpe=5,
+            lower_back_pain=1,
+        )
+        self.insert_workout(
+            created_at="2026-05-08T10:00:00",
+            session_rpe=5,
+            lower_back_pain=1,
+        )
+
+        context = build_recovery_context(as_of="2026-05-15T10:00:00")
+
+        self.assertEqual(context["overall_interval"]["sample_count"], 1)
+        self.assertEqual(context["overall_interval"]["confidence"], "low")
+
 
 if __name__ == "__main__":
     unittest.main()

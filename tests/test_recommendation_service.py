@@ -10,11 +10,13 @@ from app.services.recommendation_service import (
     build_exercise_history_context,
     build_exercise_progression_trend,
     build_next_workout_recommendation,
+    calculate_readiness_status,
     exercise_gap_label,
     exercise_gap_status,
     format_percent_change,
     format_training_target,
     get_recommendation_top_set,
+    suggested_sets_for_action,
 )
 
 
@@ -245,7 +247,7 @@ class RecommendationDatabaseTests(unittest.TestCase):
         exercise_recommendation = recommendation["exercise_recommendations"][0]
         self.assertEqual(exercise_recommendation["exercise_name"], "Deadlift")
         self.assertEqual(exercise_recommendation["action"], "add_reps")
-        self.assertEqual(exercise_recommendation["target"], "100 kg × 6")
+        self.assertEqual(exercise_recommendation["target"], "Add 1 rep to the lowest-rep set")
 
     def test_empty_workout_is_ignored_by_recovery_and_recommendation(self) -> None:
         real_workout_id = self.insert_deadlift_workout()
@@ -403,6 +405,169 @@ class RecommendationDatabaseTests(unittest.TestCase):
             [5, 5, 5],
         )
         self.assertEqual(exercise["interval_confidence"], "low")
+
+    def test_suggested_sets_cover_repeat_deload_careful_progress_and_bodyweight(self) -> None:
+        sets = [
+            {"weight": 100.0, "reps": 5},
+            {"weight": 100.0, "reps": 4},
+            {"weight": 100.0, "reps": 5},
+        ]
+
+        strategy, suggested_sets = suggested_sets_for_action(
+            sets,
+            "repeat",
+            "repeat",
+        )
+        self.assertEqual(strategy, "repeat")
+        self.assertEqual([item["reps"] for item in suggested_sets], [5, 4, 5])
+        self.assertEqual([item["weight"] for item in suggested_sets], [100.0, 100.0, 100.0])
+
+        strategy, suggested_sets = suggested_sets_for_action(
+            sets,
+            "deload",
+            "deload",
+        )
+        self.assertEqual(strategy, "deload")
+        self.assertEqual([item["weight"] for item in suggested_sets], [90.0, 90.0, 90.0])
+        self.assertEqual([item["reps"] for item in suggested_sets], [5, 4, 5])
+
+        strategy, suggested_sets = suggested_sets_for_action(
+            sets,
+            "add_reps",
+            "progress_carefully",
+        )
+        self.assertEqual(strategy, "add_rep_to_last_set")
+        self.assertEqual([item["reps"] for item in suggested_sets], [5, 4, 6])
+
+        strategy, suggested_sets = suggested_sets_for_action(
+            [
+                {"weight": 0.0, "reps": 12},
+                {"weight": 0.0, "reps": 10},
+            ],
+            "add_reps",
+            "progress",
+        )
+        self.assertEqual(strategy, "add_rep_to_lowest_rep_set")
+        self.assertEqual([item["reps"] for item in suggested_sets], [12, 11])
+
+    def test_short_gap_penalty_uses_previous_session_relative_to_baseline(self) -> None:
+        base_context = {
+            "hours_since_previous_workout": 12,
+            "last_7d": {
+                "load_score": 10,
+                "back_stress_score": 4,
+            },
+            "previous_21d": {
+                "avg_load_per_workout": 5,
+                "avg_back_stress_per_workout": 2,
+            },
+            "last_42d": {
+                "avg_load_per_workout": 5,
+                "avg_back_stress_per_workout": 2,
+            },
+            "relative_load": {
+                "baseline_confidence": "medium",
+                "acute_to_baseline": 1.0,
+                "acute_back_to_baseline": 1.0,
+            },
+            "overall_interval": {
+                "confidence": "low",
+                "current_ratio": None,
+            },
+        }
+        last_workout = {
+            "session_rpe": 4,
+            "lower_back_pain": 1,
+        }
+
+        light = calculate_readiness_status(
+            recovery_context=base_context,
+            last_workout=last_workout,
+            last_load_metrics={
+                "load_score": 4,
+                "back_stress_score": 1,
+            },
+        )
+        heavy = calculate_readiness_status(
+            recovery_context=base_context,
+            last_workout=last_workout,
+            last_load_metrics={
+                "load_score": 10,
+                "back_stress_score": 4,
+            },
+        )
+
+        self.assertGreater(light["score"], heavy["score"])
+        self.assertFalse(
+            any("relative to your baseline" in reason for reason in light["reasons"])
+        )
+        self.assertTrue(
+            any("relative to your baseline" in reason for reason in heavy["reasons"])
+        )
+
+    def test_long_layoff_caps_low_confidence_and_personal_interval(self) -> None:
+        low_confidence_context = {
+            "hours_since_previous_workout": 22 * 24,
+            "last_7d": {
+                "load_score": 0,
+                "back_stress_score": 0,
+            },
+            "previous_21d": {
+                "avg_load_per_workout": 0,
+                "avg_back_stress_per_workout": 0,
+            },
+            "last_42d": {
+                "avg_load_per_workout": 0,
+                "avg_back_stress_per_workout": 0,
+            },
+            "relative_load": {
+                "baseline_confidence": "low",
+                "acute_to_baseline": None,
+                "acute_back_to_baseline": None,
+            },
+            "overall_interval": {
+                "confidence": "low",
+                "current_ratio": None,
+            },
+        }
+        last_workout = {
+            "session_rpe": 4,
+            "lower_back_pain": 1,
+        }
+
+        low_confidence = calculate_readiness_status(
+            recovery_context=low_confidence_context,
+            last_workout=last_workout,
+            last_load_metrics={
+                "load_score": 2,
+                "back_stress_score": 1,
+            },
+        )
+        self.assertLessEqual(low_confidence["score"], 59)
+        self.assertEqual(low_confidence["status"], "repeat")
+
+        personal_interval_context = dict(low_confidence_context)
+        personal_interval_context["hours_since_previous_workout"] = 14 * 24
+        personal_interval_context["relative_load"] = {
+            "baseline_confidence": "medium",
+            "acute_to_baseline": 1.0,
+            "acute_back_to_baseline": 1.0,
+        }
+        personal_interval_context["overall_interval"] = {
+            "confidence": "medium",
+            "current_ratio": 3.0,
+        }
+
+        personal_interval = calculate_readiness_status(
+            recovery_context=personal_interval_context,
+            last_workout=last_workout,
+            last_load_metrics={
+                "load_score": 2,
+                "back_stress_score": 1,
+            },
+        )
+        self.assertLessEqual(personal_interval["score"], 59)
+        self.assertEqual(personal_interval["status"], "repeat")
 
 
 if __name__ == "__main__":

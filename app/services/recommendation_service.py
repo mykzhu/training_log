@@ -139,6 +139,13 @@ def max_readiness_score_for_status(status: str) -> int:
     return 29
 
 
+def safe_positive_ratio(value: float, baseline: float) -> float | None:
+    if baseline <= 0:
+        return None
+
+    return value / baseline
+
+
 def exercise_gap_status(
     days_since_same_exercise: float | None,
     usual_interval_days: float | None,
@@ -662,6 +669,47 @@ def calculate_readiness_status(
 
     last_load_score = float(last_load_metrics.get("load_score") or 0)
     last_back_stress_score = float(last_load_metrics.get("back_stress_score") or 0)
+    previous_21d = recovery_context.get("previous_21d", {})
+    last_42d = recovery_context.get("last_42d", {})
+    baseline_load_per_workout = float(
+        previous_21d.get("avg_load_per_workout")
+        or last_42d.get("avg_load_per_workout")
+        or 0
+    )
+    baseline_back_per_workout = float(
+        previous_21d.get("avg_back_stress_per_workout")
+        or last_42d.get("avg_back_stress_per_workout")
+        or 0
+    )
+    last_load_vs_baseline = safe_positive_ratio(
+        last_load_score,
+        baseline_load_per_workout,
+    )
+    last_back_vs_baseline = safe_positive_ratio(
+        last_back_stress_score,
+        baseline_back_per_workout,
+    )
+    previous_session_stress_level = "light"
+    previous_session_stress_reason = "absolute fallback"
+
+    if confidence in {"medium", "high"} and (
+        last_load_vs_baseline is not None
+        or last_back_vs_baseline is not None
+    ):
+        previous_session_stress_reason = "relative to baseline"
+        max_session_ratio = max(
+            last_load_vs_baseline or 0,
+            last_back_vs_baseline or 0,
+        )
+        if max_session_ratio >= 1.50:
+            previous_session_stress_level = "hard"
+        elif max_session_ratio >= 1.10:
+            previous_session_stress_level = "moderate"
+    elif previous_session_stress_level == "hard":
+        previous_session_stress_level = "hard"
+    elif previous_session_stress_level == "moderate":
+        previous_session_stress_level = "moderate"
+
     overall_interval = recovery_context.get("overall_interval", {})
     interval_confidence = str(overall_interval.get("confidence") or "low")
     overall_gap_ratio = overall_interval.get("current_ratio")
@@ -676,7 +724,7 @@ def calculate_readiness_status(
             overall_gap_ratio = float(overall_gap_ratio)
 
             if overall_gap_ratio < 0.55:
-                if last_load_score >= 14 or last_back_stress_score >= 8:
+                if previous_session_stress_level == "hard":
                     time_penalty = 30
                     time_reason = (
                         "Workout gap is much shorter than usual after a hard session."
@@ -694,17 +742,17 @@ def calculate_readiness_status(
                 time_penalty = 5
                 time_reason = "Workout gap is much longer than usual; rebuild before chasing PRs."
         elif hours_since_previous < 24:
-            if last_load_score >= 14 or last_back_stress_score >= 8:
+            if previous_session_stress_level == "hard":
                 time_penalty = 35
                 time_reason = "Last workout was less than 24h ago and was hard/back-stressful."
-            elif last_load_score >= 8 or last_back_stress_score >= 4:
+            elif previous_session_stress_level == "moderate":
                 time_penalty = 30
                 time_reason = "Last workout was less than 24h ago after moderate stress."
             else:
                 time_penalty = 25
                 time_reason = "Last workout was less than 24h ago."
         elif hours_since_previous < 48:
-            if last_load_score >= 14 or last_back_stress_score >= 8:
+            if previous_session_stress_level == "hard":
                 time_penalty = 18
                 time_reason = "Short gap after a hard/back-stressful workout."
             else:
@@ -723,6 +771,14 @@ def calculate_readiness_status(
         if time_penalty:
             score -= time_penalty
             reasons.append(time_reason)
+            if (
+                previous_session_stress_reason == "relative to baseline"
+                and previous_session_stress_level in {"hard", "moderate"}
+            ):
+                reasons.append(
+                    f"Latest session was {previous_session_stress_level} "
+                    "relative to your baseline."
+                )
 
     session_rpe = last_workout["session_rpe"]
     if session_rpe is not None:
@@ -1009,31 +1065,12 @@ def build_exercise_recommendation(
         })
 
     if overall_status == "progress":
-        if weight <= 0:
-            next_reps = reps + max(1, round(reps * 0.1))
-            return with_context({
-                "exercise_name": exercise_name,
-                "action": "add_reps",
-                "action_label": "+ reps",
-                "target": format_training_target(weight, next_reps),
-                "reason": "Readiness is good and exercise timing is acceptable.",
-            })
-
-        if reps < 12:
-            return with_context({
-                "exercise_name": exercise_name,
-                "action": "add_reps",
-                "action_label": "+1 rep",
-                "target": format_training_target(weight, reps + 1),
-                "reason": "Readiness is good; add reps before increasing weight.",
-            })
-
         return with_context({
             "exercise_name": exercise_name,
-            "action": "small_weight_increase",
-            "action_label": "Small weight increase",
-            "target": f"{current_target} + small weight increase",
-            "reason": "Reps are already high; a small weight increase is reasonable.",
+            "action": "add_reps",
+            "action_label": "+1 rep",
+            "target": "Add 1 rep to the lowest-rep set",
+            "reason": "Readiness is good; add one rep before increasing weight.",
         })
 
     if overall_status == "progress_carefully":
@@ -1046,24 +1083,12 @@ def build_exercise_recommendation(
                 "reason": "Overall readiness allows progress, but this is back-heavy.",
             })
 
-        if weight <= 0:
-            return with_context({
-                "exercise_name": exercise_name,
-                "action": "add_reps",
-                "action_label": "+ reps",
-                "target": format_training_target(
-                    weight,
-                    reps + max(1, round(reps * 0.05)),
-                ),
-                "reason": "Careful progress: use a small rep increase.",
-            })
-
         return with_context({
             "exercise_name": exercise_name,
             "action": "add_reps",
             "action_label": "+1 rep",
-            "target": format_training_target(weight, reps + 1),
-            "reason": "Careful progress: add only one rep.",
+            "target": "Add 1 rep to the last set",
+            "reason": "Careful progress: add only one rep to the last set.",
         })
 
     if overall_status == "repeat":
