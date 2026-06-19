@@ -57,6 +57,28 @@ export type RecoveryWindow = {
   weekly_load_equivalent: number;
   weekly_back_stress_equivalent: number;
   weekly_workout_average: number;
+  first_workout_at: string | null;
+  last_workout_at: string | null;
+  coverage_days: number;
+  active_week_count: number;
+  avg_load_per_workout: number;
+  avg_back_stress_per_workout: number;
+};
+
+export type OverallIntervalContext = {
+  median_days: number | null;
+  sample_count: number;
+  confidence: "low" | "medium" | "high";
+  current_ratio: number | null;
+  status: string;
+  status_label: string;
+};
+
+export type SuggestedSet = {
+  set_number: number;
+  weight: number;
+  reps: number;
+  strategy: string;
 };
 
 export type RecoveryContext = {
@@ -71,10 +93,14 @@ export type RecoveryContext = {
   last_7d: RecoveryWindow;
   previous_21d: RecoveryWindow;
   last_42d: RecoveryWindow;
+  overall_interval: OverallIntervalContext;
   relative_load: {
     acute_to_baseline: number | null;
     acute_back_to_baseline: number | null;
+    display_acute_to_baseline: number | null;
+    display_acute_back_to_baseline: number | null;
     baseline_confidence: "low" | "medium" | "high";
+    baseline_is_reliable: boolean;
   };
 };
 
@@ -83,9 +109,13 @@ export type ExerciseRecommendation = {
   action: string;
   action_label: string;
   target: string;
+  target_strategy: string;
+  suggested_sets: SuggestedSet[];
   reason: string;
   gap_label: string;
   usual_gap_label: string;
+  interval_sample_count: number;
+  interval_confidence: "low" | "medium" | "high";
   gap_status_label: string;
   progression_status: string;
   progression_label: string;

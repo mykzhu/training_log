@@ -42,6 +42,103 @@ def format_training_target(weight: float, reps: int) -> str:
     return f"{format_weight(weight)} kg × {reps}"
 
 
+def build_set_targets(
+    sets: list[Any],
+    *,
+    strategy: str,
+    weight_multiplier: float = 1.0,
+    reps_multiplier: float = 1.0,
+    add_rep_to_lowest: bool = False,
+    add_rep_to_last: bool = False,
+) -> list[dict[str, Any]]:
+    suggested_sets: list[dict[str, Any]] = []
+
+    for index, set_row in enumerate(sets):
+        weight = float(set_row["weight"])
+        reps = int(set_row["reps"])
+        suggested_sets.append(
+            {
+                "set_number": index + 1,
+                "weight": round(weight * weight_multiplier, 2) if weight > 0 else 0.0,
+                "reps": max(1, int(round(reps * reps_multiplier))),
+            }
+        )
+
+    if not suggested_sets:
+        return []
+
+    if add_rep_to_lowest:
+        lowest_index = min(
+            range(len(suggested_sets)),
+            key=lambda item_index: (
+                suggested_sets[item_index]["reps"],
+                item_index,
+            ),
+        )
+        suggested_sets[lowest_index]["reps"] += 1
+
+    if add_rep_to_last:
+        suggested_sets[-1]["reps"] += 1
+
+    for set_target in suggested_sets:
+        set_target["strategy"] = strategy
+
+    return suggested_sets
+
+
+def suggested_sets_for_action(
+    sets: list[Any],
+    action: str,
+    overall_status: str,
+) -> tuple[str, list[dict[str, Any]]]:
+    if action in {"recovery", "start_light"}:
+        return action, []
+
+    if action in {"deload", "deload_or_skip", "small_deload"}:
+        return "deload", build_set_targets(
+            sets,
+            strategy="deload",
+            weight_multiplier=0.90,
+            reps_multiplier=0.85 if all(float(item["weight"]) <= 0 for item in sets) else 1.0,
+        )
+
+    if action == "repeat_or_small_deload":
+        return "small_deload", build_set_targets(
+            sets,
+            strategy="small_deload",
+            weight_multiplier=0.95,
+            reps_multiplier=0.90 if all(float(item["weight"]) <= 0 for item in sets) else 1.0,
+        )
+
+    if action in {"add_reps", "small_weight_increase"}:
+        if overall_status == "progress":
+            return "add_rep_to_lowest_rep_set", build_set_targets(
+                sets,
+                strategy="add_rep_to_lowest_rep_set",
+                add_rep_to_lowest=True,
+            )
+
+        return "add_rep_to_last_set", build_set_targets(
+            sets,
+            strategy="add_rep_to_last_set",
+            add_rep_to_last=True,
+        )
+
+    return "repeat", build_set_targets(sets, strategy="repeat")
+
+
+def max_readiness_score_for_status(status: str) -> int:
+    if status == "progress":
+        return 100
+    if status == "progress_carefully":
+        return 74
+    if status == "repeat":
+        return 59
+    if status == "deload":
+        return 44
+    return 29
+
+
 def exercise_gap_status(
     days_since_same_exercise: float | None,
     usual_interval_days: float | None,
@@ -333,6 +430,8 @@ def empty_exercise_history_context() -> dict[str, Any]:
         "same_exercise_gap_label": "—",
         "usual_interval_days": None,
         "usual_interval_label": "—",
+        "interval_sample_count": 0,
+        "interval_confidence": "low",
         "gap_status": "unknown",
         "gap_status_label": "Unknown",
         "occurrence_count": 0,
@@ -481,6 +580,14 @@ def build_exercise_history_contexts(
             if interval_days > 0:
                 intervals.append(interval_days)
 
+        interval_sample_count = len(intervals)
+        interval_confidence = (
+            "high"
+            if interval_sample_count >= 5
+            else "medium"
+            if interval_sample_count >= 3
+            else "low"
+        )
         usual_interval_days = median(intervals) if intervals else None
         gap_status = exercise_gap_status(
             days_since_same_exercise=days_since_same_exercise,
@@ -510,6 +617,8 @@ def build_exercise_history_contexts(
                 if usual_interval_days is not None
                 else "—"
             ),
+            "interval_sample_count": interval_sample_count,
+            "interval_confidence": interval_confidence,
             "gap_status": gap_status,
             "gap_status_label": exercise_gap_label(gap_status),
             "occurrence_count": len(occurrences),
@@ -551,23 +660,69 @@ def calculate_readiness_status(
     acute_ratio = relative_load.get("acute_to_baseline")
     acute_back_ratio = relative_load.get("acute_back_to_baseline")
 
+    last_load_score = float(last_load_metrics.get("load_score") or 0)
+    last_back_stress_score = float(last_load_metrics.get("back_stress_score") or 0)
+    overall_interval = recovery_context.get("overall_interval", {})
+    interval_confidence = str(overall_interval.get("confidence") or "low")
+    overall_gap_ratio = overall_interval.get("current_ratio")
+
     if hours_since_previous is None:
         reasons.append("No previous workout gap available yet.")
-    elif hours_since_previous < 24:
-        score -= 25
-        reasons.append("Last workout was less than 24h ago.")
-    elif hours_since_previous < 48:
-        score -= 10
-        reasons.append("Short gap since the last workout.")
-    elif hours_since_previous <= 120:
-        score += 15
-        reasons.append("Recovery gap is in a normal range.")
-    elif hours_since_previous <= 240:
-        score += 5
-        reasons.append("Longer gap, so progress should stay conservative.")
     else:
-        score -= 5
-        reasons.append("Long gap since last workout; rebuild before chasing PRs.")
+        time_penalty = 0
+        time_reason = ""
+
+        if interval_confidence in {"medium", "high"} and overall_gap_ratio is not None:
+            overall_gap_ratio = float(overall_gap_ratio)
+
+            if overall_gap_ratio < 0.55:
+                if last_load_score >= 14 or last_back_stress_score >= 8:
+                    time_penalty = 30
+                    time_reason = (
+                        "Workout gap is much shorter than usual after a hard session."
+                    )
+                else:
+                    time_penalty = 20
+                    time_reason = "Workout gap is shorter than your usual interval."
+            elif overall_gap_ratio <= 1.5:
+                score += 10
+                reasons.append("Workout gap is close to your usual interval.")
+            elif overall_gap_ratio <= 2.5:
+                score += 3
+                reasons.append("Workout gap is longer than usual; progress should stay conservative.")
+            else:
+                time_penalty = 5
+                time_reason = "Workout gap is much longer than usual; rebuild before chasing PRs."
+        elif hours_since_previous < 24:
+            if last_load_score >= 14 or last_back_stress_score >= 8:
+                time_penalty = 35
+                time_reason = "Last workout was less than 24h ago and was hard/back-stressful."
+            elif last_load_score >= 8 or last_back_stress_score >= 4:
+                time_penalty = 30
+                time_reason = "Last workout was less than 24h ago after moderate stress."
+            else:
+                time_penalty = 25
+                time_reason = "Last workout was less than 24h ago."
+        elif hours_since_previous < 48:
+            if last_load_score >= 14 or last_back_stress_score >= 8:
+                time_penalty = 18
+                time_reason = "Short gap after a hard/back-stressful workout."
+            else:
+                time_penalty = 10
+                time_reason = "Short gap since the last workout."
+        elif hours_since_previous <= 120:
+            score += 15
+            reasons.append("Recovery gap is in a normal range.")
+        elif hours_since_previous <= 240:
+            score += 5
+            reasons.append("Longer gap, so progress should stay conservative.")
+        else:
+            time_penalty = 5
+            time_reason = "Long gap since last workout; rebuild before chasing PRs."
+
+        if time_penalty:
+            score -= time_penalty
+            reasons.append(time_reason)
 
     session_rpe = last_workout["session_rpe"]
     if session_rpe is not None:
@@ -666,6 +821,19 @@ def calculate_readiness_status(
             score += 5
             reasons.append("7-day back stress is low.")
 
+    if interval_confidence in {"medium", "high"} and overall_gap_ratio is not None:
+        if float(overall_gap_ratio) > 2.5:
+            score = min(score, max_readiness_score_for_status("repeat"))
+            reasons.append("Workout gap is much longer than usual, so progression is capped.")
+    elif hours_since_previous is not None:
+        days_since_previous = hours_since_previous / 24
+        if days_since_previous > 21:
+            score = min(score, max_readiness_score_for_status("repeat"))
+            reasons.append("Long low-confidence layoff over 21d caps the next step at repeat.")
+        elif days_since_previous > 10:
+            score = min(score, max_readiness_score_for_status("progress_carefully"))
+            reasons.append("Long low-confidence layoff over 10d caps aggressive progression.")
+
     # Safety caps.
     if hours_since_previous is not None and hours_since_previous < 24:
         score = min(score, 40)
@@ -726,10 +894,24 @@ def build_exercise_recommendation(
     progression_summary = str(progression_trend.get("summary") or "")
 
     def with_context(result: dict[str, Any]) -> dict[str, Any]:
+        action = str(result.get("action") or "")
+        target_strategy, suggested_sets = suggested_sets_for_action(
+            item["sets"],
+            action,
+            overall_status,
+        )
+        result.setdefault("target_strategy", target_strategy)
+        result.setdefault("suggested_sets", suggested_sets)
         result.update(
             {
                 "gap_label": same_exercise_gap_label,
                 "usual_gap_label": usual_interval_label,
+                "interval_sample_count": int(
+                    exercise_context.get("interval_sample_count") or 0
+                ),
+                "interval_confidence": str(
+                    exercise_context.get("interval_confidence") or "low"
+                ),
                 "gap_status_label": gap_status_label,
                 "progression_status": progression_status,
                 "progression_label": progression_label,
@@ -920,16 +1102,22 @@ def build_next_workout_recommendation(
     recovery_context: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     recovery_context = recovery_context or build_recovery_context()
+    recommendation_as_of = str(
+        recovery_context.get("as_of")
+        or datetime.now().isoformat(timespec="seconds")
+    )
 
     with get_db() as conn:
         last_workout = conn.execute(
             f"""
             SELECT w.*
             FROM workouts w
-            WHERE {NON_EMPTY_WORKOUT_EXISTS_SQL}
+            WHERE w.created_at < ?
+              AND {NON_EMPTY_WORKOUT_EXISTS_SQL}
             ORDER BY w.created_at DESC, w.id DESC
             LIMIT 1
-            """
+            """,
+            (recommendation_as_of,),
         ).fetchone()
 
     if not last_workout:
@@ -1024,11 +1212,6 @@ def build_next_workout_recommendation(
             "last_workout_at": last_workout["created_at"],
             "exercise_recommendations": [],
         }
-
-    recommendation_as_of = str(
-        recovery_context.get("as_of")
-        or datetime.now().isoformat(timespec="seconds")
-    )
 
     exercise_contexts = build_exercise_history_contexts(
         [int(item["exercise_id"]) for item in details],

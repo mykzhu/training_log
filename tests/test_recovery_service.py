@@ -245,6 +245,33 @@ class RecoveryServiceTests(unittest.TestCase):
         self.assertEqual(context["relative_load"]["baseline_confidence"], "medium")
         self.assertEqual(context["last_7d"]["load_label"], "Normal")
 
+    def test_recovery_window_contains_reliability_metadata(self) -> None:
+        for created_at in [
+            "2026-05-01T10:00:00",
+            "2026-05-08T10:00:00",
+            "2026-05-15T10:00:00",
+            "2026-05-22T10:00:00",
+            "2026-05-29T10:00:00",
+            "2026-06-05T10:00:00",
+        ]:
+            self.insert_workout(
+                created_at=created_at,
+                session_rpe=5,
+                lower_back_pain=1,
+            )
+
+        context = build_recovery_context(as_of="2026-06-08T10:00:00")
+        last_42d = context["last_42d"]
+
+        self.assertEqual(last_42d["first_workout_at"], "2026-05-01T10:00:00")
+        self.assertEqual(last_42d["last_workout_at"], "2026-06-05T10:00:00")
+        self.assertEqual(last_42d["coverage_days"], 36)
+        self.assertGreaterEqual(last_42d["active_week_count"], 6)
+        self.assertGreater(last_42d["avg_load_per_workout"], 0)
+        self.assertGreater(last_42d["avg_back_stress_per_workout"], 0)
+        self.assertEqual(context["overall_interval"]["sample_count"], 5)
+        self.assertEqual(context["overall_interval"]["confidence"], "high")
+
 
 if __name__ == "__main__":
     unittest.main()

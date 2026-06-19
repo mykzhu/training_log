@@ -331,6 +331,79 @@ class RecommendationDatabaseTests(unittest.TestCase):
             any("recent baseline" in reason for reason in recommendation["reasons"])
         )
 
+    def test_recommendation_ignores_future_workouts_from_recovery_as_of(self) -> None:
+        past_workout_id = self.insert_deadlift_workout(
+            "2026-06-01T10:00:00",
+            sets=[(100.0, 5)],
+        )
+        self.insert_deadlift_workout(
+            "2026-06-20T10:00:00",
+            sets=[(140.0, 5)],
+        )
+
+        recovery_context = build_recovery_context(as_of="2026-06-08T10:00:00")
+        recommendation = build_next_workout_recommendation(
+            recovery_context=recovery_context,
+        )
+
+        self.assertEqual(recommendation["last_workout_id"], past_workout_id)
+        self.assertEqual(
+            recommendation["exercise_recommendations"][0]["target"],
+            "100 kg × 6",
+        )
+
+    def test_missing_latest_feedback_returns_needs_feedback(self) -> None:
+        workout_id = self.insert_deadlift_workout(
+            "2026-06-01T10:00:00",
+            session_rpe=None,
+            lower_back_pain=2,
+        )
+        recovery_context = build_recovery_context(as_of="2026-06-08T10:00:00")
+
+        recommendation = build_next_workout_recommendation(
+            recovery_context=recovery_context,
+        )
+
+        self.assertEqual(recommendation["status"], "needs_feedback")
+        self.assertEqual(recommendation["last_workout_id"], workout_id)
+        self.assertEqual(recommendation["exercise_recommendations"], [])
+
+    def test_recovery_recommendation_has_no_exercise_targets(self) -> None:
+        self.insert_deadlift_workout(
+            "2026-06-01T10:00:00",
+            session_rpe=7,
+            lower_back_pain=3,
+        )
+        recovery_context = build_recovery_context(as_of="2026-06-01T12:00:00")
+
+        recommendation = build_next_workout_recommendation(
+            recovery_context=recovery_context,
+        )
+
+        self.assertEqual(recommendation["status"], "recovery")
+        self.assertEqual(recommendation["exercise_recommendations"], [])
+
+    def test_structured_suggested_sets_are_returned_for_progress(self) -> None:
+        self.insert_deadlift_workout(
+            "2026-06-01T10:00:00",
+            sets=[(100.0, 5), (100.0, 4), (100.0, 5)],
+            session_rpe=4,
+            lower_back_pain=1,
+        )
+        recovery_context = build_recovery_context(as_of="2026-06-08T10:00:00")
+
+        recommendation = build_next_workout_recommendation(
+            recovery_context=recovery_context,
+        )
+
+        exercise = recommendation["exercise_recommendations"][0]
+        self.assertEqual(exercise["target_strategy"], "add_rep_to_lowest_rep_set")
+        self.assertEqual(
+            [item["reps"] for item in exercise["suggested_sets"]],
+            [5, 5, 5],
+        )
+        self.assertEqual(exercise["interval_confidence"], "low")
+
 
 if __name__ == "__main__":
     unittest.main()

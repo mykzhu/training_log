@@ -145,22 +145,42 @@ function baselineRatioClass(
   context: RecoveryContext,
   value: number | null | undefined,
 ) {
-  if (context.relative_load.baseline_confidence === "low") {
+  const displayValue =
+    value ??
+    (value === context.relative_load.acute_to_baseline
+      ? context.relative_load.display_acute_to_baseline
+      : context.relative_load.display_acute_back_to_baseline);
+
+  if (
+    !context.relative_load.baseline_is_reliable ||
+    displayValue === null ||
+    displayValue === undefined
+  ) {
     return "metric-neutral";
   }
 
-  return metricClassForRatio(value);
+  return metricClassForRatio(displayValue);
 }
 
 function formatBaselineRatio(
   context: RecoveryContext,
   value: number | null | undefined,
 ) {
-  if (context.relative_load.baseline_confidence === "low") {
+  const displayValue =
+    value ??
+    (value === context.relative_load.acute_to_baseline
+      ? context.relative_load.display_acute_to_baseline
+      : context.relative_load.display_acute_back_to_baseline);
+
+  if (
+    !context.relative_load.baseline_is_reliable ||
+    displayValue === null ||
+    displayValue === undefined
+  ) {
     return "building";
   }
 
-  return formatRatio(value);
+  return formatRatio(displayValue);
 }
 
 export default function CurrentWorkoutPage() {
@@ -509,7 +529,12 @@ function NextWorkoutCard({ recommendation }: NextWorkoutCardProps) {
               <div className="recommendation-target">{exercise.target}</div>
               <div className="recommendation-reason">
                 Gap: {exercise.gap_label} · usual: {exercise.usual_gap_label} ·{" "}
-                {exercise.gap_status_label}
+                {exercise.gap_status_label} · interval confidence:{" "}
+                {exercise.interval_confidence}
+              </div>
+              <div className="recommendation-reason">
+                Strategy: {exercise.target_strategy} · sets:{" "}
+                {exercise.suggested_sets.length}
               </div>
               <div className="recommendation-reason">
                 Trend: {exercise.progression_label} · e1RM{" "}

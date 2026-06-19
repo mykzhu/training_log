@@ -3,7 +3,7 @@
 Repository: `mykzhu/training_log`
 Verified baseline: `8696abe8e141cb06538018b273862271851530fc`
 Current backup schema: `3`
-Current add-on version: `0.2.0`
+Current add-on version: `1.0.1`
 
 ## Execution rule
 
@@ -192,7 +192,7 @@ get_workout_details_batch(workout_ids)
 
 ---
 
-## [ ] Phase 4 — Recovery quality
+## [x] Phase 4 — Recovery quality
 
 Branch:
 
@@ -243,6 +243,12 @@ Use personal interval when confidence is sufficient; retain fixed safety fallbac
   - low-confidence fallback `>10d`: maximum careful progress;
   - low-confidence fallback `>21d`: maximum repeat.
 - Existing back-pain and `<24h` safety caps remain last.
+
+### Feedback completeness
+
+- Latest workout missing RPE or lower-back feedback returns `needs_feedback`.
+- `needs_feedback` has no exercise-level targets.
+- UI shows a clear action instead of a workout prescription.
 
 ### Recommendations
 

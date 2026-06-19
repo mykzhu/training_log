@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from statistics import median
 from typing import Any
 
 from app.db import get_db
@@ -154,10 +155,14 @@ def summarize_workouts(
     total_back_stress_score = 0.0
     rpe_values: list[int] = []
     back_values: list[int] = []
+    workout_datetimes: list[datetime] = []
 
     for workout in workouts:
         workout_id = int(workout["id"])
         details = details_by_workout.get(workout_id, [])
+        workout_dt = parse_iso_datetime(str(workout["created_at"]))
+        if workout_dt is not None:
+            workout_datetimes.append(workout_dt)
 
         load_metrics = calculate_workout_load_metrics(
             workout_exercises=details,
@@ -181,10 +186,36 @@ def summarize_workouts(
             back_values.append(int(workout["lower_back_pain"]))
 
     weeks = window_days / 7
+    workout_count = len(workouts)
+    sorted_datetimes = sorted(workout_datetimes)
+
+    first_workout_at = (
+        sorted_datetimes[0].isoformat(timespec="seconds")
+        if sorted_datetimes
+        else None
+    )
+    last_workout_at = (
+        sorted_datetimes[-1].isoformat(timespec="seconds")
+        if sorted_datetimes
+        else None
+    )
+    coverage_days = 0
+    active_week_count = 0
+
+    if sorted_datetimes:
+        coverage_days = (
+            sorted_datetimes[-1].date() - sorted_datetimes[0].date()
+        ).days + 1
+        active_week_count = len(
+            {
+                workout_week_start_from_datetime(workout_dt)
+                for workout_dt in sorted_datetimes
+            }
+        )
 
     return {
         "days": window_days,
-        "workout_count": len(workouts),
+        "workout_count": workout_count,
         "load_score": total_load_score,
         "load_label": rolling_load_label(total_load_score),
         "compound_score": total_compound_score,
@@ -197,8 +228,23 @@ def summarize_workouts(
             if weeks > 0
             else 0
         ),
-        "weekly_workout_average": len(workouts) / weeks if weeks > 0 else 0,
+        "weekly_workout_average": workout_count / weeks if weeks > 0 else 0,
+        "first_workout_at": first_workout_at,
+        "last_workout_at": last_workout_at,
+        "coverage_days": coverage_days,
+        "active_week_count": active_week_count,
+        "avg_load_per_workout": (
+            total_load_score / workout_count
+            if workout_count
+            else 0
+        ),
+        "avg_back_stress_per_workout": (
+            total_back_stress_score / workout_count
+            if workout_count
+            else 0
+        ),
     }
+
 
 
 def safe_ratio(
@@ -211,17 +257,126 @@ def safe_ratio(
     return current / baseline
 
 
+def workout_week_start_from_datetime(value: datetime) -> str:
+    week_start = value.date() - timedelta(days=value.weekday())
+    return week_start.isoformat()
+
+
+def interval_confidence_from_sample_count(sample_count: int) -> str:
+    if sample_count >= 5:
+        return "high"
+    if sample_count >= 3:
+        return "medium"
+    return "low"
+
+
+def overall_interval_status(
+    days_since_previous_workout: float | None,
+    median_interval_days: float | None,
+    confidence: str,
+) -> tuple[float | None, str]:
+    if days_since_previous_workout is None:
+        return None, "unknown"
+
+    if (
+        confidence not in {"medium", "high"}
+        or median_interval_days is None
+        or median_interval_days <= 0
+    ):
+        if days_since_previous_workout < 1:
+            return None, "very_short"
+        if days_since_previous_workout <= 10:
+            return None, "unknown"
+        return None, "long"
+
+    ratio = days_since_previous_workout / median_interval_days
+
+    if ratio < 0.55:
+        return ratio, "shorter_than_usual"
+    if ratio <= 1.5:
+        return ratio, "normal"
+    if ratio <= 2.5:
+        return ratio, "longer_than_usual"
+
+    return ratio, "much_longer_than_usual"
+
+
+INTERVAL_STATUS_LABELS = {
+    "very_short": "Very short",
+    "shorter_than_usual": "Shorter than usual",
+    "normal": "Normal",
+    "longer_than_usual": "Longer than usual",
+    "much_longer_than_usual": "Much longer than usual",
+    "long": "Long",
+    "unknown": "Unknown",
+}
+
+
+def build_overall_interval_context(
+    workouts: list[Any],
+    hours_since_previous_workout: float | None,
+) -> dict[str, Any]:
+    chronological = []
+    for workout in workouts:
+        workout_dt = parse_iso_datetime(str(workout["created_at"]))
+        if workout_dt is not None:
+            chronological.append(workout_dt)
+
+    chronological.sort()
+    intervals: list[float] = []
+    for previous_dt, current_dt in zip(chronological, chronological[1:]):
+        interval_days = (current_dt - previous_dt).total_seconds() / 86400
+        if interval_days > 0:
+            intervals.append(interval_days)
+
+    sample_count = len(intervals)
+    confidence = interval_confidence_from_sample_count(sample_count)
+    median_interval_days = median(intervals) if intervals else None
+    days_since_previous_workout = (
+        hours_since_previous_workout / 24
+        if hours_since_previous_workout is not None
+        else None
+    )
+    current_ratio, status = overall_interval_status(
+        days_since_previous_workout=days_since_previous_workout,
+        median_interval_days=median_interval_days,
+        confidence=confidence,
+    )
+
+    return {
+        "median_days": median_interval_days,
+        "sample_count": sample_count,
+        "confidence": confidence,
+        "current_ratio": current_ratio,
+        "status": status,
+        "status_label": INTERVAL_STATUS_LABELS.get(status, "Unknown"),
+    }
+
+
 def baseline_confidence(
     previous_21d_workouts: int,
     last_42d_workouts: int,
+    active_week_count: int,
+    coverage_days: float,
 ) -> str:
-    if last_42d_workouts >= 12 and previous_21d_workouts >= 5:
+    if (
+        last_42d_workouts >= 12
+        and previous_21d_workouts >= 5
+        and active_week_count >= 5
+        and coverage_days >= 28
+    ):
         return "high"
 
-    if last_42d_workouts >= 6 and previous_21d_workouts >= 3:
+    if (
+        last_42d_workouts >= 6
+        and previous_21d_workouts >= 3
+        and active_week_count >= 3
+        and coverage_days >= 14
+    ):
         return "medium"
 
     return "low"
+
 
 
 def build_recovery_context(
@@ -330,6 +485,8 @@ def build_recovery_context(
     confidence = baseline_confidence(
         previous_21d_workouts=int(previous_21d["workout_count"]),
         last_42d_workouts=int(last_42d["workout_count"]),
+        active_week_count=int(last_42d["active_week_count"]),
+        coverage_days=float(last_42d["coverage_days"]),
     )
     label_ratio = (
         acute_to_baseline
@@ -339,6 +496,17 @@ def build_recovery_context(
     last_7d["load_label"] = relative_load_label(
         label_ratio,
         float(last_7d["load_score"]),
+    )
+    baseline_is_reliable = confidence in {"medium", "high"}
+    display_acute_to_baseline = (
+        acute_to_baseline if baseline_is_reliable else None
+    )
+    display_acute_back_to_baseline = (
+        acute_back_to_baseline if baseline_is_reliable else None
+    )
+    overall_interval = build_overall_interval_context(
+        last_42d_workouts,
+        hours_since_previous_workout,
     )
 
     return {
@@ -353,9 +521,13 @@ def build_recovery_context(
         "last_7d": last_7d,
         "previous_21d": previous_21d,
         "last_42d": last_42d,
+        "overall_interval": overall_interval,
         "relative_load": {
             "acute_to_baseline": acute_to_baseline,
             "acute_back_to_baseline": acute_back_to_baseline,
+            "display_acute_to_baseline": display_acute_to_baseline,
+            "display_acute_back_to_baseline": display_acute_back_to_baseline,
             "baseline_confidence": confidence,
+            "baseline_is_reliable": baseline_is_reliable,
         },
     }
