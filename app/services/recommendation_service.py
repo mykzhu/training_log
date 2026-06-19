@@ -24,6 +24,7 @@ RECOMMENDATION_STATUS_TITLES: dict[str, str] = {
     "repeat": "Repeat",
     "deload": "Deload",
     "recovery": "Recovery",
+    "needs_feedback": "Add feedback",
 }
 
 
@@ -584,6 +585,9 @@ def calculate_readiness_status(
         elif session_rpe >= 7:
             score -= 10
             reasons.append("Last RPE was elevated.")
+    else:
+        score -= 10
+        reasons.append("Latest workout is missing RPE feedback.")
 
     lower_back_pain = last_workout["lower_back_pain"]
     if lower_back_pain is not None:
@@ -600,6 +604,9 @@ def calculate_readiness_status(
         else:
             score -= 35
             reasons.append("Lower back pain was high.")
+    else:
+        score -= 10
+        reasons.append("Latest workout is missing lower-back feedback.")
 
     use_personal_load_baseline = (
         confidence in {"medium", "high"}
@@ -955,6 +962,30 @@ def build_next_workout_recommendation(
             "exercise_recommendations": [],
         }
 
+    missing_feedback = (
+        last_workout["session_rpe"] is None
+        or last_workout["lower_back_pain"] is None
+    )
+    if missing_feedback:
+        missing_fields = []
+        if last_workout["session_rpe"] is None:
+            missing_fields.append("RPE")
+        if last_workout["lower_back_pain"] is None:
+            missing_fields.append("lower-back feedback")
+
+        return {
+            "status": "needs_feedback",
+            "title": RECOMMENDATION_STATUS_TITLES["needs_feedback"],
+            "score": 25,
+            "summary": "Add latest workout feedback before using recovery recommendations.",
+            "reasons": [
+                f"Missing {', '.join(missing_fields)} for the latest workout.",
+            ],
+            "last_workout_id": last_workout_id,
+            "last_workout_at": last_workout["created_at"],
+            "exercise_recommendations": [],
+        }
+
     e1rm_baselines_by_workout = build_e1rm_baselines_by_workout(
         workouts=[last_workout],
         details_by_workout=details_by_workout,
@@ -981,6 +1012,18 @@ def build_next_workout_recommendation(
         if last_workout["lower_back_pain"] is not None
         else None
     )
+
+    if readiness["status"] == "recovery":
+        return {
+            "status": readiness["status"],
+            "title": readiness["title"],
+            "score": readiness["score"],
+            "summary": "Use recovery or very light technique work instead of progression.",
+            "reasons": readiness["reasons"][:5],
+            "last_workout_id": last_workout_id,
+            "last_workout_at": last_workout["created_at"],
+            "exercise_recommendations": [],
+        }
 
     recommendation_as_of = str(
         recovery_context.get("as_of")

@@ -97,7 +97,7 @@ export type ExerciseRecommendation = {
 export type NextWorkoutRecommendation = {
   status: string;
   title: string;
-  score: number;
+  score: number | null;
   summary: string;
   reasons: string[];
   last_workout_id: number | null;

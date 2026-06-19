@@ -122,6 +122,9 @@ function metricClassForConfidence(value: string) {
 }
 
 function metricClassForReadiness(status: string) {
+  if (status === "needs_feedback") {
+    return "metric-orange";
+  }
   if (status === "progress") {
     return "metric-green";
   }
@@ -136,6 +139,28 @@ function metricClassForReadiness(status: string) {
   }
 
   return "metric-red";
+}
+
+function baselineRatioClass(
+  context: RecoveryContext,
+  value: number | null | undefined,
+) {
+  if (context.relative_load.baseline_confidence === "low") {
+    return "metric-neutral";
+  }
+
+  return metricClassForRatio(value);
+}
+
+function formatBaselineRatio(
+  context: RecoveryContext,
+  value: number | null | undefined,
+) {
+  if (context.relative_load.baseline_confidence === "low") {
+    return "building";
+  }
+
+  return formatRatio(value);
 }
 
 export default function CurrentWorkoutPage() {
@@ -348,13 +373,13 @@ function RecoveryContextCard({ context }: RecoveryContextCardProps) {
           label="7d back stress"
         />
         <MetricTile
-          className={metricClassForRatio(context.relative_load.acute_to_baseline)}
-          value={formatRatio(context.relative_load.acute_to_baseline)}
+          className={baselineRatioClass(context, context.relative_load.acute_to_baseline)}
+          value={formatBaselineRatio(context, context.relative_load.acute_to_baseline)}
           label="load vs baseline"
         />
         <MetricTile
-          className={metricClassForRatio(context.relative_load.acute_back_to_baseline)}
-          value={formatRatio(context.relative_load.acute_back_to_baseline)}
+          className={baselineRatioClass(context, context.relative_load.acute_back_to_baseline)}
+          value={formatBaselineRatio(context, context.relative_load.acute_back_to_baseline)}
           label="back vs baseline"
         />
         <MetricTile
@@ -401,14 +426,37 @@ type NextWorkoutCardProps = {
   recommendation: NextWorkoutRecommendation;
 };
 
+function nextWorkoutSubtitle(status: string) {
+  if (status === "needs_feedback") {
+    return "Latest workout feedback is required first";
+  }
+  if (status === "recovery") {
+    return "Recovery-first guidance";
+  }
+
+  return "Rule-based recommendation from your latest workout";
+}
+
 function NextWorkoutCard({ recommendation }: NextWorkoutCardProps) {
+  const showExerciseTargets =
+    recommendation.status !== "recovery" &&
+    recommendation.status !== "needs_feedback" &&
+    recommendation.exercise_recommendations.length > 0;
+  const actionValue =
+    recommendation.status === "recovery"
+      ? "pause"
+      : recommendation.status === "needs_feedback"
+        ? "log"
+        : recommendation.exercise_recommendations.length;
+  const actionLabel = showExerciseTargets ? "exercises" : "action";
+
   return (
     <section className="panel context-card">
       <div className="panel-header">
         <div>
           <h2>Next workout</h2>
           <div className="muted small">
-            Rule-based recommendation from your latest workout
+            {nextWorkoutSubtitle(recommendation.status)}
           </div>
         </div>
         {recommendation.last_workout_id && (
@@ -429,12 +477,12 @@ function NextWorkoutCard({ recommendation }: NextWorkoutCardProps) {
         />
         <MetricTile
           className={metricClassForReadiness(recommendation.status)}
-          value={recommendation.score}
+          value={recommendation.score ?? "—"}
           label="readiness"
         />
         <MetricTile
-          value={recommendation.exercise_recommendations.length}
-          label="exercises"
+          value={actionValue}
+          label={actionLabel}
         />
       </div>
 
@@ -448,7 +496,7 @@ function NextWorkoutCard({ recommendation }: NextWorkoutCardProps) {
         </ul>
       )}
 
-      {recommendation.exercise_recommendations.length > 0 && (
+      {showExerciseTargets && (
         <div className="recommendation-list">
           {recommendation.exercise_recommendations.map((exercise) => (
             <article className="recommendation-item" key={exercise.exercise_name}>
