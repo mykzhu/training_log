@@ -219,6 +219,7 @@ export default function HistoryPage({
     getWorkout(selectedWorkoutId)
       .then(hydrateDetail)
       .catch((reason: unknown) => {
+        setDetail(null);
         setError(reason instanceof Error ? reason.message : "Failed to load workout.");
       })
       .finally(() => setPending(false));
@@ -404,8 +405,12 @@ export default function HistoryPage({
         </div>
       )}
 
-      {selectedWorkoutId !== null && !detail && (
+      {selectedWorkoutId !== null && !detail && !error && (
         <section className="panel">Loading workout</section>
+      )}
+
+      {selectedWorkoutId !== null && !detail && error && (
+        <section className="panel">Workout unavailable.</section>
       )}
 
       {selectedWorkoutId !== null && detail && !initialEditMode && (

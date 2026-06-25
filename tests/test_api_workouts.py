@@ -323,6 +323,9 @@ class WorkoutsApiTests(unittest.TestCase):
         self.assertEqual(response["exercises"][0]["sets"][0]["weight"], 100.0)
         self.assertIn(100.0, response["exercises"][0]["configured_weights"])
         self.assertIn("load_label", response["load_metrics"])
+        self.assertIn("load_score", response["load_metrics"])
+        self.assertIn("back_stress_score", response["load_metrics"])
+        self.assertIn("compound_score", response["load_metrics"])
         self.assertEqual(response["analysis"]["prs"], [])
         self.assertEqual(
             response["analysis"]["exercises"][0]["exercise_name"],
@@ -447,6 +450,72 @@ class WorkoutsApiTests(unittest.TestCase):
             delete_workout_endpoint(9999)
 
         self.assertEqual(exc.exception.status_code, 404)
+
+    def test_legacy_edit_workout_flow_updates_sets_and_preserves_order(self) -> None:
+        workout_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            session_rpe=6,
+            lower_back_pain=1,
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [{"weight": 100, "reps": 5}],
+                },
+            ],
+        )
+
+        response = update_workout_endpoint(
+            workout_id,
+            WorkoutUpdateRequest(
+                created_at="2026-06-01T09:45",
+                session_rpe=7,
+                lower_back_pain=2,
+            ),
+        )
+        self.assertEqual(response["workout"]["created_at"], "2026-06-01T09:45:00")
+        self.assertEqual(response["workout"]["session_rpe"], 7)
+        self.assertEqual(response["workout"]["lower_back_pain"], 2)
+
+        response = add_workout_exercise_endpoint(
+            workout_id,
+            AddExerciseRequest(exercise_id=self.exercise_id("Squats")),
+        )
+        self.assertEqual(
+            [exercise["exercise_name"] for exercise in response["exercises"]],
+            ["Deadlift", "Squats"],
+        )
+        self.assertEqual(
+            [exercise["position"] for exercise in response["exercises"]],
+            [1, 2],
+        )
+
+        deadlift_workout_exercise_id = self.get_workout_exercise_id(response, "Deadlift")
+        squat_workout_exercise_id = self.get_workout_exercise_id(response, "Squats")
+        response = add_workout_exercise_set_endpoint(
+            squat_workout_exercise_id,
+            AddSetRequest(weight=40, reps=10),
+        )
+        self.assertEqual(response["exercises"][1]["sets"][0]["set_number"], 1)
+
+        response = duplicate_workout_exercise_set_endpoint(deadlift_workout_exercise_id)
+        deadlift_sets = response["exercises"][0]["sets"]
+        duplicated_set_id = int(deadlift_sets[1]["id"])
+        self.assertEqual([set_entry["set_number"] for set_entry in deadlift_sets], [1, 2])
+
+        response = update_set_endpoint(duplicated_set_id, UpdateSetRequest(reps=6))
+        self.assertEqual(response["exercises"][0]["sets"][1]["reps"], 6)
+
+        original_set_id = int(response["exercises"][0]["sets"][0]["id"])
+        response = delete_set_endpoint(original_set_id)
+        self.assertEqual(response["exercises"][0]["sets"][0]["set_number"], 1)
+        self.assertEqual(response["exercises"][0]["sets"][0]["reps"], 6)
+
+        response = delete_workout_exercise_endpoint(workout_id, squat_workout_exercise_id)
+        self.assertEqual(
+            [exercise["exercise_name"] for exercise in response["exercises"]],
+            ["Deadlift"],
+        )
+        self.assertEqual(response["exercises"][0]["position"], 1)
 
     def test_add_workout_exercise_endpoint_appends_exercise(self) -> None:
         workout_id = self.insert_workout(

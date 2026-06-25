@@ -114,8 +114,15 @@
 .active-exercise-add-row,
 .active-new-exercise-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
+}
+
+.active-exercise-add-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.active-new-exercise-row {
+  grid-template-columns: minmax(0, 1fr) minmax(80px, 120px) auto;
 }
 
 .active-exercise-list {
@@ -267,8 +274,11 @@
     width: 100%;
   }
 
-  .active-exercise-add-row,
-  .active-new-exercise-row {
+  .active-exercise-add-row {
     grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .active-new-exercise-row {
+    grid-template-columns: minmax(0, 1fr) minmax(76px, 96px) auto;
   }
 }
