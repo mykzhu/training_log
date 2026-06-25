@@ -6,6 +6,7 @@ from app.repositories.workouts import get_workout_details_batch
 from app.services.analysis_service import (
     calculate_workout_load_metrics as calculate_load_metrics,
     estimated_1rm,
+    list_exercise_profiles,
 )
 
 
@@ -1310,4 +1311,431 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
                 else None
             ),
         },
+    }
+
+def exercise_set_payload(set_row: Any) -> dict[str, Any]:
+    return {
+        "id": int(set_row["id"]),
+        "workout_exercise_id": int(set_row["workout_exercise_id"]),
+        "set_number": int(set_row["set_number"]),
+        "weight": float(set_row["weight"]),
+        "reps": int(set_row["reps"]),
+        "created_at": str(set_row["created_at"]),
+    }
+
+
+def score_exercise_set(weight: float, reps: int) -> float:
+    e1rm = estimated_1rm(weight, reps)
+    if e1rm is not None:
+        return e1rm
+    if weight > 0:
+        return weight * reps
+    return float(reps)
+
+
+def empty_exercise_summary() -> dict[str, Any]:
+    return {
+        "workout_count": 0,
+        "total_volume": 0.0,
+        "total_reps": 0,
+        "total_sets": 0,
+        "avg_intensity": None,
+        "best_weight": None,
+        "best_reps": None,
+        "best_e1rm": None,
+        "best_set": None,
+        "pr_count": 0,
+        "first_workout_at": None,
+        "latest_workout_at": None,
+    }
+
+
+def build_exercise_pr_baselines(
+    exercise_id: int,
+    selected_workout_ids: set[int],
+    max_workout: Any | None,
+) -> dict[int, dict[str, Any]]:
+    if max_workout is None or not selected_workout_ids:
+        return {}
+
+    with get_db() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                w.id AS workout_id,
+                w.created_at,
+                se.weight,
+                se.reps
+            FROM set_entries se
+            JOIN workout_exercises we ON we.id = se.workout_exercise_id
+            JOIN workouts w ON w.id = we.workout_id
+            WHERE we.exercise_id = ?
+              AND (
+                    w.created_at < ?
+                    OR (w.created_at = ? AND w.id <= ?)
+              )
+            ORDER BY w.created_at ASC, w.id ASC, se.set_number ASC, se.id ASC
+            """,
+            (
+                exercise_id,
+                workout_created_at(max_workout),
+                workout_created_at(max_workout),
+                workout_id(max_workout),
+            ),
+        ).fetchall()
+
+    grouped: dict[int, dict[str, Any]] = {}
+    for row in rows:
+        current_workout_id = int(row["workout_id"])
+        workout = grouped.setdefault(
+            current_workout_id,
+            {
+                "created_at": str(row["created_at"]),
+                "max_weight": None,
+                "max_reps": None,
+                "best_e1rm": None,
+                "total_volume": 0.0,
+            },
+        )
+
+        weight = float(row["weight"])
+        reps = int(row["reps"])
+        workout["total_volume"] += weight * reps
+
+        if workout["max_weight"] is None or weight > workout["max_weight"]:
+            workout["max_weight"] = weight
+
+        if workout["max_reps"] is None or reps > workout["max_reps"]:
+            workout["max_reps"] = reps
+
+        e1rm = estimated_1rm(weight, reps)
+        if e1rm is not None:
+            if workout["best_e1rm"] is None or e1rm > workout["best_e1rm"]:
+                workout["best_e1rm"] = e1rm
+
+    prior_best = {
+        "max_weight": None,
+        "max_reps": None,
+        "best_e1rm": None,
+        "best_volume": None,
+    }
+    baselines: dict[int, dict[str, Any]] = {}
+
+    for current_workout_id, workout in sorted(
+        grouped.items(),
+        key=lambda item: (item[1]["created_at"], item[0]),
+    ):
+        if current_workout_id in selected_workout_ids:
+            baselines[current_workout_id] = dict(prior_best)
+
+        max_weight = workout["max_weight"]
+        if max_weight is not None:
+            if prior_best["max_weight"] is None or max_weight > prior_best["max_weight"]:
+                prior_best["max_weight"] = max_weight
+
+        max_reps = workout["max_reps"]
+        if max_reps is not None:
+            if prior_best["max_reps"] is None or max_reps > prior_best["max_reps"]:
+                prior_best["max_reps"] = max_reps
+
+        best_e1rm = workout["best_e1rm"]
+        if best_e1rm is not None:
+            if prior_best["best_e1rm"] is None or best_e1rm > prior_best["best_e1rm"]:
+                prior_best["best_e1rm"] = best_e1rm
+
+        total_volume = float(workout["total_volume"])
+        if prior_best["best_volume"] is None or total_volume > prior_best["best_volume"]:
+            prior_best["best_volume"] = total_volume
+
+    return baselines
+
+
+def build_exercise_stats(
+    exercise_id: int,
+    limit: int | None = 30,
+) -> dict[str, Any] | None:
+    with get_db() as conn:
+        exercise = conn.execute(
+            """
+            SELECT id, name, is_active, sort_order, profile_key
+            FROM exercises
+            WHERE id = ?
+            """,
+            (exercise_id,),
+        ).fetchone()
+
+        if exercise is None:
+            return None
+
+        if limit is None:
+            workouts = conn.execute(
+                """
+                SELECT *
+                FROM workouts w
+                WHERE EXISTS (
+                    SELECT 1
+                    FROM workout_exercises we
+                    WHERE we.workout_id = w.id
+                      AND we.exercise_id = ?
+                )
+                ORDER BY w.created_at ASC, w.id ASC
+                """,
+                (exercise_id,),
+            ).fetchall()
+        else:
+            workouts = conn.execute(
+                """
+                SELECT *
+                FROM (
+                    SELECT w.*
+                    FROM workouts w
+                    WHERE EXISTS (
+                        SELECT 1
+                        FROM workout_exercises we
+                        WHERE we.workout_id = w.id
+                          AND we.exercise_id = ?
+                    )
+                    ORDER BY w.created_at DESC, w.id DESC
+                    LIMIT ?
+                )
+                ORDER BY created_at ASC, id ASC
+                """,
+                (exercise_id, limit),
+            ).fetchall()
+
+    workout_ids = [workout_id(workout) for workout in workouts]
+    selected_workout_ids = set(workout_ids)
+    details_by_workout = get_workout_details_batch(workout_ids)
+    e1rm_baselines_by_workout = build_e1rm_baselines_by_workout(
+        workouts=list(workouts),
+        details_by_workout=details_by_workout,
+    )
+    pr_baselines_by_workout = build_exercise_pr_baselines(
+        exercise_id=exercise_id,
+        selected_workout_ids=selected_workout_ids,
+        max_workout=workouts[-1] if workouts else None,
+    )
+
+    profile_key = str(exercise["profile_key"] or "accessory")
+    profile = next(
+        (
+            item
+            for item in list_exercise_profiles()
+            if item["key"] == profile_key
+        ),
+        {
+            "key": profile_key,
+            "label": profile_key,
+            "category": "accessory",
+        },
+    )
+
+    history: list[dict[str, Any]] = []
+    strength_points: list[dict[str, Any]] = []
+    per_workout_sets: list[dict[str, Any]] = []
+    source_workout_ids: list[int] = []
+
+    summary = empty_exercise_summary()
+    best_set_score = -1.0
+    pr_count = 0
+
+    for workout in workouts:
+        current_workout_id = workout_id(workout)
+        exercise_items = [
+            item
+            for item in details_by_workout.get(current_workout_id, [])
+            if int(item["exercise_id"]) == exercise_id
+        ]
+        sets = [
+            set_row
+            for item in exercise_items
+            for set_row in item["sets"]
+        ]
+        set_payloads = [exercise_set_payload(set_row) for set_row in sets]
+
+        total_volume = sum(
+            float(set_row["weight"]) * int(set_row["reps"])
+            for set_row in sets
+        )
+        total_reps = sum(int(set_row["reps"]) for set_row in sets)
+        total_sets = len(sets)
+        best_weight = None
+        best_reps = None
+        best_e1rm = None
+        best_set = None
+        workout_best_score = -1.0
+
+        for set_row in sets:
+            weight = float(set_row["weight"])
+            reps = int(set_row["reps"])
+
+            if best_weight is None or weight > best_weight:
+                best_weight = weight
+            if best_reps is None or reps > best_reps:
+                best_reps = reps
+
+            e1rm = estimated_1rm(weight, reps)
+            if e1rm is not None:
+                if best_e1rm is None or e1rm > best_e1rm:
+                    best_e1rm = e1rm
+
+            set_score = score_exercise_set(weight, reps)
+            if set_score > workout_best_score:
+                workout_best_score = set_score
+                best_set = {
+                    **exercise_set_payload(set_row),
+                    "volume": weight * reps,
+                    "e1rm": e1rm,
+                }
+
+            if set_score > best_set_score:
+                best_set_score = set_score
+                summary["best_set"] = {
+                    **exercise_set_payload(set_row),
+                    "workout_id": current_workout_id,
+                    "date": str(workout["created_at"])[:10],
+                    "volume": weight * reps,
+                    "e1rm": e1rm,
+                }
+
+        summary["total_volume"] += total_volume
+        summary["total_reps"] += total_reps
+        summary["total_sets"] += total_sets
+
+        if best_weight is not None:
+            if summary["best_weight"] is None or best_weight > summary["best_weight"]:
+                summary["best_weight"] = best_weight
+        if best_reps is not None:
+            if summary["best_reps"] is None or best_reps > summary["best_reps"]:
+                summary["best_reps"] = best_reps
+        if best_e1rm is not None:
+            if summary["best_e1rm"] is None or best_e1rm > summary["best_e1rm"]:
+                summary["best_e1rm"] = best_e1rm
+
+        prior = pr_baselines_by_workout.get(current_workout_id, {})
+        pr_flags: list[str] = []
+
+        if (
+            best_weight is not None
+            and best_weight > 0
+            and prior.get("max_weight") is not None
+            and best_weight > float(prior["max_weight"]) + 1e-9
+        ):
+            pr_flags.append("Weight PR")
+
+        if (
+            best_reps is not None
+            and prior.get("max_reps") is not None
+            and best_reps > int(prior["max_reps"])
+        ):
+            pr_flags.append("Rep PR")
+
+        previous_best_e1rm = e1rm_baselines_by_workout.get(
+            current_workout_id,
+            {},
+        ).get(exercise_id)
+
+        if (
+            best_e1rm is not None
+            and previous_best_e1rm is not None
+            and best_e1rm > previous_best_e1rm + 1e-9
+        ):
+            pr_flags.append("e1RM PR")
+
+        if (
+            total_volume > 0
+            and prior.get("best_volume") is not None
+            and total_volume > float(prior["best_volume"]) + 1e-9
+        ):
+            pr_flags.append("Volume PR")
+
+        rolling_best_e1rm = best_e1rm
+        if previous_best_e1rm is not None:
+            rolling_best_e1rm = (
+                max(previous_best_e1rm, best_e1rm)
+                if best_e1rm is not None
+                else previous_best_e1rm
+            )
+
+        workout_entry = {
+            "id": current_workout_id,
+            "workout_id": current_workout_id,
+            "date": str(workout["created_at"])[:10],
+            "created_at": str(workout["created_at"]),
+            "workout_exercise_ids": [
+                int(item["workout_exercise_id"])
+                for item in exercise_items
+            ],
+            "sets": set_payloads,
+            "total_volume": total_volume,
+            "total_reps": total_reps,
+            "total_sets": total_sets,
+            "avg_intensity": total_volume / total_reps if total_reps else None,
+            "best_weight": best_weight,
+            "best_reps": best_reps,
+            "best_e1rm": best_e1rm,
+            "rolling_best_e1rm": rolling_best_e1rm,
+            "best_set": best_set,
+            "pr_flags": pr_flags,
+        }
+
+        history.append(workout_entry)
+        per_workout_sets.append(
+            {
+                "workout_id": current_workout_id,
+                "date": workout_entry["date"],
+                "sets": set_payloads,
+            }
+        )
+        source_workout_ids.append(current_workout_id)
+        pr_count += len(pr_flags)
+
+        if best_e1rm is not None:
+            strength_points.append(
+                {
+                    "workout_id": current_workout_id,
+                    "date": workout_entry["date"],
+                    "e1rm": best_e1rm,
+                    "rolling_best": rolling_best_e1rm,
+                    "weight": best_set["weight"] if best_set else None,
+                    "reps": best_set["reps"] if best_set else None,
+                    "is_pr": "e1RM PR" in pr_flags,
+                }
+            )
+
+    summary["workout_count"] = len(history)
+    summary["avg_intensity"] = (
+        summary["total_volume"] / summary["total_reps"]
+        if summary["total_reps"]
+        else None
+    )
+    summary["pr_count"] = pr_count
+    summary["first_workout_at"] = history[0]["created_at"] if history else None
+    summary["latest_workout_at"] = history[-1]["created_at"] if history else None
+
+    return {
+        "limit": "all" if limit is None else limit,
+        "exercise": {
+            "id": int(exercise["id"]),
+            "name": str(exercise["name"]),
+            "is_active": bool(exercise["is_active"]),
+            "sort_order": int(exercise["sort_order"]),
+            "profile_key": profile_key,
+        },
+        "profile": profile,
+        "summary": summary,
+        "latest": history[-1] if history else None,
+        "history": history,
+        "per_workout_sets": per_workout_sets,
+        "trend": {
+            "volume": build_line_chart_series(history, "total_volume"),
+            "best_e1rm": build_line_chart_series(history, "best_e1rm"),
+            "reps": build_line_chart_series(history, "total_reps"),
+        },
+        "strength_progress": {
+            "exercise_id": exercise_id,
+            "name": str(exercise["name"]),
+            "points": strength_points,
+        },
+        "source_workout_ids": source_workout_ids,
     }

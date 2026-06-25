@@ -1,7 +1,7 @@
 import sqlite3
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from app.repositories.exercises import (
     ActiveExerciseWeightError,
@@ -14,6 +14,7 @@ from app.repositories.exercises import (
     update_exercise,
 )
 from app.services.analysis_service import list_exercise_profiles
+from app.services.stats_service import build_exercise_stats, parse_limit
 from app.schemas import (
     ExerciseCreateRequest,
     ExerciseOrderUpdateRequest,
@@ -37,6 +38,20 @@ def get_exercises(
     return {
         "exercises": list_exercises(include_inactive=include_inactive),
     }
+
+
+@router.get("/{exercise_id}/stats")
+def get_exercise_stats_endpoint(
+    exercise_id: int,
+    limit: Annotated[str | None, Query()] = "30",
+) -> dict[str, Any]:
+    parsed_limit = parse_limit(limit, default=30)
+    stats = build_exercise_stats(exercise_id, limit=parsed_limit)
+
+    if stats is None:
+        raise HTTPException(status_code=404, detail="Exercise not found.")
+
+    return stats
 
 
 @router.post("")

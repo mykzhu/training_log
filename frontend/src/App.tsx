@@ -5,9 +5,16 @@ import CurrentWorkoutPage from "./pages/CurrentWorkoutPage";
 import HistoryPage from "./pages/HistoryPage";
 import SettingsPage from "./pages/SettingsPage";
 
+const ExerciseStatsPage = lazy(() => import("./pages/ExerciseStatsPage"));
 const StatsPage = lazy(() => import("./pages/StatsPage"));
 
-type PageKey = "current" | "history" | "stats" | "backup" | "settings";
+type PageKey =
+  | "current"
+  | "history"
+  | "stats"
+  | "exercise-stats"
+  | "backup"
+  | "settings";
 
 const pages: Array<{ key: PageKey; label: string }> = [
   { key: "current", label: "Current" },
@@ -30,6 +37,9 @@ const historyNavItems: Array<{
 ];
 
 function pageFromPath(pathname: string): PageKey {
+  if (/^\/exercises\/\d+\/stats\/?$/.test(pathname)) {
+    return "exercise-stats";
+  }
   if (pathname.startsWith("/history") || pathname.startsWith("/workouts/")) {
     return "history";
   }
@@ -50,12 +60,20 @@ function pathForPage(page: PageKey): string {
   if (page === "current") {
     return "/";
   }
+  if (page === "exercise-stats") {
+    return "/stats";
+  }
 
   return `/${page}`;
 }
 
 function workoutIdFromPath(pathname: string): number | null {
   const match = pathname.match(/^\/workouts\/(\d+)/);
+  return match ? Number(match[1]) : null;
+}
+
+function exerciseStatsIdFromPath(pathname: string): number | null {
+  const match = pathname.match(/^\/exercises\/(\d+)\/stats\/?$/);
   return match ? Number(match[1]) : null;
 }
 
@@ -73,12 +91,16 @@ export default function App() {
   const [initialWorkoutEditMode, setInitialWorkoutEditMode] = useState(() =>
     workoutEditModeFromPath(window.location.pathname),
   );
+  const [exerciseStatsId, setExerciseStatsId] = useState<number | null>(() =>
+    exerciseStatsIdFromPath(window.location.pathname),
+  );
 
   useEffect(() => {
     function syncFromPath() {
       setActivePage(pageFromPath(window.location.pathname));
       setInitialWorkoutId(workoutIdFromPath(window.location.pathname));
       setInitialWorkoutEditMode(workoutEditModeFromPath(window.location.pathname));
+      setExerciseStatsId(exerciseStatsIdFromPath(window.location.pathname));
     }
 
     window.addEventListener("popstate", syncFromPath);
@@ -89,6 +111,7 @@ export default function App() {
     setActivePage(page);
     setInitialWorkoutId(null);
     setInitialWorkoutEditMode(false);
+    setExerciseStatsId(null);
     window.history.pushState(null, "", path);
   }
 
@@ -102,6 +125,7 @@ export default function App() {
     initialWorkoutId !== null &&
     initialWorkoutEditMode;
   const isBackupPage = activePage === "backup";
+  const isExerciseStats = activePage === "exercise-stats";
   const headerTitle = isHistoryList
     ? "History"
     : isReadonlyWorkout
@@ -110,14 +134,18 @@ export default function App() {
         ? `Edit Workout #${initialWorkoutId}`
         : isBackupPage
           ? "Backup"
-          : "Training Log";
+          : isExerciseStats
+            ? "Exercise stats"
+            : "Training Log";
   const headerSubtitle = isHistoryList
     ? "Last 30 workouts"
     : isReadonlyWorkout || isEditWorkout
       ? null
       : isBackupPage
         ? "Export, restore, or reset training history"
-        : pages.find((page) => page.key === activePage)?.label;
+        : isExerciseStats
+          ? "Stats"
+          : pages.find((page) => page.key === activePage)?.label;
   const navItems = isHistoryList
     ? historyNavItems
     : pages.map((page) => ({
@@ -126,6 +154,8 @@ export default function App() {
         page: page.key,
         path: pathForPage(page.key),
       }));
+
+  const navActivePage = activePage === "exercise-stats" ? "stats" : activePage;
 
   return (
     <main className={`app-shell app-shell-${activePage}`}>
@@ -139,7 +169,7 @@ export default function App() {
         <nav className="tabs" aria-label="Main navigation">
           {navItems.map((item) => (
             <button
-              className={item.page === activePage ? "tab tab-active" : "tab"}
+              className={item.page === navActivePage ? "tab tab-active" : "tab"}
               key={item.key}
               onClick={() => navigate(item.page, item.path)}
               type="button"
@@ -160,6 +190,11 @@ export default function App() {
       {activePage === "stats" && (
         <Suspense fallback={<section className="panel">Loading</section>}>
           <StatsPage />
+        </Suspense>
+      )}
+      {activePage === "exercise-stats" && exerciseStatsId !== null && (
+        <Suspense fallback={<section className="panel">Loading</section>}>
+          <ExerciseStatsPage exerciseId={exerciseStatsId} />
         </Suspense>
       )}
       {activePage === "backup" && <BackupPage />}

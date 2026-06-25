@@ -345,3 +345,94 @@ export type StatsResponse = {
   };
   charts: StatsCharts;
 };
+
+export type ExerciseStatsSet = {
+  id: number;
+  workout_exercise_id: number;
+  set_number: number;
+  weight: number;
+  reps: number;
+  created_at: string;
+  volume?: number;
+  e1rm?: number | null;
+};
+
+export type ExerciseStatsBestSet = ExerciseStatsSet & {
+  workout_id?: number;
+  date?: string;
+  volume: number;
+  e1rm: number | null;
+};
+
+export type ExerciseStatsHistoryEntry = {
+  workout_id: number;
+  date: string;
+  created_at: string;
+  workout_exercise_ids: number[];
+  sets: ExerciseStatsSet[];
+  total_volume: number;
+  total_reps: number;
+  total_sets: number;
+  avg_intensity: number | null;
+  best_weight: number | null;
+  best_reps: number | null;
+  best_e1rm: number | null;
+  rolling_best_e1rm: number | null;
+  best_set: ExerciseStatsBestSet | null;
+  pr_flags: string[];
+};
+
+export type ExerciseStatsSummary = {
+  workout_count: number;
+  total_volume: number;
+  total_reps: number;
+  total_sets: number;
+  avg_intensity: number | null;
+  best_weight: number | null;
+  best_reps: number | null;
+  best_e1rm: number | null;
+  best_set: ExerciseStatsBestSet | null;
+  pr_count: number;
+  first_workout_at: string | null;
+  latest_workout_at: string | null;
+};
+
+export type ExerciseStatsTrendSeries = {
+  points: string;
+  area_points: string;
+  markers: Array<{
+    x: number;
+    y: number;
+    value: number;
+    date: string;
+    workout_id: number;
+  }>;
+  max_value: number | null;
+};
+
+export type ExerciseStatsResponse = {
+  limit: number | "all";
+  exercise: {
+    id: number;
+    name: string;
+    is_active: boolean;
+    sort_order: number;
+    profile_key: string;
+  };
+  profile: ExerciseProfile;
+  summary: ExerciseStatsSummary;
+  latest: ExerciseStatsHistoryEntry | null;
+  history: ExerciseStatsHistoryEntry[];
+  per_workout_sets: Array<{
+    workout_id: number;
+    date: string;
+    sets: ExerciseStatsSet[];
+  }>;
+  trend: {
+    volume: ExerciseStatsTrendSeries;
+    best_e1rm: ExerciseStatsTrendSeries;
+    reps: ExerciseStatsTrendSeries;
+  };
+  strength_progress: ExerciseStrengthProgress;
+  source_workout_ids: number[];
+};

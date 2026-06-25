@@ -2446,3 +2446,99 @@ button.load-calendar-cell:focus-visible {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+.app-shell-exercise-stats {
+  width: min(100%, 820px);
+}
+
+.exercise-stats-page {
+  min-width: 0;
+}
+
+.exercise-stats-hero {
+  display: grid;
+  gap: 12px;
+}
+
+.exercise-stats-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.exercise-stats-title-row h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 26px;
+  line-height: 1.1;
+}
+
+.exercise-stats-meta,
+.exercise-source-links,
+.exercise-pr-list,
+.exercise-set-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.exercise-stats-meta {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.exercise-stats-meta span {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 8px;
+  background: var(--card2);
+}
+
+.exercise-source-links {
+  padding-top: 2px;
+}
+
+.exercise-set-list {
+  min-width: 180px;
+}
+
+.exercise-set-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: var(--card2);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.exercise-history-table {
+  min-width: 720px;
+}
+
+.exercise-history-table td:nth-child(4) {
+  min-width: 240px;
+}
+
+.exercise-pr-list .status-badge {
+  min-height: 24px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+@media (max-width: 620px) {
+  .exercise-stats-title-row {
+    display: grid;
+  }
+
+  .exercise-history-table {
+    min-width: 680px;
+  }
+}
