@@ -268,19 +268,25 @@ export default function CurrentWorkoutPage() {
     await runAction(() => addCurrentWorkoutExercise(exerciseId));
   }
 
-  async function createNewExercise(name: string) {
+  async function createNewExercise(name: string, initialWeight: number) {
     const cleanName = name.trim();
-    if (!cleanName) {
+    if (!cleanName || !Number.isFinite(initialWeight) || initialWeight < 0) {
       return;
     }
 
     setPending(true);
     setError(null);
     try {
-      const response = await createExercise({ name: cleanName });
+      const response = await createExercise({
+        name: cleanName,
+        weights: [initialWeight],
+      });
       const exerciseResponse = await getExercises();
+      const workoutResponse = await addCurrentWorkoutExercise(response.exercise.id);
       setExercises(exerciseResponse.exercises);
       setSelectedExerciseId(String(response.exercise.id));
+      setCurrentWorkout(workoutResponse);
+      setElapsedSeconds(workoutResponse.elapsed_seconds);
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : "Action failed.");
     } finally {

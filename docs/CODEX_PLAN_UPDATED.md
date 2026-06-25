@@ -1,4 +1,4 @@
-# Training Log — Codex Plan
+# Training Log — Updated Codex Plan
 
 Repository: `mykzhu/training_log`  
 Reviewed branch: `master`  

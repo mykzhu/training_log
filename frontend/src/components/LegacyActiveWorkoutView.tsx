@@ -24,7 +24,7 @@ type LegacyActiveWorkoutViewProps = {
   onAddExercise: () => Promise<void> | void;
   onAddSet: (exerciseId: number, weight: number, reps: number) => Promise<void> | void;
   onCancel: () => Promise<void> | void;
-  onCreateExercise: (name: string) => Promise<void> | void;
+  onCreateExercise: (name: string, initialWeight: number) => Promise<void> | void;
   onDeleteExercise: (exerciseId: number) => Promise<void> | void;
   onDeleteSet: (setId: number) => Promise<void> | void;
   onFinish: () => Promise<void> | void;
@@ -296,6 +296,7 @@ export default function LegacyActiveWorkoutView({
     String(currentWorkout.lower_back_pain ?? ""),
   );
   const [newExerciseName, setNewExerciseName] = useState("");
+  const [newExerciseWeight, setNewExerciseWeight] = useState("0");
 
   useEffect(() => {
     setSessionRpe(String(currentWorkout.session_rpe ?? ""));
@@ -315,7 +316,12 @@ export default function LegacyActiveWorkoutView({
       return;
     }
 
-    await onCreateExercise(cleanName);
+    const initialWeight = Number(newExerciseWeight);
+    if (!Number.isFinite(initialWeight) || initialWeight < 0) {
+      return;
+    }
+
+    await onCreateExercise(cleanName, initialWeight);
     setNewExerciseName("");
   }
 
@@ -449,9 +455,23 @@ export default function LegacyActiveWorkoutView({
             type="text"
             value={newExerciseName}
           />
+          <input
+            aria-label="Initial weight"
+            disabled={disabled}
+            min="0"
+            onChange={(event) => setNewExerciseWeight(event.target.value)}
+            step="0.25"
+            type="number"
+            value={newExerciseWeight}
+          />
           <button
             className="ghost-button"
-            disabled={disabled || !newExerciseName.trim()}
+            disabled={
+              disabled ||
+              !newExerciseName.trim() ||
+              !Number.isFinite(Number(newExerciseWeight)) ||
+              Number(newExerciseWeight) < 0
+            }
             onClick={() => void createNewExercise()}
             type="button"
           >

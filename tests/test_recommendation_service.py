@@ -399,6 +399,7 @@ class RecommendationDatabaseTests(unittest.TestCase):
         )
 
         exercise = recommendation["exercise_recommendations"][0]
+        self.assertEqual(exercise["target"], "Add 1 rep to the lowest-rep set")
         self.assertEqual(exercise["target_strategy"], "add_rep_to_lowest_rep_set")
         self.assertEqual(
             [item["reps"] for item in exercise["suggested_sets"]],

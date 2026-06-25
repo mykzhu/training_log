@@ -13,15 +13,18 @@ from app.routes.api_current_workout import (
     clear_current_workout,
     delete_current_workout_exercise,
     delete_current_workout_set,
+    duplicate_current_workout_set,
     finish_current_workout,
     get_current_workout,
     start_current_workout,
     update_current_workout_metadata,
     update_current_workout_set,
 )
+from app.routes.api_exercises import create_exercise_endpoint
 from app.schemas import (
     AddExerciseRequest,
     AddSetRequest,
+    ExerciseCreateRequest,
     UpdateSetRequest,
     WorkoutMetadataUpdate,
 )
@@ -119,6 +122,56 @@ class CurrentWorkoutApiTests(unittest.TestCase):
         response = delete_current_workout_exercise(draft_exercise_id)
         self.assertEqual(response["exercises"], [])
 
+    def test_active_workout_inline_created_exercise_can_be_added_mutated_and_finished(self) -> None:
+        start_current_workout()
+
+        created = create_exercise_endpoint(
+            ExerciseCreateRequest(name="Inline Curl", weights=[12.5])
+        )
+        exercise_id = int(created["exercise"]["id"])
+
+        response = add_current_workout_exercise(
+            AddExerciseRequest(exercise_id=exercise_id)
+        )
+        draft_exercise_id = response["exercises"][0]["draft_exercise_id"]
+        self.assertEqual(response["exercises"][0]["exercise_name"], "Inline Curl")
+        self.assertEqual(response["exercises"][0]["configured_weights"], [12.5])
+
+        response = add_current_workout_set(
+            draft_exercise_id,
+            AddSetRequest(weight=12.5, reps=8),
+        )
+        first_set_id = response["exercises"][0]["sets"][0]["id"]
+
+        response = duplicate_current_workout_set(draft_exercise_id)
+        second_set_id = response["exercises"][0]["sets"][1]["id"]
+        self.assertEqual(
+            [set_entry["set_number"] for set_entry in response["exercises"][0]["sets"]],
+            [1, 2],
+        )
+
+        response = update_current_workout_set(
+            second_set_id,
+            UpdateSetRequest(reps=9),
+        )
+        self.assertEqual(response["exercises"][0]["sets"][1]["reps"], 9)
+
+        response = delete_current_workout_set(first_set_id)
+        self.assertEqual(response["total_sets"], 1)
+        self.assertEqual(response["exercises"][0]["sets"][0]["set_number"], 1)
+
+        finish_response = finish_current_workout()
+
+        self.assertEqual(finish_response["workout_id"], 1)
+        self.assertFalse(finish_response["current_workout"]["active"])
+
+        with get_db() as conn:
+            workout_count = conn.execute("SELECT COUNT(*) FROM workouts").fetchone()[0]
+            set_count = conn.execute("SELECT COUNT(*) FROM set_entries").fetchone()[0]
+
+        self.assertEqual(workout_count, 1)
+        self.assertEqual(set_count, 1)
+
     def test_inactive_exercise_cannot_be_added_to_current_workout(self) -> None:
         deadlift_id = self.exercise_id("Deadlift")
         with get_db() as conn:
@@ -153,6 +206,14 @@ class CurrentWorkoutApiTests(unittest.TestCase):
 
         self.assertTrue(response["active"])
         self.assertEqual(response["exercises"][0]["exercise_name"], "Deadlift")
+
+        draft_exercise_id = response["exercises"][0]["draft_exercise_id"]
+        response = add_current_workout_set(
+            draft_exercise_id,
+            AddSetRequest(weight=100.0, reps=5),
+        )
+
+        self.assertEqual(response["total_sets"], 1)
 
     def test_profile_update_refreshes_current_workout_metrics(self) -> None:
         deadlift_id = self.exercise_id("Deadlift")
