@@ -6,6 +6,7 @@ from typing import Any
 from app.db import get_db
 from app.repositories.workouts import get_workout_details_batch
 from app.services.analysis_service import estimated_1rm, get_exercise_load_profile
+from app.services.garmin_readiness_service import build_garmin_readiness_adjustment
 from app.services.recovery_service import (
     NON_EMPTY_WORKOUT_EXISTS_SQL,
     build_recovery_context,
@@ -877,6 +878,21 @@ def calculate_readiness_status(
             score += 5
             reasons.append("7-day back stress is low.")
 
+
+    garmin_adjustment = build_garmin_readiness_adjustment(
+        as_of=str(recovery_context.get("as_of"))
+        if recovery_context.get("as_of")
+        else None,
+    )
+    garmin_delta = int(garmin_adjustment.get("score_delta") or 0)
+    if garmin_delta:
+        score += garmin_delta
+        reasons.append(
+            str(
+                garmin_adjustment.get("summary")
+                or "Garmin readiness adjusted."
+            )
+        )
     if interval_confidence in {"medium", "high"} and overall_gap_ratio is not None:
         if float(overall_gap_ratio) > 2.5:
             score = min(score, max_readiness_score_for_status("repeat"))
@@ -918,6 +934,7 @@ def calculate_readiness_status(
         "status": status,
         "title": RECOMMENDATION_STATUS_TITLES[status],
         "reasons": reasons,
+        "garmin_adjustment": garmin_adjustment,
     }
 
 
@@ -1233,6 +1250,7 @@ def build_next_workout_recommendation(
             "score": readiness["score"],
             "summary": "Use recovery or very light technique work instead of progression.",
             "reasons": readiness["reasons"][:5],
+            "garmin_adjustment": readiness.get("garmin_adjustment"),
             "last_workout_id": last_workout_id,
             "last_workout_at": last_workout["created_at"],
             "exercise_recommendations": [],
@@ -1277,6 +1295,7 @@ def build_next_workout_recommendation(
         "score": readiness["score"],
         "summary": summary,
         "reasons": readiness["reasons"][:5],
+        "garmin_adjustment": readiness.get("garmin_adjustment"),
         "last_workout_id": last_workout_id,
         "last_workout_at": last_workout["created_at"],
         "exercise_recommendations": exercise_recommendations,

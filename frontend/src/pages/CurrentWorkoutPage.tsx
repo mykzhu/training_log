@@ -214,6 +214,30 @@ function metricClassForConfidence(value: string) {
   return "metric-neutral";
 }
 
+function formatScoreDelta(value: number | null | undefined) {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "-";
+  }
+
+  return value > 0 ? `+${value}` : String(value);
+}
+
+function metricClassForGarminDelta(value: number | null | undefined) {
+  if (value === null || value === undefined || value === 0) {
+    return "metric-neutral";
+  }
+
+  if (value > 0) {
+    return "metric-green";
+  }
+
+  return value <= -10 ? "metric-red" : "metric-orange";
+}
+
+function shouldShowGarminAdjustment(status: string | undefined) {
+  return Boolean(status && status !== "not_available");
+}
+
 function metricClassForReadiness(status: string) {
   if (status === "needs_feedback") {
     return "metric-orange";
@@ -656,6 +680,10 @@ function nextWorkoutSubtitle(status: string) {
 }
 
 function NextWorkoutCard({ recommendation }: NextWorkoutCardProps) {
+  const garminAdjustment = recommendation.garmin_adjustment;
+  const showGarminAdjustment = shouldShowGarminAdjustment(
+    garminAdjustment?.status,
+  );
   const showExerciseTargets =
     recommendation.status !== "recovery" &&
     recommendation.status !== "needs_feedback" &&
@@ -702,9 +730,19 @@ function NextWorkoutCard({ recommendation }: NextWorkoutCardProps) {
           value={actionValue}
           label={actionLabel}
         />
+        {showGarminAdjustment && garminAdjustment && (
+          <MetricTile
+            className={metricClassForGarminDelta(garminAdjustment.score_delta)}
+            value={formatScoreDelta(garminAdjustment.score_delta)}
+            label="Garmin adj"
+          />
+        )}
       </div>
 
       <p className="recovery-hint">{recommendation.summary}</p>
+      {showGarminAdjustment && garminAdjustment && (
+        <p className="recovery-hint">Garmin: {garminAdjustment.summary}</p>
+      )}
 
       {recommendation.reasons.length > 0 && (
         <ul className="recommendation-reasons">

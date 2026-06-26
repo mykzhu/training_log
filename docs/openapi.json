@@ -731,6 +731,87 @@
         "title": "GarminMfaRequest",
         "type": "object"
       },
+      "GarminReadinessAdjustmentResponse": {
+        "properties": {
+          "applied": {
+            "title": "Applied",
+            "type": "boolean"
+          },
+          "baseline_days": {
+            "title": "Baseline Days",
+            "type": "integer"
+          },
+          "baseline_end_date": {
+            "title": "Baseline End Date",
+            "type": "string"
+          },
+          "baseline_start_date": {
+            "title": "Baseline Start Date",
+            "type": "string"
+          },
+          "current_date": {
+            "title": "Current Date",
+            "type": "string"
+          },
+          "max_score_delta": {
+            "title": "Max Score Delta",
+            "type": "integer"
+          },
+          "min_score_delta": {
+            "title": "Min Score Delta",
+            "type": "integer"
+          },
+          "minimum_baseline_samples": {
+            "title": "Minimum Baseline Samples",
+            "type": "integer"
+          },
+          "previous_date": {
+            "title": "Previous Date",
+            "type": "string"
+          },
+          "raw_score_delta": {
+            "title": "Raw Score Delta",
+            "type": "integer"
+          },
+          "rules": {
+            "items": {
+              "type": "object"
+            },
+            "title": "Rules",
+            "type": "array"
+          },
+          "score_delta": {
+            "title": "Score Delta",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "applied",
+          "status",
+          "score_delta",
+          "raw_score_delta",
+          "min_score_delta",
+          "max_score_delta",
+          "baseline_days",
+          "minimum_baseline_samples",
+          "current_date",
+          "previous_date",
+          "baseline_start_date",
+          "baseline_end_date",
+          "summary",
+          "rules"
+        ],
+        "title": "GarminReadinessAdjustmentResponse",
+        "type": "object"
+      },
       "GarminRecoverySnapshotResponse": {
         "properties": {
           "connected": {
@@ -903,6 +984,9 @@
             },
             "title": "Exercise Recommendations",
             "type": "array"
+          },
+          "garmin_adjustment": {
+            "$ref": "#/components/schemas/GarminReadinessAdjustmentResponse"
           },
           "last_workout_id": {
             "title": "Last Workout Id",

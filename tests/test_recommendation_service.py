@@ -1,10 +1,12 @@
 import math
 import tempfile
 import unittest
+from datetime import date, timedelta
 from pathlib import Path
 
 from app import config
 from app.db import get_db, init_db
+from app.repositories import garmin as garmin_repository
 from app.services.recovery_service import build_recovery_context
 from app.services.recommendation_service import (
     build_exercise_history_context,
@@ -118,6 +120,40 @@ class RecommendationDatabaseTests(unittest.TestCase):
             raise AssertionError(f"Seed exercise not found: {exercise_name}")
 
         return int(row["id"])
+
+    def insert_garmin_metric(
+        self,
+        metric_date: str,
+        *,
+        resting_heart_rate: int | None = 60,
+        hrv_ms: float | None = 50.0,
+        stress_avg: int | None = 50,
+        body_battery_start: int | None = 70,
+    ) -> None:
+        garmin_repository.upsert_daily_metric(
+            {
+                "date": metric_date,
+                "resting_heart_rate": resting_heart_rate,
+                "hrv_ms": hrv_ms,
+                "stress_avg": stress_avg,
+                "body_battery_start": body_battery_start,
+                "body_battery_end": 35,
+                "steps": 8000,
+                "synced_at": f"{metric_date}T08:00:00",
+                "raw_diagnostics": {"test": {"ok": True}},
+            }
+        )
+
+    def insert_garmin_baseline_metrics(
+        self,
+        *,
+        current_day: date = date(2026, 6, 26),
+    ) -> None:
+        start_day = current_day - timedelta(days=28)
+        for offset in range(28):
+            self.insert_garmin_metric(
+                (start_day + timedelta(days=offset)).isoformat()
+            )
 
     def insert_deadlift_workout(
         self,
@@ -560,6 +596,57 @@ class RecommendationDatabaseTests(unittest.TestCase):
                 for reason in heavy["reasons"]
             )
         )
+
+    def test_garmin_positive_adjustment_is_capped_by_short_gap_safety_rule(self) -> None:
+        self.insert_garmin_baseline_metrics()
+        self.insert_garmin_metric("2026-06-25", stress_avg=25)
+        self.insert_garmin_metric(
+            "2026-06-26",
+            resting_heart_rate=54,
+            hrv_ms=60.0,
+            body_battery_start=92,
+        )
+        recovery_context = {
+            "as_of": "2026-06-26T10:00:00",
+            "hours_since_previous_workout": 12,
+            "last_7d": {
+                "load_score": 2,
+                "back_stress_score": 1,
+            },
+            "previous_21d": {
+                "avg_load_per_workout": 0,
+                "avg_back_stress_per_workout": 0,
+            },
+            "last_42d": {
+                "avg_load_per_workout": 0,
+                "avg_back_stress_per_workout": 0,
+            },
+            "relative_load": {
+                "baseline_confidence": "low",
+                "acute_to_baseline": None,
+                "acute_back_to_baseline": None,
+            },
+            "overall_interval": {
+                "confidence": "low",
+                "current_ratio": None,
+            },
+        }
+
+        readiness = calculate_readiness_status(
+            recovery_context=recovery_context,
+            last_workout={
+                "session_rpe": 4,
+                "lower_back_pain": 1,
+            },
+            last_load_metrics={
+                "load_score": 2,
+                "back_stress_score": 1,
+            },
+        )
+
+        self.assertEqual(readiness["garmin_adjustment"]["score_delta"], 10)
+        self.assertEqual(readiness["score"], 40)
+        self.assertEqual(readiness["status"], "deload")
 
     def test_long_layoff_caps_low_confidence_and_personal_interval(self) -> None:
         low_confidence_context = {

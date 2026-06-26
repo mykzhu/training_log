@@ -452,7 +452,7 @@ Compare at least seven dates against Garmin Connect before starting scoring.
 
 ---
 
-## [ ] Phase 12 — Garmin readiness adjustment
+## [x] Phase 12 — Garmin readiness adjustment
 
 Branch:
 

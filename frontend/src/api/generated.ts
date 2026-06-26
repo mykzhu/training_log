@@ -176,6 +176,23 @@ export type GarminMfaRequest = {
   mfa_token: string;
 };
 
+export type GarminReadinessAdjustmentResponse = {
+  applied: boolean;
+  baseline_days: number;
+  baseline_end_date: string;
+  baseline_start_date: string;
+  current_date: string;
+  max_score_delta: number;
+  min_score_delta: number;
+  minimum_baseline_samples: number;
+  previous_date: string;
+  raw_score_delta: number;
+  rules: Array<Record<string, unknown>>;
+  score_delta: number;
+  status: string;
+  summary: string;
+};
+
 export type GarminRecoverySnapshotResponse = {
   connected: boolean;
   last_synced_at?: string | null;
@@ -220,6 +237,7 @@ export type LoadMetricsResponse = {
 
 export type NextWorkoutRecommendationResponse = {
   exercise_recommendations: Array<Record<string, unknown>>;
+  garmin_adjustment?: GarminReadinessAdjustmentResponse | null;
   last_workout_id?: number | null;
   reasons: Array<string>;
   score?: number | null;
@@ -371,6 +389,7 @@ export type ApiSchemas = {
   GarminLoginRequest: GarminLoginRequest;
   GarminLoginResponse: GarminLoginResponse;
   GarminMfaRequest: GarminMfaRequest;
+  GarminReadinessAdjustmentResponse: GarminReadinessAdjustmentResponse;
   GarminRecoverySnapshotResponse: GarminRecoverySnapshotResponse;
   GarminStatusResponse: GarminStatusResponse;
   GarminSyncRequest: GarminSyncRequest;

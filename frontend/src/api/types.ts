@@ -124,6 +124,35 @@ export type ExerciseRecommendation = {
   volume_change_label: string;
 };
 
+export type GarminReadinessAdjustmentRule = {
+  metric: string;
+  label: string;
+  source_date: string;
+  current: number | null;
+  baseline_median: number | null;
+  baseline_sample_count: number;
+  score_delta: number;
+  status: string;
+  message: string;
+};
+
+export type GarminReadinessAdjustment = {
+  applied: boolean;
+  status: string;
+  score_delta: number;
+  raw_score_delta: number;
+  min_score_delta: number;
+  max_score_delta: number;
+  baseline_days: number;
+  minimum_baseline_samples: number;
+  current_date: string;
+  previous_date: string;
+  baseline_start_date: string;
+  baseline_end_date: string;
+  summary: string;
+  rules: GarminReadinessAdjustmentRule[];
+};
+
 export type NextWorkoutRecommendation = {
   status: string;
   title: string;
@@ -132,6 +161,7 @@ export type NextWorkoutRecommendation = {
   reasons: string[];
   last_workout_id: number | null;
   last_workout_at?: string;
+  garmin_adjustment?: GarminReadinessAdjustment | null;
   exercise_recommendations: ExerciseRecommendation[];
 };
 

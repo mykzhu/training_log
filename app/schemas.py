@@ -210,6 +210,22 @@ class RecoveryContextResponse(FlexibleResponse):
     has_history: bool
 
 
+class GarminReadinessAdjustmentResponse(FlexibleResponse):
+    applied: bool
+    status: str
+    score_delta: int
+    raw_score_delta: int
+    min_score_delta: int
+    max_score_delta: int
+    baseline_days: int
+    minimum_baseline_samples: int
+    current_date: str
+    previous_date: str
+    baseline_start_date: str
+    baseline_end_date: str
+    summary: str
+    rules: list[dict[str, Any]]
+
 class NextWorkoutRecommendationResponse(FlexibleResponse):
     status: str
     title: str
@@ -217,6 +233,7 @@ class NextWorkoutRecommendationResponse(FlexibleResponse):
     summary: str
     reasons: list[str]
     last_workout_id: int | None
+    garmin_adjustment: GarminReadinessAdjustmentResponse | None = None
     exercise_recommendations: list[dict[str, Any]]
 
 
