@@ -8,7 +8,14 @@ import {
   replaceExerciseWeights,
   updateExercise,
 } from "../api/exercises";
-import type { Exercise, ExerciseProfile } from "../api/types";
+import {
+  disconnectGarmin,
+  getGarminStatus,
+  loginGarmin,
+  submitGarminMfa,
+  syncGarmin,
+} from "../api/garmin";
+import type { Exercise, ExerciseProfile, GarminStatus } from "../api/types";
 import { formatSetOption, uniqueSortedNumbers } from "../utils/setOptions";
 
 function normalizeWeights(weights: number[]) {
@@ -34,6 +41,40 @@ function parseWeight(value: string) {
   return Number.isFinite(weight) && weight >= 0 ? weight : null;
 }
 
+function formatGarminDate(value: string | null | undefined) {
+  if (!value) {
+    return "-";
+  }
+
+  const parsed = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return parsed.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function formatGarminDateTime(value: string | null | undefined) {
+  if (!value) {
+    return "-";
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return parsed.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export default function SettingsPage() {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [profiles, setProfiles] = useState<ExerciseProfile[]>([]);
@@ -48,7 +89,14 @@ export default function SettingsPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
-
+  const [garminStatus, setGarminStatus] = useState<GarminStatus | null>(null);
+  const [garminUsername, setGarminUsername] = useState("");
+  const [garminPassword, setGarminPassword] = useState("");
+  const [garminMfaCode, setGarminMfaCode] = useState("");
+  const [garminMfaToken, setGarminMfaToken] = useState<string | null>(null);
+  const [garminError, setGarminError] = useState<string | null>(null);
+  const [garminMessage, setGarminMessage] = useState<string | null>(null);
+  const [garminPendingAction, setGarminPendingAction] = useState<string | null>(null);
   const profileLabels = useMemo(
     () =>
       Object.fromEntries(
@@ -93,8 +141,19 @@ export default function SettingsPage() {
     }
   }
 
+  async function loadGarminStatus() {
+    setGarminError(null);
+    const response = await getGarminStatus();
+    setGarminStatus(response);
+  }
+
   useEffect(() => {
     load();
+    loadGarminStatus().catch((reason: unknown) => {
+      setGarminError(
+        reason instanceof Error ? reason.message : "Failed to load Garmin status.",
+      );
+    });
   }, []);
 
   function isNameDirty(exercise: Exercise) {
@@ -121,6 +180,7 @@ export default function SettingsPage() {
 
   const hasDirtyDrafts = exercises.some(isExerciseDirty);
   const isBusy = pendingAction !== null;
+  const garminBusy = garminPendingAction !== null;
 
   async function runAction(
     actionKey: string,
@@ -290,6 +350,93 @@ export default function SettingsPage() {
     );
   }
 
+  async function runGarminAction(
+    actionKey: string,
+    action: () => Promise<void>,
+  ) {
+    setGarminPendingAction(actionKey);
+    setGarminError(null);
+    setGarminMessage(null);
+    try {
+      await action();
+    } catch (reason: unknown) {
+      setGarminError(
+        reason instanceof Error ? reason.message : "Garmin action failed.",
+      );
+    } finally {
+      setGarminPendingAction(null);
+    }
+  }
+
+  async function refreshGarminStatus() {
+    await runGarminAction("status", async () => {
+      await loadGarminStatus();
+      setGarminMessage("Garmin status refreshed");
+    });
+  }
+
+  async function connectGarmin(event?: FormEvent) {
+    event?.preventDefault();
+    const username = garminUsername.trim();
+    if (!username || !garminPassword) {
+      return;
+    }
+
+    await runGarminAction("login", async () => {
+      const response = await loginGarmin(username, garminPassword);
+      setGarminPassword("");
+      if (response.mfa_required && response.mfa_token) {
+        setGarminMfaToken(response.mfa_token);
+        setGarminMessage("Enter Garmin MFA code");
+      } else {
+        setGarminMfaToken(null);
+        setGarminMfaCode("");
+        setGarminMessage("Garmin connected");
+      }
+      await loadGarminStatus();
+    });
+  }
+
+  async function submitGarminCode(event?: FormEvent) {
+    event?.preventDefault();
+    if (!garminMfaToken || !garminMfaCode.trim()) {
+      return;
+    }
+
+    await runGarminAction("mfa", async () => {
+      await submitGarminMfa(garminMfaToken, garminMfaCode.trim());
+      setGarminMfaToken(null);
+      setGarminMfaCode("");
+      setGarminMessage("Garmin connected");
+      await loadGarminStatus();
+    });
+  }
+
+  async function syncGarminMetrics() {
+    await runGarminAction("sync", async () => {
+      const response = await syncGarmin(35);
+      const warningCount = Object.keys(response.errors).length;
+      setGarminStatus(response.status);
+      setGarminMessage(
+        `Saved ${response.saved_dates.length} date${
+          response.saved_dates.length === 1 ? "" : "s"
+        }, skipped ${response.skipped_dates.length}${
+          warningCount ? `, ${warningCount} source warning${warningCount === 1 ? "" : "s"}` : ""
+        }`,
+      );
+    });
+  }
+
+  async function disconnectGarminAccount() {
+    await runGarminAction("disconnect", async () => {
+      const response = await disconnectGarmin();
+      setGarminStatus(response);
+      setGarminPassword("");
+      setGarminMfaCode("");
+      setGarminMfaToken(null);
+      setGarminMessage("Garmin disconnected");
+    });
+  }
   return (
     <section className="page-stack">
       <header className="page-header">
@@ -302,6 +449,115 @@ export default function SettingsPage() {
       {error && <div className="error-banner">{error}</div>}
       {message && <div className="success-banner">{message}</div>}
 
+      <section className="panel garmin-panel">
+        <div className="panel-header">
+          <div>
+            <h2>Garmin</h2>
+            <div className="muted small">Observational import</div>
+          </div>
+          <button
+            className="ghost-button compact-action"
+            disabled={garminBusy}
+            onClick={refreshGarminStatus}
+            type="button"
+          >
+            Refresh
+          </button>
+        </div>
+
+        {garminError && <div className="error-banner">{garminError}</div>}
+        {garminMessage && (
+          <div className="success-banner">{garminMessage}</div>
+        )}
+
+        <div className="garmin-status-grid">
+          <div>
+            <strong>{garminStatus === null ? "Loading" : garminStatus.connected ? "Connected" : "Not connected"}</strong>
+            <span className="muted">status</span>
+          </div>
+          <div>
+            <strong>{formatGarminDateTime(garminStatus?.last_synced_at)}</strong>
+            <span className="muted">last sync</span>
+          </div>
+          <div>
+            <strong>{formatGarminDate(garminStatus?.latest_metric?.date)}</strong>
+            <span className="muted">latest date</span>
+          </div>
+        </div>
+
+        {garminMfaToken ? (
+          <form className="garmin-form" onSubmit={submitGarminCode}>
+            <label>
+              MFA code
+              <input
+                autoComplete="one-time-code"
+                disabled={garminPendingAction === "mfa"}
+                onChange={(event) => setGarminMfaCode(event.target.value)}
+                value={garminMfaCode}
+              />
+            </label>
+            <button
+              className="primary-button"
+              disabled={garminPendingAction === "mfa" || !garminMfaCode.trim()}
+              type="submit"
+            >
+              Verify
+            </button>
+          </form>
+        ) : garminStatus?.connected ? (
+          <div className="garmin-actions">
+            <button
+              className="secondary-button"
+              disabled={garminPendingAction === "sync"}
+              onClick={syncGarminMetrics}
+              type="button"
+            >
+              Sync 35 days
+            </button>
+            <button
+              className="ghost-button"
+              disabled={garminPendingAction === "disconnect"}
+              onClick={disconnectGarminAccount}
+              type="button"
+            >
+              Disconnect
+            </button>
+          </div>
+        ) : (
+          <form className="garmin-login" onSubmit={connectGarmin}>
+            <label>
+              Email
+              <input
+                autoComplete="username"
+                disabled={garminPendingAction === "login"}
+                onChange={(event) => setGarminUsername(event.target.value)}
+                value={garminUsername}
+              />
+            </label>
+            <label>
+              Password
+              <input
+                autoComplete="current-password"
+                disabled={garminPendingAction === "login"}
+                onChange={(event) => setGarminPassword(event.target.value)}
+                type="password"
+                value={garminPassword}
+              />
+            </label>
+            <button
+              className="primary-button"
+              disabled={
+                garminPendingAction === "login" ||
+                !garminUsername.trim() ||
+                !garminPassword
+              }
+              type="submit"
+            >
+              Connect
+            </button>
+          </form>
+        )}
+      </section>
       <form className="panel settings-add" onSubmit={addExercise}>
         <label>
           Exercise

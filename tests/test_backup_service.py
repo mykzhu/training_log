@@ -84,16 +84,52 @@ class BackupServiceTests(unittest.TestCase):
 
         return workout_id
 
-    def test_build_and_restore_backup_payload_round_trips_schema_v3(self) -> None:
+    def insert_garmin_metric(self) -> None:
+        with get_db() as conn:
+            conn.execute(
+                """
+                INSERT INTO garmin_daily_metrics (
+                    date,
+                    resting_heart_rate,
+                    hrv_ms,
+                    stress_avg,
+                    body_battery_start,
+                    body_battery_end,
+                    steps,
+                    synced_at,
+                    raw_diagnostics
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "2026-06-26",
+                    52,
+                    48.0,
+                    30,
+                    82,
+                    37,
+                    12345,
+                    "2026-06-26T08:00:00",
+                    '{"summary":{"ok":true}}',
+                ),
+            )
+
+    def test_build_and_restore_backup_payload_round_trips_schema_v4(self) -> None:
         workout_id = self.insert_workout()
+        self.insert_garmin_metric()
 
         payload = build_backup_payload()
-        self.assertEqual(payload["schema_version"], 3)
+        self.assertEqual(payload["schema_version"], 4)
         self.assertIn("exercise_weight_options", payload["tables"])
         self.assertEqual(len(payload["tables"]["workouts"]), 1)
         self.assertEqual(len(payload["tables"]["workout_exercises"]), 1)
         self.assertEqual(len(payload["tables"]["set_entries"]), 1)
         self.assertEqual(payload["tables"]["exercises"][0]["is_active"], 1)
+        self.assertEqual(len(payload["tables"]["garmin_daily_metrics"]), 1)
+        self.assertEqual(
+            payload["tables"]["garmin_daily_metrics"][0]["raw_diagnostics"],
+            {"summary": {"ok": True}},
+        )
 
         reset_database_data()
         restore_backup_payload(payload)
@@ -111,12 +147,18 @@ class BackupServiceTests(unittest.TestCase):
             weight_count = conn.execute(
                 "SELECT COUNT(*) FROM exercise_weight_options"
             ).fetchone()[0]
+            garmin_metric = conn.execute(
+                "SELECT resting_heart_rate, steps FROM garmin_daily_metrics WHERE date = ?",
+                ("2026-06-26",),
+            ).fetchone()
 
         self.assertEqual(workout["session_rpe"], 7)
         self.assertEqual(workout["lower_back_pain"], 2)
         self.assertEqual(workout["duration_seconds"], 3600)
         self.assertEqual(set_count, 1)
         self.assertGreater(weight_count, 0)
+        self.assertEqual(garmin_metric["resting_heart_rate"], 52)
+        self.assertEqual(garmin_metric["steps"], 12345)
 
     def test_schema_v3_restore_preserves_exact_inactive_empty_weights(self) -> None:
         self.insert_workout()
@@ -135,6 +177,8 @@ class BackupServiceTests(unittest.TestCase):
             )
 
         payload = build_backup_payload()
+        payload["schema_version"] = 3
+        payload["tables"].pop("garmin_daily_metrics")
         reset_database_data()
         restore_backup_payload(payload)
 
@@ -276,6 +320,7 @@ class BackupServiceTests(unittest.TestCase):
 
     def test_invalid_backup_validation_happens_before_destructive_restore(self) -> None:
         self.insert_workout()
+        self.insert_garmin_metric()
         payload = build_backup_payload()
         payload["tables"]["workout_exercises"][0]["exercise_id"] = 9999
 
@@ -284,24 +329,29 @@ class BackupServiceTests(unittest.TestCase):
 
         with get_db() as conn:
             workout_count = conn.execute("SELECT COUNT(*) FROM workouts").fetchone()[0]
+            garmin_count = conn.execute("SELECT COUNT(*) FROM garmin_daily_metrics").fetchone()[0]
             set_count = conn.execute("SELECT COUNT(*) FROM set_entries").fetchone()[0]
 
         self.assertEqual(workout_count, 1)
+        self.assertEqual(garmin_count, 1)
         self.assertEqual(set_count, 1)
 
     def test_reset_database_data_clears_workouts_and_reseeds_defaults(self) -> None:
         self.insert_workout()
+        self.insert_garmin_metric()
 
         reset_database_data()
 
         with get_db() as conn:
             workout_count = conn.execute("SELECT COUNT(*) FROM workouts").fetchone()[0]
+            garmin_count = conn.execute("SELECT COUNT(*) FROM garmin_daily_metrics").fetchone()[0]
             exercise_names = [
                 row["name"]
                 for row in conn.execute("SELECT name FROM exercises ORDER BY id ASC")
             ]
 
         self.assertEqual(workout_count, 0)
+        self.assertEqual(garmin_count, 0)
         self.assertEqual(exercise_names, list(config.DEFAULT_EXERCISES))
 
 

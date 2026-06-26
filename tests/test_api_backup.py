@@ -94,6 +94,36 @@ class BackupApiTests(unittest.TestCase):
 
         return workout_id
 
+    def insert_garmin_metric(self) -> None:
+        with get_db() as conn:
+            conn.execute(
+                """
+                INSERT INTO garmin_daily_metrics (
+                    date,
+                    resting_heart_rate,
+                    hrv_ms,
+                    stress_avg,
+                    body_battery_start,
+                    body_battery_end,
+                    steps,
+                    synced_at,
+                    raw_diagnostics
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "2026-06-26",
+                    52,
+                    48.0,
+                    30,
+                    82,
+                    37,
+                    12345,
+                    "2026-06-26T08:00:00",
+                    '{"summary":{"ok":true}}',
+                ),
+            )
+
     def test_backup_routes_are_registered(self) -> None:
         routes = {
             (route.path, tuple(sorted(route.methods)))
@@ -111,11 +141,12 @@ class BackupApiTests(unittest.TestCase):
         response = get_backup()
 
         self.assertEqual(response["app"], "training-log")
-        self.assertEqual(response["schema_version"], 3)
+        self.assertEqual(response["schema_version"], 4)
         self.assertGreater(len(response["tables"]["exercise_weight_options"]), 0)
         self.assertEqual(len(response["tables"]["workouts"]), 1)
         self.assertEqual(len(response["tables"]["workout_exercises"]), 1)
         self.assertEqual(len(response["tables"]["set_entries"]), 1)
+        self.assertIn("garmin_daily_metrics", response["tables"])
 
     def test_import_backup_payload_restores_data_and_clears_active_draft(self) -> None:
         workout_id = self.insert_workout()
@@ -154,12 +185,14 @@ class BackupApiTests(unittest.TestCase):
         self,
     ) -> None:
         self.insert_workout()
+        self.insert_garmin_metric()
         start_active_workout_draft()
 
         response = reset_backup_data()
 
         with get_db() as conn:
             workout_count = conn.execute("SELECT COUNT(*) FROM workouts").fetchone()[0]
+            garmin_count = conn.execute("SELECT COUNT(*) FROM garmin_daily_metrics").fetchone()[0]
             exercise_names = [
                 row["name"]
                 for row in conn.execute("SELECT name FROM exercises ORDER BY id ASC")
@@ -169,6 +202,7 @@ class BackupApiTests(unittest.TestCase):
         self.assertEqual(response["counts"]["workouts"], 0)
         self.assertEqual(response["counts"]["exercises"], len(config.DEFAULT_EXERCISES))
         self.assertEqual(workout_count, 0)
+        self.assertEqual(garmin_count, 0)
         self.assertEqual(exercise_names, list(config.DEFAULT_EXERCISES))
         self.assertIsNone(get_active_workout_draft())
 

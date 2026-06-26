@@ -10,6 +10,7 @@ from app import config
 from app.db import init_db
 from app.routes.api_backup import router as backup_api_router
 from app.routes.api_current_workout import router as current_workout_api_router
+from app.routes.api_garmin import router as garmin_api_router
 from app.routes.api_exercises import (
     profiles_router as exercise_profiles_api_router,
     router as exercises_api_router,
@@ -43,6 +44,7 @@ app.include_router(backup_api_router)
 app.include_router(current_workout_api_router)
 app.include_router(exercises_api_router)
 app.include_router(exercise_profiles_api_router)
+app.include_router(garmin_api_router)
 app.include_router(stats_api_router)
 app.include_router(workout_items_api_router)
 app.include_router(workouts_api_router)

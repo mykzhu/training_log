@@ -4,6 +4,7 @@ from pathlib import Path
 
 DB_PATH = Path(os.getenv("DB_PATH", "data/training.db"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "DEBUG").upper()
+GARMIN_TOKEN_DIR = Path(os.getenv("GARMIN_TOKEN_DIR", "/data/garmin_tokens"))
 FRONTEND_DIST_DIR = Path(
     os.getenv(
         "FRONTEND_DIST_DIR",

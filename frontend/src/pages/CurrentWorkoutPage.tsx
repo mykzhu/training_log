@@ -12,14 +12,90 @@ import {
   updateCurrentWorkoutMetadata,
 } from "../api/currentWorkout";
 import { createExercise, getExercises } from "../api/exercises";
+import { syncGarmin } from "../api/garmin";
 import type {
   CurrentWorkout,
+  GarminDailyMetric,
+  GarminRecoverySnapshot,
   NextWorkoutRecommendation,
   RecoveryContext,
   Exercise,
   SuggestedSet,
 } from "../api/types";
 import LegacyActiveWorkoutView from "../components/LegacyActiveWorkoutView";
+
+function formatGarminDate(value: string | null | undefined) {
+  if (!value) {
+    return "-";
+  }
+
+  const parsed = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return parsed.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function formatGarminDateTime(value: string | null | undefined) {
+  if (!value) {
+    return "-";
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return parsed.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatGarminMetric(value: number | null | undefined, digits = 0) {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "-";
+  }
+
+  return Number(value).toLocaleString(undefined, {
+    maximumFractionDigits: digits,
+    minimumFractionDigits: digits,
+  });
+}
+
+function garminBatteryLabel(metric: GarminDailyMetric) {
+  if (metric.body_battery_start === null && metric.body_battery_end === null) {
+    return null;
+  }
+
+  return `BB ${formatGarminMetric(metric.body_battery_start)} -> ${formatGarminMetric(
+    metric.body_battery_end,
+  )}`;
+}
+
+function garminMetricSummary(metric: GarminDailyMetric | null) {
+  if (!metric) {
+    return "No data";
+  }
+
+  const parts = [
+    metric.resting_heart_rate === null
+      ? null
+      : `RHR ${formatGarminMetric(metric.resting_heart_rate)}`,
+    metric.hrv_ms === null ? null : `HRV ${formatGarminMetric(metric.hrv_ms, 1)}`,
+    metric.stress_avg === null ? null : `Stress ${formatGarminMetric(metric.stress_avg)}`,
+    garminBatteryLabel(metric),
+    metric.steps === null ? null : `Steps ${formatGarminMetric(metric.steps)}`,
+  ].filter(Boolean);
+
+  return parts.length ? parts.join(" / ") : "No values";
+}
 
 function formatNumber(value: number | null | undefined, digits = 1) {
   if (value === null || value === undefined || Number.isNaN(value)) {
@@ -206,6 +282,8 @@ export default function CurrentWorkoutPage() {
   const [selectedExerciseId, setSelectedExerciseId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [garminError, setGarminError] = useState<string | null>(null);
+  const [garminPending, setGarminPending] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   async function load() {
@@ -257,6 +335,23 @@ export default function CurrentWorkoutPage() {
       setError(reason instanceof Error ? reason.message : "Action failed.");
     } finally {
       setPending(false);
+    }
+  }
+
+  async function syncGarminRecovery() {
+    setGarminPending(true);
+    setGarminError(null);
+    try {
+      await syncGarmin(35);
+      const response = await getCurrentWorkout();
+      setCurrentWorkout(response);
+      setElapsedSeconds(response.elapsed_seconds);
+    } catch (reason: unknown) {
+      setGarminError(
+        reason instanceof Error ? reason.message : "Garmin sync failed.",
+      );
+    } finally {
+      setGarminPending(false);
     }
   }
 
@@ -326,6 +421,14 @@ export default function CurrentWorkoutPage() {
         {error && <div className="error-banner">{error}</div>}
         {currentWorkout.recovery_context && (
           <RecoveryContextCard context={currentWorkout.recovery_context} />
+        )}
+        {currentWorkout.garmin_recovery && (
+          <GarminRecoveryCard
+            error={garminError}
+            onSync={syncGarminRecovery}
+            pending={garminPending}
+            snapshot={currentWorkout.garmin_recovery}
+          />
         )}
         {currentWorkout.next_workout_recommendation && (
           <NextWorkoutCard
@@ -462,6 +565,78 @@ function RecoveryContextCard({ context }: RecoveryContextCardProps) {
 
       <p className="recovery-hint">{context.hint}</p>
     </section>
+  );
+}
+
+type GarminRecoveryCardProps = {
+  error: string | null;
+  onSync: () => void;
+  pending: boolean;
+  snapshot: GarminRecoverySnapshot;
+};
+
+function GarminRecoveryCard({
+  error,
+  onSync,
+  pending,
+  snapshot,
+}: GarminRecoveryCardProps) {
+  return (
+    <section className="panel context-card garmin-recovery-card">
+      <div className="panel-header">
+        <div>
+          <h2>Garmin recovery</h2>
+          <div className="muted small">{snapshot.message}</div>
+        </div>
+        <button
+          className="ghost-button compact-action"
+          disabled={pending || !snapshot.connected}
+          onClick={onSync}
+          type="button"
+        >
+          {pending ? "Syncing" : "Sync"}
+        </button>
+      </div>
+
+      {error && <div className="error-banner">{error}</div>}
+
+      <div className="recovery-grid">
+        <MetricTile
+          className={snapshot.connected ? "metric-green" : "metric-neutral"}
+          value={snapshot.connected ? "connected" : "off"}
+          label="Garmin"
+        />
+        <MetricTile
+          value={formatGarminDateTime(snapshot.last_synced_at)}
+          label="last sync"
+        />
+        <MetricTile
+          value={snapshot.sample_count_35d}
+          label="35d samples"
+        />
+      </div>
+
+      <div className="garmin-metric-list">
+        <GarminMetricRow label="Today" metric={snapshot.today} />
+        <GarminMetricRow label="Yesterday" metric={snapshot.yesterday} />
+        <GarminMetricRow label="Latest" metric={snapshot.latest} />
+      </div>
+    </section>
+  );
+}
+
+type GarminMetricRowProps = {
+  label: string;
+  metric: GarminDailyMetric | null;
+};
+
+function GarminMetricRow({ label, metric }: GarminMetricRowProps) {
+  return (
+    <div className="garmin-metric-row">
+      <strong>{label}</strong>
+      <span>{metric ? formatGarminDate(metric.date) : "-"}</span>
+      <span className="muted">{garminMetricSummary(metric)}</span>
+    </div>
   );
 }
 

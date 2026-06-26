@@ -1,3 +1,4 @@
+import json
 import logging
 import math
 import sqlite3
@@ -19,8 +20,8 @@ from app.services.analysis_service import (
 
 logger = logging.getLogger("training_log")
 
-BACKUP_SCHEMA_VERSION = 3
-BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
+BACKUP_SCHEMA_VERSION = 4
+BASE_BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
     "exercises": ("id", "name", "is_active", "sort_order", "profile_key"),
     "exercise_weight_options": ("id", "exercise_id", "weight", "sort_order"),
     "workouts": (
@@ -42,12 +43,28 @@ BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
         "created_at",
     ),
 }
+GARMIN_BACKUP_TABLE_COLUMNS: tuple[str, ...] = (
+    "date",
+    "resting_heart_rate",
+    "hrv_ms",
+    "stress_avg",
+    "body_battery_start",
+    "body_battery_end",
+    "steps",
+    "synced_at",
+    "raw_diagnostics",
+)
+BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
+    **BASE_BACKUP_TABLE_COLUMNS,
+    "garmin_daily_metrics": GARMIN_BACKUP_TABLE_COLUMNS,
+}
 BACKUP_TABLES = tuple(BACKUP_TABLE_COLUMNS)
+BACKUP_SEQUENCE_TABLES = tuple(BASE_BACKUP_TABLE_COLUMNS)
 LEGACY_BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
     "exercises": ("id", "name"),
-    "workouts": BACKUP_TABLE_COLUMNS["workouts"],
-    "workout_exercises": BACKUP_TABLE_COLUMNS["workout_exercises"],
-    "set_entries": BACKUP_TABLE_COLUMNS["set_entries"],
+    "workouts": BASE_BACKUP_TABLE_COLUMNS["workouts"],
+    "workout_exercises": BASE_BACKUP_TABLE_COLUMNS["workout_exercises"],
+    "set_entries": BASE_BACKUP_TABLE_COLUMNS["set_entries"],
 }
 DRAFT_TABLES = (
     "active_draft_sets",
@@ -76,10 +93,22 @@ def build_backup_payload() -> dict[str, Any]:
 
         for table_name, columns in BACKUP_TABLE_COLUMNS.items():
             column_sql = ", ".join(columns)
+            order_sql = "date ASC" if table_name == "garmin_daily_metrics" else "id ASC"
             rows = conn.execute(
-                f"SELECT {column_sql} FROM {table_name} ORDER BY id ASC"
+                f"SELECT {column_sql} FROM {table_name} ORDER BY {order_sql}"
             ).fetchall()
-            tables[table_name] = [dict(row) for row in rows]
+            table_rows = []
+            for row in rows:
+                row_data = dict(row)
+                if table_name == "garmin_daily_metrics":
+                    try:
+                        row_data["raw_diagnostics"] = json.loads(
+                            str(row_data["raw_diagnostics"] or "{}")
+                        )
+                    except json.JSONDecodeError:
+                        row_data["raw_diagnostics"] = {"invalid": True}
+                table_rows.append(row_data)
+            tables[table_name] = table_rows
 
     payload = {
         "app": "training-log",
@@ -100,9 +129,9 @@ def validate_backup_payload(payload: Any) -> dict[str, list[dict[str, Any]]]:
         raise ValueError("Backup file must contain a JSON object.")
 
     schema_version = payload.get("schema_version")
-    if schema_version not in (1, 2, BACKUP_SCHEMA_VERSION):
+    if schema_version not in (1, 2, 3, BACKUP_SCHEMA_VERSION):
         raise ValueError(
-            f"Unsupported backup schema version. Expected 1, 2 or {BACKUP_SCHEMA_VERSION}."
+            f"Unsupported backup schema version. Expected 1, 2, 3 or {BACKUP_SCHEMA_VERSION}."
         )
 
     tables = payload.get("tables")
@@ -111,11 +140,12 @@ def validate_backup_payload(payload: Any) -> dict[str, list[dict[str, Any]]]:
 
     validated: dict[str, list[dict[str, Any]]] = {}
 
-    table_columns = (
-        BACKUP_TABLE_COLUMNS
-        if schema_version == BACKUP_SCHEMA_VERSION
-        else LEGACY_BACKUP_TABLE_COLUMNS
-    )
+    if schema_version == BACKUP_SCHEMA_VERSION:
+        table_columns = BACKUP_TABLE_COLUMNS
+    elif schema_version == 3:
+        table_columns = BASE_BACKUP_TABLE_COLUMNS
+    else:
+        table_columns = LEGACY_BACKUP_TABLE_COLUMNS
 
     for table_name, columns in table_columns.items():
         rows = tables.get(table_name)
@@ -146,7 +176,7 @@ def validate_backup_payload(payload: Any) -> dict[str, list[dict[str, Any]]]:
 
         validated[table_name] = validated_rows
 
-    if schema_version != BACKUP_SCHEMA_VERSION:
+    if schema_version in (1, 2):
         for index, row in enumerate(validated["exercises"], start=1):
             row["is_active"] = 1
             row["sort_order"] = index * 10
@@ -154,14 +184,18 @@ def validate_backup_payload(payload: Any) -> dict[str, list[dict[str, Any]]]:
 
         validated["exercise_weight_options"] = []
 
+    if schema_version != BACKUP_SCHEMA_VERSION:
+        validated["garmin_daily_metrics"] = []
+
     validate_table_ids(validated)
     validate_exercises(validated["exercises"])
     validate_exercise_weight_options(
         validated["exercise_weight_options"],
         validated,
-        enforce_active_weights=schema_version == BACKUP_SCHEMA_VERSION,
+        enforce_active_weights=schema_version in (3, BACKUP_SCHEMA_VERSION),
     )
     validate_workout_graph(validated)
+    validate_garmin_daily_metrics(validated["garmin_daily_metrics"])
 
     logger.info(
         "backup.validate.success schema_version=%s target_schema_version=%s counts=%s",
@@ -195,6 +229,9 @@ def coerce_float(value: Any, context: str) -> float:
 
 def validate_table_ids(tables: dict[str, list[dict[str, Any]]]) -> None:
     for table_name, rows in tables.items():
+        if table_name == "garmin_daily_metrics":
+            continue
+
         seen_ids: set[int] = set()
         for index, row in enumerate(rows, start=1):
             row_id = coerce_int(row["id"], f"Row {index} in {table_name} id")
@@ -302,6 +339,122 @@ def validate_exercise_weight_options(
                 )
 
 
+def coerce_optional_int(
+    value: Any,
+    context: str,
+    *,
+    minimum: int | None = None,
+    maximum: int | None = None,
+) -> int | None:
+    if value is None:
+        return None
+
+    result = coerce_int(value, context)
+    if minimum is not None and result < minimum:
+        raise ValueError(f"{context} is below the allowed range.")
+    if maximum is not None and result > maximum:
+        raise ValueError(f"{context} is above the allowed range.")
+    return result
+
+
+def coerce_optional_float(
+    value: Any,
+    context: str,
+    *,
+    minimum: float | None = None,
+    maximum: float | None = None,
+) -> float | None:
+    if value is None:
+        return None
+
+    result = coerce_float(value, context)
+    if minimum is not None and result < minimum:
+        raise ValueError(f"{context} is below the allowed range.")
+    if maximum is not None and result > maximum:
+        raise ValueError(f"{context} is above the allowed range.")
+    return result
+
+
+def validate_garmin_daily_metrics(rows: list[dict[str, Any]]) -> None:
+    seen_dates: set[str] = set()
+    for index, row in enumerate(rows, start=1):
+        metric_date = str(row["date"]).strip()
+        try:
+            datetime.fromisoformat(metric_date)
+        except ValueError as exc:
+            raise ValueError(
+                f"Row {index} in garmin_daily_metrics has an invalid date."
+            ) from exc
+        if metric_date in seen_dates:
+            raise ValueError(
+                f"Row {index} in garmin_daily_metrics duplicates a date."
+            )
+        seen_dates.add(metric_date)
+        row["date"] = metric_date
+
+        row["resting_heart_rate"] = coerce_optional_int(
+            row["resting_heart_rate"],
+            f"Row {index} in garmin_daily_metrics resting_heart_rate",
+            minimum=20,
+            maximum=240,
+        )
+        row["hrv_ms"] = coerce_optional_float(
+            row["hrv_ms"],
+            f"Row {index} in garmin_daily_metrics hrv_ms",
+            minimum=0,
+        )
+        row["stress_avg"] = coerce_optional_int(
+            row["stress_avg"],
+            f"Row {index} in garmin_daily_metrics stress_avg",
+            minimum=0,
+            maximum=100,
+        )
+        row["body_battery_start"] = coerce_optional_int(
+            row["body_battery_start"],
+            f"Row {index} in garmin_daily_metrics body_battery_start",
+            minimum=0,
+            maximum=100,
+        )
+        row["body_battery_end"] = coerce_optional_int(
+            row["body_battery_end"],
+            f"Row {index} in garmin_daily_metrics body_battery_end",
+            minimum=0,
+            maximum=100,
+        )
+        row["steps"] = coerce_optional_int(
+            row["steps"],
+            f"Row {index} in garmin_daily_metrics steps",
+            minimum=0,
+        )
+
+        synced_at = str(row["synced_at"]).strip()
+        try:
+            datetime.fromisoformat(synced_at)
+        except ValueError as exc:
+            raise ValueError(
+                f"Row {index} in garmin_daily_metrics has an invalid synced_at."
+            ) from exc
+        row["synced_at"] = synced_at
+
+        raw_diagnostics = row["raw_diagnostics"]
+        if isinstance(raw_diagnostics, str):
+            try:
+                raw_diagnostics = json.loads(raw_diagnostics)
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    f"Row {index} in garmin_daily_metrics has invalid diagnostics."
+                ) from exc
+        if not isinstance(raw_diagnostics, dict):
+            raise ValueError(
+                f"Row {index} in garmin_daily_metrics diagnostics must be an object."
+            )
+        row["raw_diagnostics"] = json.dumps(
+            raw_diagnostics,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+
+
 def validate_workout_graph(tables: dict[str, list[dict[str, Any]]]) -> None:
     exercise_ids = {int(row["id"]) for row in tables["exercises"]}
     workout_ids = {int(row["id"]) for row in tables["workouts"]}
@@ -358,13 +511,13 @@ def validate_workout_graph(tables: dict[str, list[dict[str, Any]]]) -> None:
 
 def reset_sqlite_sequences(conn: sqlite3.Connection) -> None:
     logger.debug("db.sqlite_sequence.reset.start")
-    placeholders = ", ".join("?" for _ in BACKUP_TABLES)
+    placeholders = ", ".join("?" for _ in BACKUP_SEQUENCE_TABLES)
     conn.execute(
         f"DELETE FROM sqlite_sequence WHERE name IN ({placeholders})",
-        BACKUP_TABLES,
+        BACKUP_SEQUENCE_TABLES,
     )
 
-    for table_name in BACKUP_TABLES:
+    for table_name in BACKUP_SEQUENCE_TABLES:
         max_id = conn.execute(
             f"SELECT COALESCE(MAX(id), 0) FROM {table_name}"
         ).fetchone()[0]
@@ -404,7 +557,7 @@ def restore_backup_payload(payload: Any) -> None:
                 conn.execute(insert_sql, tuple(row[column] for column in columns))
 
         reset_sqlite_sequences(conn)
-        if schema_version == BACKUP_SCHEMA_VERSION:
+        if schema_version in (3, BACKUP_SCHEMA_VERSION):
             set_metadata(conn, EXERCISE_SETTINGS_WEIGHT_MIGRATION_KEY, "1")
         else:
             initialize_exercise_settings(conn, force_weight_migration=True)
@@ -424,10 +577,10 @@ def reset_database_data() -> None:
         for table_name in reversed(BACKUP_TABLES):
             conn.execute(f"DELETE FROM {table_name}")
 
-        placeholders = ", ".join("?" for _ in BACKUP_TABLES)
+        placeholders = ", ".join("?" for _ in BACKUP_SEQUENCE_TABLES)
         conn.execute(
             f"DELETE FROM sqlite_sequence WHERE name IN ({placeholders})",
-            BACKUP_TABLES,
+            BACKUP_SEQUENCE_TABLES,
         )
 
         seed_default_exercises(conn)

@@ -31,6 +31,7 @@ from app.services.draft_service import (
     update_active_draft_set,
 )
 from app.services.recommendation_service import build_next_workout_recommendation
+from app.services.garmin_service import garmin_service
 from app.services.recovery_service import build_recovery_context
 from app.services.stats_service import calculate_workout_load_metrics
 
@@ -60,6 +61,7 @@ def build_current_workout_response(
             "next_workout_recommendation": build_next_workout_recommendation(
                 recovery_context=recovery_context,
             ),
+            "garmin_recovery": garmin_service.recovery_snapshot(),
         }
 
     workout_exercises = get_draft_workout_details(draft)
@@ -101,6 +103,7 @@ def build_current_workout_response(
         "load_metrics": load_metrics,
         "recovery_context": None,
         "next_workout_recommendation": None,
+        "garmin_recovery": None,
     }
 
 

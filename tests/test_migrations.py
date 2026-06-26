@@ -54,8 +54,12 @@ class MigrationTests(unittest.TestCase):
             workout_columns = {
                 row["name"] for row in conn.execute("PRAGMA table_info(workouts)")
             }
+            garmin_columns = {
+                row["name"]
+                for row in conn.execute("PRAGMA table_info(garmin_daily_metrics)")
+            }
 
-        self.assertEqual([int(row["version"]) for row in rows], [1, 2, 3, 4, 5])
+        self.assertEqual([int(row["version"]) for row in rows], [1, 2, 3, 4, 5, 6])
         self.assertEqual(
             [row["name"] for row in rows],
             [
@@ -64,12 +68,16 @@ class MigrationTests(unittest.TestCase):
                 "active_draft",
                 "exercise_settings",
                 "performance_indexes",
+                "garmin_daily_metrics",
             ],
         )
         self.assertGreater(exercise_count, 0)
         self.assertIn("session_rpe", workout_columns)
         self.assertIn("lower_back_pain", workout_columns)
         self.assertIn("duration_seconds", workout_columns)
+        self.assertIn("date", garmin_columns)
+        self.assertIn("resting_heart_rate", garmin_columns)
+        self.assertIn("raw_diagnostics", garmin_columns)
 
     def test_existing_database_startup_establishes_safe_migration_baseline(self) -> None:
         with sqlite3.connect(config.DB_PATH) as conn:
@@ -107,7 +115,7 @@ class MigrationTests(unittest.TestCase):
                 ("Deadlift",),
             ).fetchone()[0]
 
-        self.assertEqual(versions, [1, 2, 3, 4, 5])
+        self.assertEqual(versions, [1, 2, 3, 4, 5, 6])
         self.assertEqual(exercise["name"], "Romanian Deadlift")
         self.assertEqual(exercise["profile_key"], "deadlift")
         self.assertEqual(exercise["is_active"], 1)

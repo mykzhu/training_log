@@ -164,6 +164,9 @@
             "title": "Exercises",
             "type": "array"
           },
+          "garmin_recovery": {
+            "$ref": "#/components/schemas/GarminRecoverySnapshotResponse"
+          },
           "load_metrics": {
             "$ref": "#/components/schemas/LoadMetricsResponse"
           },
@@ -567,6 +570,284 @@
           "current_workout"
         ],
         "title": "FinishCurrentWorkoutResponse",
+        "type": "object"
+      },
+      "GarminDailyMetricResponse": {
+        "properties": {
+          "body_battery_end": {
+            "title": "Body Battery End",
+            "type": "integer"
+          },
+          "body_battery_start": {
+            "title": "Body Battery Start",
+            "type": "integer"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "hrv_ms": {
+            "title": "Hrv Ms",
+            "type": "number"
+          },
+          "raw_diagnostics": {
+            "title": "Raw Diagnostics",
+            "type": "object"
+          },
+          "resting_heart_rate": {
+            "title": "Resting Heart Rate",
+            "type": "integer"
+          },
+          "steps": {
+            "title": "Steps",
+            "type": "integer"
+          },
+          "stress_avg": {
+            "title": "Stress Avg",
+            "type": "integer"
+          },
+          "synced_at": {
+            "title": "Synced At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "synced_at",
+          "raw_diagnostics"
+        ],
+        "title": "GarminDailyMetricResponse",
+        "type": "object"
+      },
+      "GarminDailyMetricsResponse": {
+        "properties": {
+          "days": {
+            "title": "Days",
+            "type": "integer"
+          },
+          "metrics": {
+            "items": {
+              "$ref": "#/components/schemas/GarminDailyMetricResponse"
+            },
+            "title": "Metrics",
+            "type": "array"
+          }
+        },
+        "required": [
+          "days",
+          "metrics"
+        ],
+        "title": "GarminDailyMetricsResponse",
+        "type": "object"
+      },
+      "GarminDisconnectResponse": {
+        "properties": {
+          "connected": {
+            "title": "Connected",
+            "type": "boolean"
+          },
+          "last_synced_at": {
+            "title": "Last Synced At",
+            "type": "string"
+          },
+          "latest_metric": {
+            "$ref": "#/components/schemas/GarminDailyMetricResponse"
+          },
+          "pending_mfa": {
+            "title": "Pending Mfa",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "connected",
+          "pending_mfa"
+        ],
+        "title": "GarminDisconnectResponse",
+        "type": "object"
+      },
+      "GarminLoginRequest": {
+        "properties": {
+          "password": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          },
+          "username": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "GarminLoginRequest",
+        "type": "object"
+      },
+      "GarminLoginResponse": {
+        "properties": {
+          "connected": {
+            "title": "Connected",
+            "type": "boolean"
+          },
+          "mfa_required": {
+            "title": "Mfa Required",
+            "type": "boolean"
+          },
+          "mfa_token": {
+            "title": "Mfa Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "connected",
+          "mfa_required"
+        ],
+        "title": "GarminLoginResponse",
+        "type": "object"
+      },
+      "GarminMfaRequest": {
+        "properties": {
+          "code": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Code",
+            "type": "string"
+          },
+          "mfa_token": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Mfa Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mfa_token",
+          "code"
+        ],
+        "title": "GarminMfaRequest",
+        "type": "object"
+      },
+      "GarminRecoverySnapshotResponse": {
+        "properties": {
+          "connected": {
+            "title": "Connected",
+            "type": "boolean"
+          },
+          "last_synced_at": {
+            "title": "Last Synced At",
+            "type": "string"
+          },
+          "latest": {
+            "$ref": "#/components/schemas/GarminDailyMetricResponse"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "sample_count_35d": {
+            "title": "Sample Count 35D",
+            "type": "integer"
+          },
+          "today": {
+            "$ref": "#/components/schemas/GarminDailyMetricResponse"
+          },
+          "yesterday": {
+            "$ref": "#/components/schemas/GarminDailyMetricResponse"
+          }
+        },
+        "required": [
+          "connected",
+          "sample_count_35d",
+          "message"
+        ],
+        "title": "GarminRecoverySnapshotResponse",
+        "type": "object"
+      },
+      "GarminStatusResponse": {
+        "properties": {
+          "connected": {
+            "title": "Connected",
+            "type": "boolean"
+          },
+          "last_synced_at": {
+            "title": "Last Synced At",
+            "type": "string"
+          },
+          "latest_metric": {
+            "$ref": "#/components/schemas/GarminDailyMetricResponse"
+          },
+          "pending_mfa": {
+            "title": "Pending Mfa",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "connected",
+          "pending_mfa"
+        ],
+        "title": "GarminStatusResponse",
+        "type": "object"
+      },
+      "GarminSyncRequest": {
+        "properties": {
+          "days": {
+            "maximum": 90.0,
+            "minimum": 1.0,
+            "title": "Days",
+            "type": "integer"
+          }
+        },
+        "title": "GarminSyncRequest",
+        "type": "object"
+      },
+      "GarminSyncResponse": {
+        "properties": {
+          "days": {
+            "title": "Days",
+            "type": "integer"
+          },
+          "errors": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Errors",
+            "type": "object"
+          },
+          "saved_dates": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Saved Dates",
+            "type": "array"
+          },
+          "skipped_dates": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Skipped Dates",
+            "type": "array"
+          },
+          "status": {
+            "$ref": "#/components/schemas/GarminStatusResponse"
+          },
+          "synced": {
+            "title": "Synced",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "synced",
+          "days",
+          "saved_dates",
+          "skipped_dates",
+          "errors",
+          "status"
+        ],
+        "title": "GarminSyncResponse",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -1940,6 +2221,215 @@
         "summary": "Replace Exercise Weights Endpoint",
         "tags": [
           "exercises"
+        ]
+      }
+    },
+    "/api/v1/garmin/daily": {
+      "get": {
+        "operationId": "get_garmin_daily_metrics_api_v1_garmin_daily_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 35,
+              "maximum": 90.0,
+              "minimum": 1.0,
+              "title": "Days",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarminDailyMetricsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Garmin Daily Metrics",
+        "tags": [
+          "garmin"
+        ]
+      }
+    },
+    "/api/v1/garmin/disconnect": {
+      "post": {
+        "operationId": "disconnect_garmin_api_v1_garmin_disconnect_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarminDisconnectResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Disconnect Garmin",
+        "tags": [
+          "garmin"
+        ]
+      }
+    },
+    "/api/v1/garmin/login": {
+      "post": {
+        "operationId": "login_garmin_api_v1_garmin_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GarminLoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarminLoginResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Login Garmin",
+        "tags": [
+          "garmin"
+        ]
+      }
+    },
+    "/api/v1/garmin/mfa": {
+      "post": {
+        "operationId": "submit_garmin_mfa_api_v1_garmin_mfa_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GarminMfaRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarminLoginResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Submit Garmin Mfa",
+        "tags": [
+          "garmin"
+        ]
+      }
+    },
+    "/api/v1/garmin/status": {
+      "get": {
+        "operationId": "get_garmin_status_api_v1_garmin_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarminStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Garmin Status",
+        "tags": [
+          "garmin"
+        ]
+      }
+    },
+    "/api/v1/garmin/sync": {
+      "post": {
+        "operationId": "sync_garmin_api_v1_garmin_sync_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GarminSyncRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarminSyncResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Sync Garmin",
+        "tags": [
+          "garmin"
         ]
       }
     },

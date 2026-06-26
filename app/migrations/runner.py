@@ -9,6 +9,7 @@ from app.migrations import (
     v003_active_draft,
     v004_exercise_settings,
     v005_performance_indexes,
+    v006_garmin_daily_metrics,
 )
 
 
@@ -26,6 +27,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     v003_active_draft,
     v004_exercise_settings,
     v005_performance_indexes,
+    v006_garmin_daily_metrics,
 )
 
 

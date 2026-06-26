@@ -135,6 +135,54 @@ export type NextWorkoutRecommendation = {
   exercise_recommendations: ExerciseRecommendation[];
 };
 
+export type GarminDailyMetric = {
+  date: string;
+  resting_heart_rate: number | null;
+  hrv_ms: number | null;
+  stress_avg: number | null;
+  body_battery_start: number | null;
+  body_battery_end: number | null;
+  steps: number | null;
+  synced_at: string;
+  raw_diagnostics: Record<string, unknown>;
+};
+
+export type GarminStatus = {
+  connected: boolean;
+  last_synced_at: string | null;
+  latest_metric: GarminDailyMetric | null;
+  pending_mfa: boolean;
+};
+
+export type GarminRecoverySnapshot = {
+  connected: boolean;
+  today: GarminDailyMetric | null;
+  yesterday: GarminDailyMetric | null;
+  latest: GarminDailyMetric | null;
+  last_synced_at: string | null;
+  sample_count_35d: number;
+  message: string;
+};
+
+export type GarminLoginResponse = {
+  connected: boolean;
+  mfa_required: boolean;
+  mfa_token: string | null;
+};
+
+export type GarminSyncResponse = {
+  synced: boolean;
+  days: number;
+  saved_dates: string[];
+  skipped_dates: string[];
+  errors: Record<string, string>;
+  status: GarminStatus;
+};
+
+export type GarminDailyMetricsResponse = {
+  days: number;
+  metrics: GarminDailyMetric[];
+};
 export type CurrentWorkout = {
   active: boolean;
   started_at: string | null;
@@ -148,6 +196,7 @@ export type CurrentWorkout = {
   load_metrics: LoadMetrics | null;
   recovery_context: RecoveryContext | null;
   next_workout_recommendation: NextWorkoutRecommendation | null;
+  garmin_recovery: GarminRecoverySnapshot | null;
 };
 
 export type WorkoutCore = {

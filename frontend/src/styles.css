@@ -666,6 +666,91 @@ label {
   font-size: 14px;
 }
 
+.garmin-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.garmin-status-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.garmin-status-grid > div {
+  display: grid;
+  gap: 3px;
+  min-height: 62px;
+  align-content: center;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+  background: var(--card2);
+}
+
+.garmin-status-grid strong {
+  overflow-wrap: anywhere;
+  font-size: 15px;
+  line-height: 1.2;
+}
+
+.garmin-status-grid span {
+  font-size: 12px;
+}
+
+.garmin-login,
+.garmin-form {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(150px, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.garmin-form {
+  grid-template-columns: minmax(160px, 1fr) auto;
+}
+
+.garmin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.garmin-actions button {
+  flex: 1 1 140px;
+}
+
+.garmin-recovery-card .recovery-item strong {
+  overflow-wrap: anywhere;
+  font-size: 15px;
+}
+
+.garmin-metric-list {
+  display: grid;
+  gap: 2px;
+}
+
+.garmin-metric-row {
+  display: grid;
+  grid-template-columns: 82px 74px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  border-top: 1px solid var(--border);
+  padding: 8px 0;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.garmin-metric-row:first-child {
+  border-top: 0;
+}
+
+.garmin-metric-row strong,
+.garmin-metric-row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .stats-toolbar {
   display: flex;
   align-items: center;
@@ -1538,12 +1623,23 @@ button.load-calendar-cell:focus-visible {
   .add-exercise,
   .settings-add,
   .settings-row,
+  .garmin-login,
+  .garmin-form,
   .set-actions,
   .stats-chart-grid,
   .analysis-grid {
     grid-template-columns: 1fr;
   }
 
+
+  .garmin-status-grid,
+  .garmin-metric-row {
+    grid-template-columns: 1fr;
+  }
+
+  .garmin-actions button {
+    flex-basis: 100%;
+  }
   .recovery-grid,
   .dashboard-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));

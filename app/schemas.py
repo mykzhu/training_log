@@ -220,6 +220,74 @@ class NextWorkoutRecommendationResponse(FlexibleResponse):
     exercise_recommendations: list[dict[str, Any]]
 
 
+
+class GarminDailyMetricResponse(AppBaseModel):
+    date: str
+    resting_heart_rate: int | None
+    hrv_ms: float | None
+    stress_avg: int | None
+    body_battery_start: int | None
+    body_battery_end: int | None
+    steps: int | None
+    synced_at: str
+    raw_diagnostics: dict[str, Any]
+
+
+class GarminStatusResponse(AppBaseModel):
+    connected: bool
+    last_synced_at: str | None
+    latest_metric: GarminDailyMetricResponse | None
+    pending_mfa: bool
+
+
+class GarminRecoverySnapshotResponse(AppBaseModel):
+    connected: bool
+    today: GarminDailyMetricResponse | None
+    yesterday: GarminDailyMetricResponse | None
+    latest: GarminDailyMetricResponse | None
+    last_synced_at: str | None
+    sample_count_35d: int
+    message: str
+
+
+class GarminLoginRequest(AppBaseModel):
+    username: str = Field(min_length=1, max_length=240)
+    password: str = Field(min_length=1, max_length=240)
+
+
+class GarminMfaRequest(AppBaseModel):
+    mfa_token: str = Field(min_length=1, max_length=120)
+    code: str = Field(min_length=1, max_length=40)
+
+
+class GarminSyncRequest(AppBaseModel):
+    days: int | None = Field(default=None, ge=1, le=90)
+
+
+class GarminLoginResponse(AppBaseModel):
+    connected: bool
+    mfa_required: bool
+    mfa_token: str | None = None
+
+
+class GarminDisconnectResponse(GarminStatusResponse):
+    pass
+
+
+class GarminSyncResponse(AppBaseModel):
+    synced: bool
+    days: int
+    saved_dates: list[str]
+    skipped_dates: list[str]
+    errors: dict[str, str]
+    status: GarminStatusResponse
+
+
+class GarminDailyMetricsResponse(AppBaseModel):
+    days: int
+    metrics: list[GarminDailyMetricResponse]
+
+
 class CurrentWorkoutResponse(AppBaseModel):
     active: bool
     started_at: str | None
@@ -233,6 +301,7 @@ class CurrentWorkoutResponse(AppBaseModel):
     load_metrics: LoadMetricsResponse | None
     recovery_context: RecoveryContextResponse | None
     next_workout_recommendation: NextWorkoutRecommendationResponse | None
+    garmin_recovery: GarminRecoverySnapshotResponse | None
 
 
 class FinishCurrentWorkoutResponse(AppBaseModel):

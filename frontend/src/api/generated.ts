@@ -39,6 +39,7 @@ export type CurrentWorkoutResponse = {
   active: boolean;
   elapsed_seconds: number;
   exercises: Array<CurrentWorkoutExerciseResponse>;
+  garmin_recovery?: GarminRecoverySnapshotResponse | null;
   load_metrics?: LoadMetricsResponse | null;
   lower_back_pain?: number | null;
   next_workout_recommendation?: NextWorkoutRecommendationResponse | null;
@@ -133,6 +134,76 @@ export type ExercisesResponse = {
 export type FinishCurrentWorkoutResponse = {
   current_workout: CurrentWorkoutResponse;
   workout_id: number;
+};
+
+export type GarminDailyMetricResponse = {
+  body_battery_end?: number | null;
+  body_battery_start?: number | null;
+  date: string;
+  hrv_ms?: number | null;
+  raw_diagnostics: Record<string, unknown>;
+  resting_heart_rate?: number | null;
+  steps?: number | null;
+  stress_avg?: number | null;
+  synced_at: string;
+};
+
+export type GarminDailyMetricsResponse = {
+  days: number;
+  metrics: Array<GarminDailyMetricResponse>;
+};
+
+export type GarminDisconnectResponse = {
+  connected: boolean;
+  last_synced_at?: string | null;
+  latest_metric?: GarminDailyMetricResponse | null;
+  pending_mfa: boolean;
+};
+
+export type GarminLoginRequest = {
+  password: string;
+  username: string;
+};
+
+export type GarminLoginResponse = {
+  connected: boolean;
+  mfa_required: boolean;
+  mfa_token?: string | null;
+};
+
+export type GarminMfaRequest = {
+  code: string;
+  mfa_token: string;
+};
+
+export type GarminRecoverySnapshotResponse = {
+  connected: boolean;
+  last_synced_at?: string | null;
+  latest?: GarminDailyMetricResponse | null;
+  message: string;
+  sample_count_35d: number;
+  today?: GarminDailyMetricResponse | null;
+  yesterday?: GarminDailyMetricResponse | null;
+};
+
+export type GarminStatusResponse = {
+  connected: boolean;
+  last_synced_at?: string | null;
+  latest_metric?: GarminDailyMetricResponse | null;
+  pending_mfa: boolean;
+};
+
+export type GarminSyncRequest = {
+  days?: number | null;
+};
+
+export type GarminSyncResponse = {
+  days: number;
+  errors: Record<string, string>;
+  saved_dates: Array<string>;
+  skipped_dates: Array<string>;
+  status: GarminStatusResponse;
+  synced: boolean;
 };
 
 export type HTTPValidationError = {
@@ -294,6 +365,16 @@ export type ApiSchemas = {
   ExerciseWeightsUpdateRequest: ExerciseWeightsUpdateRequest;
   ExercisesResponse: ExercisesResponse;
   FinishCurrentWorkoutResponse: FinishCurrentWorkoutResponse;
+  GarminDailyMetricResponse: GarminDailyMetricResponse;
+  GarminDailyMetricsResponse: GarminDailyMetricsResponse;
+  GarminDisconnectResponse: GarminDisconnectResponse;
+  GarminLoginRequest: GarminLoginRequest;
+  GarminLoginResponse: GarminLoginResponse;
+  GarminMfaRequest: GarminMfaRequest;
+  GarminRecoverySnapshotResponse: GarminRecoverySnapshotResponse;
+  GarminStatusResponse: GarminStatusResponse;
+  GarminSyncRequest: GarminSyncRequest;
+  GarminSyncResponse: GarminSyncResponse;
   HTTPValidationError: HTTPValidationError;
   LoadMetricsResponse: LoadMetricsResponse;
   NextWorkoutRecommendationResponse: NextWorkoutRecommendationResponse;
