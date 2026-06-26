@@ -2,6 +2,8 @@ import { jsonBody, requestJson } from "./client";
 import type {
   GarminDailyMetricsResponse,
   GarminLoginResponse,
+  GarminStatsRange,
+  GarminStatsResponse,
   GarminStatus,
   GarminSyncResponse,
 } from "./types";
@@ -40,5 +42,11 @@ export function syncGarmin(days?: number) {
 export function getGarminDailyMetrics(days = 35) {
   return requestJson<GarminDailyMetricsResponse>(
     `${base}/daily?days=${encodeURIComponent(String(days))}`,
+  );
+}
+
+export function getGarminStats(range: GarminStatsRange = "90") {
+  return requestJson<GarminStatsResponse>(
+    `${base}/stats?range=${encodeURIComponent(range)}`,
   );
 }

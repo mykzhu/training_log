@@ -85,6 +85,10 @@ label {
   width: min(100%, 820px);
 }
 
+.app-shell-garmin {
+  width: min(100%, 920px);
+}
+
 .app-header {
   display: flex;
   align-items: center;
@@ -756,6 +760,33 @@ label {
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
+}
+
+.garmin-stats-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.garmin-stats-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.stats-range-control.garmin-range-control {
+  grid-template-columns: repeat(5, minmax(44px, 1fr));
+}
+
+.dashboard-grid.garmin-summary-grid {
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+}
+
+.garmin-low-data {
+  border-color: rgba(255, 159, 10, 0.65);
 }
 
 .stats-range-label {
@@ -1615,8 +1646,21 @@ button.load-calendar-cell:focus-visible {
     justify-content: stretch;
   }
 
+  .garmin-stats-header {
+    display: grid;
+  }
+
+  .garmin-stats-actions {
+    align-items: stretch;
+    justify-content: stretch;
+  }
+
   .stats-range-control {
     flex: 1;
+  }
+
+  .garmin-range-control {
+    width: 100%;
   }
 
   .controls-grid,

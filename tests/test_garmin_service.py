@@ -1,6 +1,7 @@
+import json
 import tempfile
 import unittest
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -110,6 +111,35 @@ class FakeGarminConnect:
         return None
 
 
+class ExplodingGarminClient:
+    def has_tokens(self) -> bool:
+        raise AssertionError("stats must not check Garmin tokens")
+
+    def login(self, username: str, password: str):
+        raise AssertionError("stats must not call Garmin login")
+
+    def resume_mfa(self, client: Any, state: Any, code: str) -> None:
+        raise AssertionError("stats must not call Garmin MFA")
+
+    def connect_from_tokens(self) -> object:
+        raise AssertionError("stats must not connect to Garmin")
+
+    def disconnect(self) -> None:
+        raise AssertionError("stats must not disconnect Garmin")
+
+    def get_daily_summary(self, client: Any, metric_date: str) -> Any:
+        raise AssertionError("stats must not fetch Garmin summaries")
+
+    def get_hrv_data(self, client: Any, metric_date: str) -> Any:
+        raise AssertionError("stats must not fetch Garmin HRV")
+
+    def get_stress_data(self, client: Any, metric_date: str) -> Any:
+        raise AssertionError("stats must not fetch Garmin stress")
+
+    def get_body_battery_data(self, client: Any, metric_date: str) -> Any:
+        raise AssertionError("stats must not fetch Garmin Body Battery")
+
+
 class GarminServiceTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -125,6 +155,21 @@ class GarminServiceTests(unittest.TestCase):
         config.DB_PATH = self.original_db_path
         config.GARMIN_TOKEN_DIR = self.original_token_dir
         self.temp_dir.cleanup()
+
+    def seed_metric(self, metric_date: str, **overrides: Any) -> None:
+        metric = {
+            "date": metric_date,
+            "resting_heart_rate": 50,
+            "hrv_ms": 40.0,
+            "stress_avg": 25,
+            "body_battery_start": 70,
+            "body_battery_end": 35,
+            "steps": 7000,
+            "synced_at": f"{metric_date}T08:00:00",
+            "raw_diagnostics": {"seed": {"ok": True}},
+        }
+        metric.update(overrides)
+        garmin_repository.upsert_daily_metric(metric)
 
     def test_sync_extracts_fenix_style_payload_shapes(self) -> None:
         payloads = {
@@ -229,6 +274,161 @@ class GarminServiceTests(unittest.TestCase):
         adapter.disconnect()
 
         self.assertFalse(token_file.exists())
+
+    def test_stats_with_no_rows_returns_stable_empty_response(self) -> None:
+        service = GarminService(ExplodingGarminClient())
+
+        response = service.stats("90", today=date(2026, 6, 26))
+
+        self.assertEqual(response["range"], "90")
+        self.assertEqual(response["date_from"], "2026-03-29")
+        self.assertEqual(response["date_to"], "2026-06-26")
+        self.assertEqual(response["metric_count"], 0)
+        self.assertEqual(response["coverage"]["expected_days"], 90)
+        self.assertEqual(response["coverage"]["available_days"], 0)
+        self.assertEqual(response["coverage"]["missing_days"], 90)
+        self.assertIsNone(response["latest_metric"])
+        self.assertEqual(response["series"], [])
+        self.assertEqual(
+            response["baselines"],
+            {
+                "resting_heart_rate": None,
+                "hrv_ms": None,
+                "stress_avg": None,
+                "steps": None,
+            },
+        )
+
+    def test_stats_supports_expected_ranges(self) -> None:
+        self.seed_metric("2026-06-24")
+        service = GarminService(ExplodingGarminClient())
+
+        for range_value, days in (("35", 35), ("90", 90), ("180", 180), ("365", 365)):
+            with self.subTest(range_value=range_value):
+                response = service.stats(range_value, today=date(2026, 6, 26))
+                expected_start = (date(2026, 6, 26) - timedelta(days=days - 1)).isoformat()
+
+                self.assertEqual(response["range"], range_value)
+                self.assertEqual(response["date_from"], expected_start)
+                self.assertEqual(response["date_to"], "2026-06-26")
+                self.assertEqual(response["coverage"]["expected_days"], days)
+
+        all_response = service.stats("all", today=date(2026, 6, 26))
+
+        self.assertEqual(all_response["range"], "all")
+        self.assertEqual(all_response["date_from"], "2026-06-24")
+        self.assertEqual(all_response["date_to"], "2026-06-24")
+        self.assertIsNone(all_response["coverage"]["expected_days"])
+        self.assertIsNone(all_response["coverage"]["missing_days"])
+
+    def test_stats_rejects_unknown_range(self) -> None:
+        service = GarminService(ExplodingGarminClient())
+
+        with self.assertRaises(ValueError):
+            service.stats("14", today=date(2026, 6, 26))
+
+    def test_stats_series_is_chronological(self) -> None:
+        self.seed_metric("2026-06-25")
+        self.seed_metric("2026-06-23")
+        self.seed_metric("2026-06-24")
+        service = GarminService(ExplodingGarminClient())
+
+        response = service.stats("35", today=date(2026, 6, 26))
+
+        self.assertEqual(
+            [point["date"] for point in response["series"]],
+            ["2026-06-23", "2026-06-24", "2026-06-25"],
+        )
+
+    def test_stats_preserves_null_metric_values(self) -> None:
+        self.seed_metric(
+            "2026-06-26",
+            resting_heart_rate=None,
+            hrv_ms=None,
+            stress_avg=None,
+            body_battery_start=None,
+            body_battery_end=None,
+            steps=None,
+        )
+        service = GarminService(ExplodingGarminClient())
+
+        point = service.stats("35", today=date(2026, 6, 26))["series"][0]
+
+        self.assertIsNone(point["resting_heart_rate"])
+        self.assertIsNone(point["hrv_ms"])
+        self.assertIsNone(point["stress_avg"])
+        self.assertIsNone(point["body_battery_start"])
+        self.assertIsNone(point["body_battery_end"])
+        self.assertIsNone(point["steps"])
+
+    def test_stats_coverage_counts_only_selected_range(self) -> None:
+        self.seed_metric("2026-05-22")
+        self.seed_metric("2026-06-01")
+        self.seed_metric("2026-06-10")
+        self.seed_metric("2026-06-26")
+        service = GarminService(ExplodingGarminClient())
+
+        response = service.stats("35", today=date(2026, 6, 26))
+
+        self.assertEqual(response["metric_count"], 3)
+        self.assertEqual(response["coverage"]["available_days"], 3)
+        self.assertEqual(response["coverage"]["missing_days"], 32)
+
+    def test_stats_baselines_require_enough_samples(self) -> None:
+        for offset in range(6):
+            metric_date = (date(2026, 6, 26) - timedelta(days=offset)).isoformat()
+            self.seed_metric(metric_date, resting_heart_rate=50 + offset)
+        service = GarminService(ExplodingGarminClient())
+
+        response = service.stats("35", today=date(2026, 6, 26))
+
+        self.assertIsNone(response["baselines"]["resting_heart_rate"])
+
+    def test_stats_baselines_use_recent_median_with_enough_samples(self) -> None:
+        for offset in range(8):
+            metric_date = (date(2026, 6, 26) - timedelta(days=offset)).isoformat()
+            self.seed_metric(
+                metric_date,
+                resting_heart_rate=50 + offset,
+                hrv_ms=40.0 + offset,
+                stress_avg=20 + offset,
+                steps=1000 * (offset + 1),
+            )
+        service = GarminService(ExplodingGarminClient())
+
+        response = service.stats("35", today=date(2026, 6, 26))
+
+        self.assertEqual(response["baselines"]["resting_heart_rate"], 53.5)
+        self.assertEqual(response["baselines"]["hrv_ms"], 43.5)
+        self.assertEqual(response["baselines"]["stress_avg"], 23.5)
+        self.assertEqual(response["baselines"]["steps"], 4500.0)
+
+    def test_stats_works_when_disconnected_but_history_exists(self) -> None:
+        self.seed_metric("2026-06-26", hrv_ms=44.0)
+        fake_client = FakeGarminDataClient({})
+        fake_client.connected = False
+        service = GarminService(fake_client)
+
+        response = service.stats("35", today=date(2026, 6, 26))
+
+        self.assertEqual(response["metric_count"], 1)
+        self.assertEqual(response["series"][0]["hrv_ms"], 44.0)
+
+    def test_stats_response_never_exposes_raw_diagnostics(self) -> None:
+        self.seed_metric("2026-06-26")
+        service = GarminService(ExplodingGarminClient())
+
+        response = service.stats("35", today=date(2026, 6, 26))
+
+        self.assertNotIn("raw_diagnostics", json.dumps(response))
+
+    def test_stats_does_not_call_garmin_client(self) -> None:
+        self.seed_metric("2026-06-26")
+        service = GarminService(ExplodingGarminClient())
+
+        response = service.stats("35", today=date(2026, 6, 26))
+
+        self.assertEqual(response["metric_count"], 1)
 
     def test_only_garmin_client_imports_garminconnect(self) -> None:
         app_dir = Path(__file__).resolve().parents[1] / "app"

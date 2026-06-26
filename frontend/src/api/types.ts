@@ -213,6 +213,42 @@ export type GarminDailyMetricsResponse = {
   days: number;
   metrics: GarminDailyMetric[];
 };
+
+export type GarminStatsRange = "35" | "90" | "180" | "365" | "all";
+
+export type GarminStatsPoint = {
+  date: string;
+  resting_heart_rate: number | null;
+  hrv_ms: number | null;
+  stress_avg: number | null;
+  body_battery_start: number | null;
+  body_battery_end: number | null;
+  steps: number | null;
+};
+
+export type GarminStatsResponse = {
+  range: GarminStatsRange;
+  date_from: string | null;
+  date_to: string | null;
+  metric_count: number;
+  coverage: {
+    expected_days: number | null;
+    available_days: number;
+    missing_days: number | null;
+  };
+  latest_metric: {
+    date: string;
+    synced_at: string;
+  } | null;
+  series: GarminStatsPoint[];
+  baselines: {
+    resting_heart_rate: number | null;
+    hrv_ms: number | null;
+    stress_avg: number | null;
+    steps: number | null;
+  };
+};
+
 export type CurrentWorkout = {
   active: boolean;
   started_at: string | null;

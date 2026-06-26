@@ -305,6 +305,45 @@ class GarminDailyMetricsResponse(AppBaseModel):
     metrics: list[GarminDailyMetricResponse]
 
 
+class GarminStatsPointResponse(AppBaseModel):
+    date: str
+    resting_heart_rate: int | None
+    hrv_ms: float | None
+    stress_avg: int | None
+    body_battery_start: int | None
+    body_battery_end: int | None
+    steps: int | None
+
+
+class GarminStatsCoverageResponse(AppBaseModel):
+    expected_days: int | None
+    available_days: int
+    missing_days: int | None
+
+
+class GarminStatsLatestMetricResponse(AppBaseModel):
+    date: str
+    synced_at: str
+
+
+class GarminStatsBaselinesResponse(AppBaseModel):
+    resting_heart_rate: float | None
+    hrv_ms: float | None
+    stress_avg: float | None
+    steps: float | None
+
+
+class GarminStatsResponse(AppBaseModel):
+    range: str
+    date_from: str | None
+    date_to: str | None
+    metric_count: int
+    coverage: GarminStatsCoverageResponse
+    latest_metric: GarminStatsLatestMetricResponse | None
+    series: list[GarminStatsPointResponse]
+    baselines: GarminStatsBaselinesResponse
+
+
 class CurrentWorkoutResponse(AppBaseModel):
     active: bool
     started_at: str | None

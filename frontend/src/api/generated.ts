@@ -203,6 +203,45 @@ export type GarminRecoverySnapshotResponse = {
   yesterday?: GarminDailyMetricResponse | null;
 };
 
+export type GarminStatsBaselinesResponse = {
+  hrv_ms?: number | null;
+  resting_heart_rate?: number | null;
+  steps?: number | null;
+  stress_avg?: number | null;
+};
+
+export type GarminStatsCoverageResponse = {
+  available_days: number;
+  expected_days?: number | null;
+  missing_days?: number | null;
+};
+
+export type GarminStatsLatestMetricResponse = {
+  date: string;
+  synced_at: string;
+};
+
+export type GarminStatsPointResponse = {
+  body_battery_end?: number | null;
+  body_battery_start?: number | null;
+  date: string;
+  hrv_ms?: number | null;
+  resting_heart_rate?: number | null;
+  steps?: number | null;
+  stress_avg?: number | null;
+};
+
+export type GarminStatsResponse = {
+  baselines: GarminStatsBaselinesResponse;
+  coverage: GarminStatsCoverageResponse;
+  date_from?: string | null;
+  date_to?: string | null;
+  latest_metric?: GarminStatsLatestMetricResponse | null;
+  metric_count: number;
+  range: string;
+  series: Array<GarminStatsPointResponse>;
+};
+
 export type GarminStatusResponse = {
   connected: boolean;
   last_synced_at?: string | null;
@@ -391,6 +430,11 @@ export type ApiSchemas = {
   GarminMfaRequest: GarminMfaRequest;
   GarminReadinessAdjustmentResponse: GarminReadinessAdjustmentResponse;
   GarminRecoverySnapshotResponse: GarminRecoverySnapshotResponse;
+  GarminStatsBaselinesResponse: GarminStatsBaselinesResponse;
+  GarminStatsCoverageResponse: GarminStatsCoverageResponse;
+  GarminStatsLatestMetricResponse: GarminStatsLatestMetricResponse;
+  GarminStatsPointResponse: GarminStatsPointResponse;
+  GarminStatsResponse: GarminStatsResponse;
   GarminStatusResponse: GarminStatusResponse;
   GarminSyncRequest: GarminSyncRequest;
   GarminSyncResponse: GarminSyncResponse;

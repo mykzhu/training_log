@@ -1,7 +1,7 @@
 import logging
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from statistics import mean
+from statistics import mean, median
 from typing import Any, Protocol
 from uuid import uuid4
 
@@ -13,6 +13,15 @@ logger = logging.getLogger("training_log")
 DEFAULT_SYNC_DAYS = 35
 MIN_SYNC_DAYS = 1
 MAX_SYNC_DAYS = 90
+GARMIN_STATS_RANGES = {"35": 35, "90": 90, "180": 180, "365": 365}
+GARMIN_STATS_BASELINE_DAYS = 28
+GARMIN_STATS_MIN_BASELINE_SAMPLES = 7
+GARMIN_STATS_BASELINE_COLUMNS = (
+    "resting_heart_rate",
+    "hrv_ms",
+    "stress_avg",
+    "steps",
+)
 PENDING_MFA: dict[str, "PendingMfaSession"] = {}
 
 
@@ -48,6 +57,64 @@ def local_date_range(days: int, *, today: date | None = None) -> list[str]:
         (today - timedelta(days=offset)).isoformat()
         for offset in range(days)
     ]
+
+
+def garmin_stats_range_days(range_value: str | None) -> tuple[str, int | None]:
+    normalized = str(range_value or "90").lower()
+    if normalized == "all":
+        return normalized, None
+    if normalized not in GARMIN_STATS_RANGES:
+        raise ValueError("Stats range must be one of 35, 90, 180, 365, or all.")
+    return normalized, GARMIN_STATS_RANGES[normalized]
+
+
+def stats_point(metric: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "date": metric.get("date"),
+        **{column: metric.get(column) for column in garmin_repository.GARMIN_VALUE_COLUMNS},
+    }
+
+
+def rounded_median(values: list[float]) -> float | None:
+    if len(values) < GARMIN_STATS_MIN_BASELINE_SAMPLES:
+        return None
+    return round(float(median(values)), 2)
+
+
+def stats_baselines(
+    metrics: list[dict[str, Any]],
+    *,
+    baseline_end_date: date | None,
+) -> dict[str, float | None]:
+    if baseline_end_date is None:
+        baseline_metrics: list[dict[str, Any]] = []
+    else:
+        baseline_start = (
+            baseline_end_date - timedelta(days=GARMIN_STATS_BASELINE_DAYS - 1)
+        ).isoformat()
+        baseline_end = baseline_end_date.isoformat()
+        baseline_metrics = [
+            metric
+            for metric in metrics
+            if baseline_start <= str(metric.get("date")) <= baseline_end
+        ]
+
+    baselines: dict[str, float | None] = {}
+    for column in GARMIN_STATS_BASELINE_COLUMNS:
+        values = [
+            float(metric[column])
+            for metric in baseline_metrics
+            if isinstance(metric.get(column), (int, float))
+        ]
+        baselines[column] = rounded_median(values)
+
+    return baselines
+
+
+def latest_metric_summary(metric: dict[str, Any] | None) -> dict[str, str] | None:
+    if metric is None:
+        return None
+    return {"date": str(metric["date"]), "synced_at": str(metric["synced_at"])}
 
 
 def number_from_keys(payload: Any, keys: tuple[str, ...]) -> float | None:
@@ -342,6 +409,59 @@ class GarminService:
         return {
             "days": sync_days,
             "metrics": garmin_repository.list_daily_metrics(start_date=start_date),
+        }
+
+    def stats(
+        self,
+        range_value: str = "90",
+        *,
+        today: date | None = None,
+    ) -> dict[str, Any]:
+        selected_range, expected_days = garmin_stats_range_days(range_value)
+        today = today or date.today()
+
+        if expected_days is None:
+            start_date = None
+            end_date = None
+        else:
+            start_date = (today - timedelta(days=expected_days - 1)).isoformat()
+            end_date = today.isoformat()
+
+        metrics = garmin_repository.list_daily_metrics_chronological(
+            start_date=start_date,
+            end_date=end_date,
+        )
+        series = [stats_point(metric) for metric in metrics]
+
+        if expected_days is None:
+            date_from = metrics[0]["date"] if metrics else None
+            date_to = metrics[-1]["date"] if metrics else None
+            baseline_end_date = (
+                datetime.fromisoformat(str(date_to)).date() if date_to else None
+            )
+            missing_days = None
+        else:
+            date_from = start_date
+            date_to = end_date
+            baseline_end_date = today
+            missing_days = max(expected_days - len(metrics), 0)
+
+        return {
+            "range": selected_range,
+            "date_from": date_from,
+            "date_to": date_to,
+            "metric_count": len(metrics),
+            "coverage": {
+                "expected_days": expected_days,
+                "available_days": len(metrics),
+                "missing_days": missing_days,
+            },
+            "latest_metric": latest_metric_summary(garmin_repository.get_latest_metric()),
+            "series": series,
+            "baselines": stats_baselines(
+                metrics,
+                baseline_end_date=baseline_end_date,
+            ),
         }
 
     def recovery_snapshot(self, *, today: date | None = None) -> dict[str, Any]:

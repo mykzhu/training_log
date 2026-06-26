@@ -13,6 +13,7 @@ import app.routes.api_garmin as api_garmin
 from app.routes.api_garmin import (
     disconnect_garmin,
     get_garmin_daily_metrics,
+    get_garmin_stats,
     get_garmin_status,
     login_garmin,
     submit_garmin_mfa,
@@ -24,6 +25,7 @@ from app.schemas import GarminLoginRequest, GarminMfaRequest, GarminSyncRequest
 class FakeGarminApiService:
     def __init__(self) -> None:
         self.synced_days: int | None = None
+        self.stats_range: str | None = None
         self.disconnected = False
 
     def status(self) -> dict[str, Any]:
@@ -58,6 +60,28 @@ class FakeGarminApiService:
     def list_daily(self, days: int | None = None) -> dict[str, Any]:
         return {"days": 35 if days is None else days, "metrics": []}
 
+    def stats(self, range_value: str = "90") -> dict[str, Any]:
+        self.stats_range = range_value
+        return {
+            "range": range_value,
+            "date_from": "2026-03-29",
+            "date_to": "2026-06-26",
+            "metric_count": 0,
+            "coverage": {
+                "expected_days": 90,
+                "available_days": 0,
+                "missing_days": 90,
+            },
+            "latest_metric": None,
+            "series": [],
+            "baselines": {
+                "resting_heart_rate": None,
+                "hrv_ms": None,
+                "stress_avg": None,
+                "steps": None,
+            },
+        }
+
 
 class GarminApiTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -87,6 +111,7 @@ class GarminApiTests(unittest.TestCase):
         self.assertIn(("/api/v1/garmin/disconnect", ("POST",)), routes)
         self.assertIn(("/api/v1/garmin/sync", ("POST",)), routes)
         self.assertIn(("/api/v1/garmin/daily", ("GET",)), routes)
+        self.assertIn(("/api/v1/garmin/stats", ("GET",)), routes)
 
     def test_status_login_mfa_disconnect_sync_and_daily_routes_delegate(self) -> None:
         self.assertTrue(get_garmin_status()["connected"])
@@ -104,10 +129,13 @@ class GarminApiTests(unittest.TestCase):
 
         sync_response = sync_garmin(GarminSyncRequest(days=7))
         daily_response = get_garmin_daily_metrics(days=14)
+        stats_response = get_garmin_stats(range_value="180")
 
         self.assertEqual(sync_response["days"], 7)
         self.assertEqual(self.fake_service.synced_days, 7)
         self.assertEqual(daily_response["days"], 14)
+        self.assertEqual(stats_response["range"], "180")
+        self.assertEqual(self.fake_service.stats_range, "180")
         self.assertTrue(self.fake_service.disconnected)
 
     def test_sync_days_model_allows_only_one_to_ninety(self) -> None:

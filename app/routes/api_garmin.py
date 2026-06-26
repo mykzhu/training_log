@@ -9,6 +9,7 @@ from app.schemas import (
     GarminLoginRequest,
     GarminLoginResponse,
     GarminMfaRequest,
+    GarminStatsResponse,
     GarminStatusResponse,
     GarminSyncRequest,
     GarminSyncResponse,
@@ -70,5 +71,15 @@ def get_garmin_daily_metrics(
 ) -> dict[str, Any]:
     try:
         return garmin_service.list_daily(days)
+    except Exception as exc:
+        raise garmin_error(exc) from exc
+
+
+@router.get("/stats", response_model=GarminStatsResponse)
+def get_garmin_stats(
+    range_value: str = Query(default="90", alias="range"),
+) -> dict[str, Any]:
+    try:
+        return garmin_service.stats(range_value)
     except Exception as exc:
         raise garmin_error(exc) from exc

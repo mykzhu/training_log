@@ -84,6 +84,39 @@ def list_daily_metrics(
     return [serialize_metric_row(row) for row in rows]
 
 
+def list_daily_metrics_chronological(
+    *,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> list[dict[str, Any]]:
+    where = []
+    params: list[Any] = []
+
+    if start_date is not None:
+        where.append("date >= ?")
+        params.append(start_date)
+
+    if end_date is not None:
+        where.append("date <= ?")
+        params.append(end_date)
+
+    where_sql = f"WHERE {' AND '.join(where)}" if where else ""
+    columns = ("date", *GARMIN_VALUE_COLUMNS, "synced_at")
+
+    with get_db() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT {', '.join(columns)}
+            FROM garmin_daily_metrics
+            {where_sql}
+            ORDER BY date ASC
+            """,
+            params,
+        ).fetchall()
+
+    return [{column: row[column] for column in columns} for row in rows]
+
+
 def get_daily_metric(metric_date: str) -> dict[str, Any] | None:
     with get_db() as conn:
         row = conn.execute(

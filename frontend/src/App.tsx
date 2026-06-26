@@ -6,6 +6,7 @@ import HistoryPage from "./pages/HistoryPage";
 import SettingsPage from "./pages/SettingsPage";
 
 const ExerciseStatsPage = lazy(() => import("./pages/ExerciseStatsPage"));
+const GarminStatsPage = lazy(() => import("./pages/GarminStatsPage"));
 const StatsPage = lazy(() => import("./pages/StatsPage"));
 
 type PageKey =
@@ -13,6 +14,7 @@ type PageKey =
   | "history"
   | "stats"
   | "exercise-stats"
+  | "garmin"
   | "backup"
   | "settings";
 
@@ -20,6 +22,7 @@ const pages: Array<{ key: PageKey; label: string }> = [
   { key: "current", label: "Current" },
   { key: "history", label: "History" },
   { key: "stats", label: "Stats" },
+  { key: "garmin", label: "Garmin" },
   { key: "backup", label: "Backup" },
   { key: "settings", label: "Settings" },
 ];
@@ -32,6 +35,7 @@ const historyNavItems: Array<{
 }> = [
   { key: "current", label: "Current", page: "current", path: "/" },
   { key: "stats", label: "Stats", page: "stats", path: "/stats" },
+  { key: "garmin", label: "Garmin", page: "garmin", path: "/garmin" },
   { key: "backup", label: "Backup", page: "backup", path: "/backup" },
   { key: "settings", label: "Settings", page: "settings", path: "/settings" },
 ];
@@ -45,6 +49,9 @@ function pageFromPath(pathname: string): PageKey {
   }
   if (pathname.startsWith("/stats")) {
     return "stats";
+  }
+  if (pathname.startsWith("/garmin")) {
+    return "garmin";
   }
   if (pathname.startsWith("/backup")) {
     return "backup";
@@ -195,6 +202,11 @@ export default function App() {
       {activePage === "exercise-stats" && exerciseStatsId !== null && (
         <Suspense fallback={<section className="panel">Loading</section>}>
           <ExerciseStatsPage exerciseId={exerciseStatsId} />
+        </Suspense>
+      )}
+      {activePage === "garmin" && (
+        <Suspense fallback={<section className="panel">Loading</section>}>
+          <GarminStatsPage />
         </Suspense>
       )}
       {activePage === "backup" && <BackupPage />}

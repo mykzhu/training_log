@@ -848,6 +848,149 @@
         "title": "GarminRecoverySnapshotResponse",
         "type": "object"
       },
+      "GarminStatsBaselinesResponse": {
+        "properties": {
+          "hrv_ms": {
+            "title": "Hrv Ms",
+            "type": "number"
+          },
+          "resting_heart_rate": {
+            "title": "Resting Heart Rate",
+            "type": "number"
+          },
+          "steps": {
+            "title": "Steps",
+            "type": "number"
+          },
+          "stress_avg": {
+            "title": "Stress Avg",
+            "type": "number"
+          }
+        },
+        "title": "GarminStatsBaselinesResponse",
+        "type": "object"
+      },
+      "GarminStatsCoverageResponse": {
+        "properties": {
+          "available_days": {
+            "title": "Available Days",
+            "type": "integer"
+          },
+          "expected_days": {
+            "title": "Expected Days",
+            "type": "integer"
+          },
+          "missing_days": {
+            "title": "Missing Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "available_days"
+        ],
+        "title": "GarminStatsCoverageResponse",
+        "type": "object"
+      },
+      "GarminStatsLatestMetricResponse": {
+        "properties": {
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "synced_at": {
+            "title": "Synced At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "synced_at"
+        ],
+        "title": "GarminStatsLatestMetricResponse",
+        "type": "object"
+      },
+      "GarminStatsPointResponse": {
+        "properties": {
+          "body_battery_end": {
+            "title": "Body Battery End",
+            "type": "integer"
+          },
+          "body_battery_start": {
+            "title": "Body Battery Start",
+            "type": "integer"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "hrv_ms": {
+            "title": "Hrv Ms",
+            "type": "number"
+          },
+          "resting_heart_rate": {
+            "title": "Resting Heart Rate",
+            "type": "integer"
+          },
+          "steps": {
+            "title": "Steps",
+            "type": "integer"
+          },
+          "stress_avg": {
+            "title": "Stress Avg",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "date"
+        ],
+        "title": "GarminStatsPointResponse",
+        "type": "object"
+      },
+      "GarminStatsResponse": {
+        "properties": {
+          "baselines": {
+            "$ref": "#/components/schemas/GarminStatsBaselinesResponse"
+          },
+          "coverage": {
+            "$ref": "#/components/schemas/GarminStatsCoverageResponse"
+          },
+          "date_from": {
+            "title": "Date From",
+            "type": "string"
+          },
+          "date_to": {
+            "title": "Date To",
+            "type": "string"
+          },
+          "latest_metric": {
+            "$ref": "#/components/schemas/GarminStatsLatestMetricResponse"
+          },
+          "metric_count": {
+            "title": "Metric Count",
+            "type": "integer"
+          },
+          "range": {
+            "title": "Range",
+            "type": "string"
+          },
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/GarminStatsPointResponse"
+            },
+            "title": "Series",
+            "type": "array"
+          }
+        },
+        "required": [
+          "range",
+          "metric_count",
+          "coverage",
+          "series",
+          "baselines"
+        ],
+        "title": "GarminStatsResponse",
+        "type": "object"
+      },
       "GarminStatusResponse": {
         "properties": {
           "connected": {
@@ -2451,6 +2594,49 @@
           }
         },
         "summary": "Submit Garmin Mfa",
+        "tags": [
+          "garmin"
+        ]
+      }
+    },
+    "/api/v1/garmin/stats": {
+      "get": {
+        "operationId": "get_garmin_stats_api_v1_garmin_stats_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "range",
+            "required": false,
+            "schema": {
+              "default": "90",
+              "title": "Range",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarminStatsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Garmin Stats",
         "tags": [
           "garmin"
         ]

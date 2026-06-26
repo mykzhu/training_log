@@ -381,7 +381,7 @@ Regression tests to add or keep:
 
 # Future phases
 
-## [ ] Phase 12 — Garmin stats charts page
+## [x] Phase 12 — Garmin stats charts page
 
 Branch:
 
