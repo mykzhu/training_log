@@ -7,6 +7,8 @@ from app.repositories.drafts import EmptyDraftError
 from app.schemas import (
     AddExerciseRequest,
     AddSetRequest,
+    CurrentWorkoutResponse,
+    FinishCurrentWorkoutResponse,
     UpdateSetRequest,
     WorkoutMetadataUpdate,
 )
@@ -123,18 +125,18 @@ def get_exercise_or_404(exercise_id: int) -> dict[str, Any]:
     return dict(exercise)
 
 
-@router.get("")
+@router.get("", response_model=CurrentWorkoutResponse)
 def get_current_workout() -> dict[str, Any]:
     return build_current_workout_response()
 
 
-@router.post("/start")
+@router.post("/start", response_model=CurrentWorkoutResponse)
 def start_current_workout() -> dict[str, Any]:
     draft, _ = start_active_workout_draft()
     return build_current_workout_response(draft)
 
 
-@router.patch("/metadata")
+@router.patch("/metadata", response_model=CurrentWorkoutResponse)
 def update_current_workout_metadata(
     payload: WorkoutMetadataUpdate,
 ) -> dict[str, Any]:
@@ -146,7 +148,7 @@ def update_current_workout_metadata(
     return build_current_workout_response()
 
 
-@router.post("/exercises")
+@router.post("/exercises", response_model=CurrentWorkoutResponse)
 def add_current_workout_exercise(
     payload: AddExerciseRequest,
 ) -> dict[str, Any]:
@@ -163,7 +165,7 @@ def add_current_workout_exercise(
     return build_current_workout_response()
 
 
-@router.delete("/exercises/{draft_exercise_id}")
+@router.delete("/exercises/{draft_exercise_id}", response_model=CurrentWorkoutResponse)
 def delete_current_workout_exercise(
     draft_exercise_id: int,
 ) -> dict[str, Any]:
@@ -175,7 +177,7 @@ def delete_current_workout_exercise(
     return build_current_workout_response()
 
 
-@router.post("/exercises/{draft_exercise_id}/sets")
+@router.post("/exercises/{draft_exercise_id}/sets", response_model=CurrentWorkoutResponse)
 def add_current_workout_set(
     draft_exercise_id: int,
     payload: AddSetRequest,
@@ -192,7 +194,7 @@ def add_current_workout_set(
     return build_current_workout_response()
 
 
-@router.post("/exercises/{draft_exercise_id}/sets/duplicate")
+@router.post("/exercises/{draft_exercise_id}/sets/duplicate", response_model=CurrentWorkoutResponse)
 def duplicate_current_workout_set(
     draft_exercise_id: int,
 ) -> dict[str, Any]:
@@ -207,7 +209,7 @@ def duplicate_current_workout_set(
     return build_current_workout_response()
 
 
-@router.patch("/sets/{draft_set_id}")
+@router.patch("/sets/{draft_set_id}", response_model=CurrentWorkoutResponse)
 def update_current_workout_set(
     draft_set_id: int,
     payload: UpdateSetRequest,
@@ -227,7 +229,7 @@ def update_current_workout_set(
     return build_current_workout_response()
 
 
-@router.delete("/sets/{draft_set_id}")
+@router.delete("/sets/{draft_set_id}", response_model=CurrentWorkoutResponse)
 def delete_current_workout_set(
     draft_set_id: int,
 ) -> dict[str, Any]:
@@ -239,7 +241,7 @@ def delete_current_workout_set(
     return build_current_workout_response()
 
 
-@router.post("/finish")
+@router.post("/finish", response_model=FinishCurrentWorkoutResponse)
 def finish_current_workout() -> dict[str, Any]:
     draft = require_active_draft()
 
@@ -266,7 +268,7 @@ def finish_current_workout() -> dict[str, Any]:
     }
 
 
-@router.delete("")
+@router.delete("", response_model=CurrentWorkoutResponse)
 def clear_current_workout() -> dict[str, Any]:
     clear_active_workout_draft()
     return build_current_workout_response()

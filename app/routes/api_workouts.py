@@ -23,7 +23,10 @@ from app.repositories.workouts import (
 from app.schemas import (
     AddExerciseRequest,
     AddSetRequest,
+    DeleteWorkoutResponse,
     UpdateSetRequest,
+    WorkoutDetailResponse,
+    WorkoutsResponse,
     WorkoutUpdateRequest,
 )
 from app.services.stats_service import (
@@ -163,7 +166,7 @@ def calculate_duration_seconds(
         return None
 
 
-@router.get("")
+@router.get("", response_model=WorkoutsResponse)
 def get_workouts(
     limit: int = Query(default=30, ge=1, le=500),
 ) -> dict[str, Any]:
@@ -174,7 +177,7 @@ def get_workouts(
     }
 
 
-@router.get("/{workout_id}")
+@router.get("/{workout_id}", response_model=WorkoutDetailResponse)
 def get_workout_detail(workout_id: int) -> dict[str, Any]:
     workout = get_workout(workout_id)
     if workout is None:
@@ -212,7 +215,7 @@ def get_workout_detail(workout_id: int) -> dict[str, Any]:
     }
 
 
-@router.patch("/{workout_id}")
+@router.patch("/{workout_id}", response_model=WorkoutDetailResponse)
 def update_workout_endpoint(
     workout_id: int,
     payload: WorkoutUpdateRequest,
@@ -221,7 +224,7 @@ def update_workout_endpoint(
     if workout is None:
         raise HTTPException(status_code=404, detail="Workout not found.")
 
-    changed_fields = payload.__fields_set__
+    changed_fields = payload.model_fields_set
     if not changed_fields:
         raise HTTPException(status_code=400, detail="No workout fields provided.")
 
@@ -262,7 +265,7 @@ def update_workout_endpoint(
     return get_workout_detail(workout_id)
 
 
-@router.delete("/{workout_id}")
+@router.delete("/{workout_id}", response_model=DeleteWorkoutResponse)
 def delete_workout_endpoint(workout_id: int) -> dict[str, Any]:
     if not delete_workout(workout_id):
         raise HTTPException(status_code=404, detail="Workout not found.")
@@ -273,7 +276,7 @@ def delete_workout_endpoint(workout_id: int) -> dict[str, Any]:
     }
 
 
-@router.post("/{workout_id}/exercises")
+@router.post("/{workout_id}/exercises", response_model=WorkoutDetailResponse)
 def add_workout_exercise_endpoint(
     workout_id: int,
     payload: AddExerciseRequest,
@@ -291,7 +294,7 @@ def add_workout_exercise_endpoint(
     return get_workout_detail(workout_id)
 
 
-@router.delete("/{workout_id}/exercises/{workout_exercise_id}")
+@router.delete("/{workout_id}/exercises/{workout_exercise_id}", response_model=WorkoutDetailResponse)
 def delete_workout_exercise_endpoint(
     workout_id: int,
     workout_exercise_id: int,
@@ -305,7 +308,7 @@ def delete_workout_exercise_endpoint(
     return get_workout_detail(workout_id)
 
 
-@workout_items_router.post("/workout-exercises/{workout_exercise_id}/sets")
+@workout_items_router.post("/workout-exercises/{workout_exercise_id}/sets", response_model=WorkoutDetailResponse)
 def add_workout_exercise_set_endpoint(
     workout_exercise_id: int,
     payload: AddSetRequest,
@@ -326,7 +329,7 @@ def add_workout_exercise_set_endpoint(
     return get_workout_detail(int(workout_exercise["workout_id"]))
 
 
-@workout_items_router.post("/workout-exercises/{workout_exercise_id}/sets/duplicate")
+@workout_items_router.post("/workout-exercises/{workout_exercise_id}/sets/duplicate", response_model=WorkoutDetailResponse)
 def duplicate_workout_exercise_set_endpoint(
     workout_exercise_id: int,
 ) -> dict[str, Any]:
@@ -344,7 +347,7 @@ def duplicate_workout_exercise_set_endpoint(
     return get_workout_detail(int(workout_exercise["workout_id"]))
 
 
-@workout_items_router.patch("/sets/{set_id}")
+@workout_items_router.patch("/sets/{set_id}", response_model=WorkoutDetailResponse)
 def update_set_endpoint(
     set_id: int,
     payload: UpdateSetRequest,
@@ -367,7 +370,7 @@ def update_set_endpoint(
     return get_workout_detail(int(current_set["workout_id"]))
 
 
-@workout_items_router.delete("/sets/{set_id}")
+@workout_items_router.delete("/sets/{set_id}", response_model=WorkoutDetailResponse)
 def delete_set_endpoint(set_id: int) -> dict[str, Any]:
     current_set = delete_set_entry(set_id)
     if current_set is None:

@@ -24,6 +24,7 @@ from app.routes.api_exercises import create_exercise_endpoint
 from app.schemas import (
     AddExerciseRequest,
     AddSetRequest,
+    CurrentWorkoutResponse,
     ExerciseCreateRequest,
     UpdateSetRequest,
     WorkoutMetadataUpdate,
@@ -80,6 +81,27 @@ class CurrentWorkoutApiTests(unittest.TestCase):
             response["next_workout_recommendation"]["title"],
             "Start baseline",
         )
+
+    def test_current_workout_response_model_accepts_draft_sets(self) -> None:
+        deadlift_id = self.exercise_id("Deadlift")
+
+        start_current_workout()
+        response = add_current_workout_exercise(
+            AddExerciseRequest(exercise_id=deadlift_id)
+        )
+        draft_exercise_id = response["exercises"][0]["draft_exercise_id"]
+        add_current_workout_set(
+            draft_exercise_id,
+            AddSetRequest(weight=100.0, reps=5),
+        )
+
+        validated = CurrentWorkoutResponse(**get_current_workout()).dict()
+
+        self.assertEqual(validated["total_sets"], 1)
+        set_entry = validated["exercises"][0]["sets"][0]
+        self.assertEqual(set_entry["weight"], 100.0)
+        self.assertEqual(set_entry["reps"], 5)
+        self.assertNotIn("workout_exercise_id", set_entry)
 
     def test_current_workout_mutation_flow_returns_updated_state(self) -> None:
         deadlift_id = self.exercise_id("Deadlift")

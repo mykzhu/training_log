@@ -2,6 +2,7 @@ import logging
 import sqlite3
 
 from app import config
+from app.migrations.runner import run_migrations
 from app.services.analysis_service import (
     is_supported_profile_key,
     profile_key_for_exercise_name,
@@ -361,103 +362,11 @@ def initialize_exercise_settings(
         seed_initial_weight_options(conn)
         set_metadata(conn, EXERCISE_SETTINGS_WEIGHT_MIGRATION_KEY, "1")
 
-
 def init_db() -> None:
     logger.info("db.init.start db_path=%s", config.DB_PATH)
 
     with get_db() as conn:
-        conn.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS exercises (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL UNIQUE,
-                is_active INTEGER NOT NULL DEFAULT 1,
-                sort_order INTEGER NOT NULL DEFAULT 0,
-                profile_key TEXT
-            );
-
-            CREATE TABLE IF NOT EXISTS workouts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                workout_date TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                finished_at TEXT,
-                duration_seconds INTEGER
-            );
-
-            CREATE TABLE IF NOT EXISTS workout_exercises (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                workout_id INTEGER NOT NULL,
-                exercise_id INTEGER NOT NULL,
-                position INTEGER NOT NULL,
-                FOREIGN KEY (workout_id) REFERENCES workouts(id) ON DELETE CASCADE,
-                FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE CASCADE
-            );
-
-            CREATE TABLE IF NOT EXISTS set_entries (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                workout_exercise_id INTEGER NOT NULL,
-                set_number INTEGER NOT NULL,
-                weight REAL NOT NULL DEFAULT 0,
-                reps INTEGER NOT NULL,
-                created_at TEXT NOT NULL,
-                FOREIGN KEY (workout_exercise_id) REFERENCES workout_exercises(id) ON DELETE CASCADE
-            );
-
-            CREATE TABLE IF NOT EXISTS active_workout_draft (
-                id INTEGER PRIMARY KEY CHECK (id = 1),
-                started_at TEXT NOT NULL,
-                session_rpe INTEGER,
-                lower_back_pain INTEGER,
-                next_workout_exercise_id INTEGER NOT NULL,
-                next_set_id INTEGER NOT NULL,
-                updated_at TEXT NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS active_draft_exercises (
-                id INTEGER PRIMARY KEY,
-                draft_id INTEGER NOT NULL DEFAULT 1,
-                exercise_id INTEGER NOT NULL,
-                position INTEGER NOT NULL,
-                FOREIGN KEY (draft_id) REFERENCES active_workout_draft(id) ON DELETE CASCADE,
-                FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE CASCADE
-            );
-
-            CREATE TABLE IF NOT EXISTS active_draft_sets (
-                id INTEGER PRIMARY KEY,
-                draft_exercise_id INTEGER NOT NULL,
-                set_number INTEGER NOT NULL,
-                weight REAL NOT NULL DEFAULT 0,
-                reps INTEGER NOT NULL,
-                created_at TEXT NOT NULL,
-                FOREIGN KEY (draft_exercise_id) REFERENCES active_draft_exercises(id) ON DELETE CASCADE
-            );
-
-            CREATE TABLE IF NOT EXISTS exercise_weight_options (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                exercise_id INTEGER NOT NULL,
-                weight REAL NOT NULL CHECK (weight >= 0),
-                sort_order INTEGER NOT NULL DEFAULT 0,
-                FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE CASCADE,
-                UNIQUE (exercise_id, weight)
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_exercise_weight_options_exercise
-            ON exercise_weight_options(exercise_id, sort_order, weight);
-
-            CREATE TABLE IF NOT EXISTS app_metadata (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL
-            );
-            """
-        )
-
-        ensure_column(conn, "exercises", "is_active", "INTEGER NOT NULL DEFAULT 1")
-        ensure_column(conn, "exercises", "sort_order", "INTEGER NOT NULL DEFAULT 0")
-        ensure_column(conn, "exercises", "profile_key", "TEXT")
-        ensure_column(conn, "workouts", "session_rpe", "INTEGER")
-        ensure_column(conn, "workouts", "lower_back_pain", "INTEGER")
-        ensure_column(conn, "workouts", "duration_seconds", "INTEGER")
-
+        run_migrations(conn)
         seed_default_exercises(conn)
         initialize_exercise_settings(conn)
         normalize_ordering_columns(conn)

@@ -1,0 +1,2456 @@
+{
+  "components": {
+    "schemas": {
+      "AddExerciseRequest": {
+        "properties": {
+          "exercise_id": {
+            "minimum": 1.0,
+            "title": "Exercise Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "exercise_id"
+        ],
+        "title": "AddExerciseRequest",
+        "type": "object"
+      },
+      "AddSetRequest": {
+        "properties": {
+          "reps": {
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Reps",
+            "type": "integer"
+          },
+          "weight": {
+            "minimum": 0.0,
+            "title": "Weight",
+            "type": "number"
+          }
+        },
+        "required": [
+          "weight",
+          "reps"
+        ],
+        "title": "AddSetRequest",
+        "type": "object"
+      },
+      "BackupMutationResponse": {
+        "properties": {
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Counts",
+            "type": "object"
+          },
+          "reset": {
+            "title": "Reset",
+            "type": "boolean"
+          },
+          "restored": {
+            "title": "Restored",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "counts"
+        ],
+        "title": "BackupMutationResponse",
+        "type": "object"
+      },
+      "BackupPayloadResponse": {
+        "properties": {
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "schema_version"
+        ],
+        "title": "BackupPayloadResponse",
+        "type": "object"
+      },
+      "CurrentWorkoutExerciseResponse": {
+        "properties": {
+          "configured_weights": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Configured Weights",
+            "type": "array"
+          },
+          "default_reps": {
+            "title": "Default Reps",
+            "type": "integer"
+          },
+          "default_weight": {
+            "title": "Default Weight",
+            "type": "number"
+          },
+          "draft_exercise_id": {
+            "title": "Draft Exercise Id",
+            "type": "integer"
+          },
+          "exercise_id": {
+            "title": "Exercise Id",
+            "type": "integer"
+          },
+          "exercise_name": {
+            "title": "Exercise Name",
+            "type": "string"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "profile_key": {
+            "title": "Profile Key",
+            "type": "string"
+          },
+          "sets": {
+            "items": {
+              "$ref": "#/components/schemas/CurrentWorkoutSetEntryResponse"
+            },
+            "title": "Sets",
+            "type": "array"
+          },
+          "total_reps": {
+            "title": "Total Reps",
+            "type": "integer"
+          },
+          "total_sets": {
+            "title": "Total Sets",
+            "type": "integer"
+          },
+          "total_volume": {
+            "title": "Total Volume",
+            "type": "number"
+          }
+        },
+        "required": [
+          "draft_exercise_id",
+          "exercise_id",
+          "exercise_name",
+          "profile_key",
+          "position",
+          "sets",
+          "total_sets",
+          "total_reps",
+          "total_volume",
+          "default_weight",
+          "default_reps",
+          "configured_weights"
+        ],
+        "title": "CurrentWorkoutExerciseResponse",
+        "type": "object"
+      },
+      "CurrentWorkoutResponse": {
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "elapsed_seconds": {
+            "title": "Elapsed Seconds",
+            "type": "integer"
+          },
+          "exercises": {
+            "items": {
+              "$ref": "#/components/schemas/CurrentWorkoutExerciseResponse"
+            },
+            "title": "Exercises",
+            "type": "array"
+          },
+          "load_metrics": {
+            "$ref": "#/components/schemas/LoadMetricsResponse"
+          },
+          "lower_back_pain": {
+            "title": "Lower Back Pain",
+            "type": "integer"
+          },
+          "next_workout_recommendation": {
+            "$ref": "#/components/schemas/NextWorkoutRecommendationResponse"
+          },
+          "recovery_context": {
+            "$ref": "#/components/schemas/RecoveryContextResponse"
+          },
+          "session_rpe": {
+            "title": "Session Rpe",
+            "type": "integer"
+          },
+          "started_at": {
+            "title": "Started At",
+            "type": "string"
+          },
+          "total_reps": {
+            "title": "Total Reps",
+            "type": "integer"
+          },
+          "total_sets": {
+            "title": "Total Sets",
+            "type": "integer"
+          },
+          "total_volume": {
+            "title": "Total Volume",
+            "type": "number"
+          }
+        },
+        "required": [
+          "active",
+          "elapsed_seconds",
+          "total_sets",
+          "total_reps",
+          "total_volume",
+          "exercises"
+        ],
+        "title": "CurrentWorkoutResponse",
+        "type": "object"
+      },
+      "CurrentWorkoutSetEntryResponse": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "reps": {
+            "title": "Reps",
+            "type": "integer"
+          },
+          "set_number": {
+            "title": "Set Number",
+            "type": "integer"
+          },
+          "weight": {
+            "title": "Weight",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "set_number",
+          "weight",
+          "reps",
+          "created_at"
+        ],
+        "title": "CurrentWorkoutSetEntryResponse",
+        "type": "object"
+      },
+      "DeleteWorkoutResponse": {
+        "properties": {
+          "deleted": {
+            "title": "Deleted",
+            "type": "boolean"
+          },
+          "workout_id": {
+            "title": "Workout Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "deleted",
+          "workout_id"
+        ],
+        "title": "DeleteWorkoutResponse",
+        "type": "object"
+      },
+      "ExerciseCreateRequest": {
+        "properties": {
+          "is_active": {
+            "default": true,
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "profile_key": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Profile Key",
+            "type": "string"
+          },
+          "weights": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Weights",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ExerciseCreateRequest",
+        "type": "object"
+      },
+      "ExerciseMutationResponse": {
+        "properties": {
+          "created": {
+            "title": "Created",
+            "type": "boolean"
+          },
+          "exercise": {
+            "$ref": "#/components/schemas/ExerciseResponse"
+          }
+        },
+        "required": [
+          "exercise"
+        ],
+        "title": "ExerciseMutationResponse",
+        "type": "object"
+      },
+      "ExerciseOrderUpdateRequest": {
+        "properties": {
+          "exercise_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Exercise Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "exercise_ids"
+        ],
+        "title": "ExerciseOrderUpdateRequest",
+        "type": "object"
+      },
+      "ExerciseProfileResponse": {
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "category"
+        ],
+        "title": "ExerciseProfileResponse",
+        "type": "object"
+      },
+      "ExerciseProfilesResponse": {
+        "properties": {
+          "profiles": {
+            "items": {
+              "$ref": "#/components/schemas/ExerciseProfileResponse"
+            },
+            "title": "Profiles",
+            "type": "array"
+          }
+        },
+        "required": [
+          "profiles"
+        ],
+        "title": "ExerciseProfilesResponse",
+        "type": "object"
+      },
+      "ExerciseResponse": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "profile_key": {
+            "title": "Profile Key",
+            "type": "string"
+          },
+          "sort_order": {
+            "title": "Sort Order",
+            "type": "integer"
+          },
+          "weights": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Weights",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "is_active",
+          "sort_order",
+          "profile_key",
+          "weights"
+        ],
+        "title": "ExerciseResponse",
+        "type": "object"
+      },
+      "ExerciseStatsResponseModel": {
+        "properties": {
+          "exercise": {
+            "title": "Exercise",
+            "type": "object"
+          },
+          "history": {
+            "items": {
+              "type": "object"
+            },
+            "title": "History",
+            "type": "array"
+          },
+          "latest": {
+            "title": "Latest",
+            "type": "object"
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Limit"
+          },
+          "per_workout_sets": {
+            "items": {
+              "type": "object"
+            },
+            "title": "Per Workout Sets",
+            "type": "array"
+          },
+          "profile": {
+            "$ref": "#/components/schemas/ExerciseProfileResponse"
+          },
+          "source_workout_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Source Workout Ids",
+            "type": "array"
+          },
+          "strength_progress": {
+            "title": "Strength Progress",
+            "type": "object"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "object"
+          },
+          "trend": {
+            "title": "Trend",
+            "type": "object"
+          }
+        },
+        "required": [
+          "limit",
+          "exercise",
+          "profile",
+          "summary",
+          "history",
+          "per_workout_sets",
+          "trend",
+          "strength_progress",
+          "source_workout_ids"
+        ],
+        "title": "ExerciseStatsResponseModel",
+        "type": "object"
+      },
+      "ExerciseUpdateRequest": {
+        "properties": {
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "profile_key": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Profile Key",
+            "type": "string"
+          }
+        },
+        "title": "ExerciseUpdateRequest",
+        "type": "object"
+      },
+      "ExerciseWeightsResponse": {
+        "properties": {
+          "exercise_id": {
+            "title": "Exercise Id",
+            "type": "integer"
+          },
+          "weights": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Weights",
+            "type": "array"
+          }
+        },
+        "required": [
+          "exercise_id",
+          "weights"
+        ],
+        "title": "ExerciseWeightsResponse",
+        "type": "object"
+      },
+      "ExerciseWeightsUpdateRequest": {
+        "properties": {
+          "weights": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Weights",
+            "type": "array"
+          }
+        },
+        "required": [
+          "weights"
+        ],
+        "title": "ExerciseWeightsUpdateRequest",
+        "type": "object"
+      },
+      "ExercisesResponse": {
+        "properties": {
+          "exercises": {
+            "items": {
+              "$ref": "#/components/schemas/ExerciseResponse"
+            },
+            "title": "Exercises",
+            "type": "array"
+          }
+        },
+        "required": [
+          "exercises"
+        ],
+        "title": "ExercisesResponse",
+        "type": "object"
+      },
+      "FinishCurrentWorkoutResponse": {
+        "properties": {
+          "current_workout": {
+            "$ref": "#/components/schemas/CurrentWorkoutResponse"
+          },
+          "workout_id": {
+            "title": "Workout Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "workout_id",
+          "current_workout"
+        ],
+        "title": "FinishCurrentWorkoutResponse",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "LoadMetricsResponse": {
+        "properties": {
+          "back_stress_score": {
+            "title": "Back Stress Score",
+            "type": "number"
+          },
+          "compound_score": {
+            "title": "Compound Score",
+            "type": "number"
+          },
+          "intensity_score": {
+            "title": "Intensity Score",
+            "type": "number"
+          },
+          "load_label": {
+            "title": "Load Label",
+            "type": "string"
+          },
+          "load_score": {
+            "title": "Load Score",
+            "type": "number"
+          }
+        },
+        "required": [
+          "load_score",
+          "load_label",
+          "compound_score",
+          "back_stress_score"
+        ],
+        "title": "LoadMetricsResponse",
+        "type": "object"
+      },
+      "NextWorkoutRecommendationResponse": {
+        "properties": {
+          "exercise_recommendations": {
+            "items": {
+              "type": "object"
+            },
+            "title": "Exercise Recommendations",
+            "type": "array"
+          },
+          "last_workout_id": {
+            "title": "Last Workout Id",
+            "type": "integer"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "title",
+          "summary",
+          "reasons",
+          "exercise_recommendations"
+        ],
+        "title": "NextWorkoutRecommendationResponse",
+        "type": "object"
+      },
+      "RecoveryContextResponse": {
+        "properties": {
+          "as_of": {
+            "title": "As Of",
+            "type": "string"
+          },
+          "has_history": {
+            "title": "Has History",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "as_of",
+          "has_history"
+        ],
+        "title": "RecoveryContextResponse",
+        "type": "object"
+      },
+      "SetEntryResponse": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "reps": {
+            "title": "Reps",
+            "type": "integer"
+          },
+          "set_number": {
+            "title": "Set Number",
+            "type": "integer"
+          },
+          "weight": {
+            "title": "Weight",
+            "type": "number"
+          },
+          "workout_exercise_id": {
+            "title": "Workout Exercise Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "workout_exercise_id",
+          "set_number",
+          "weight",
+          "reps",
+          "created_at"
+        ],
+        "title": "SetEntryResponse",
+        "type": "object"
+      },
+      "StatsResponseModel": {
+        "properties": {
+          "charts": {
+            "title": "Charts",
+            "type": "object"
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Limit"
+          },
+          "stats": {
+            "title": "Stats",
+            "type": "object"
+          }
+        },
+        "required": [
+          "limit",
+          "stats",
+          "charts"
+        ],
+        "title": "StatsResponseModel",
+        "type": "object"
+      },
+      "UpdateSetRequest": {
+        "properties": {
+          "reps": {
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Reps",
+            "type": "integer"
+          },
+          "weight": {
+            "minimum": 0.0,
+            "title": "Weight",
+            "type": "number"
+          }
+        },
+        "title": "UpdateSetRequest",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "WorkoutAnalysisExerciseResponse": {
+        "properties": {
+          "best_e1rm": {
+            "title": "Best E1Rm",
+            "type": "number"
+          },
+          "best_e1rm_set": {
+            "title": "Best E1Rm Set",
+            "type": "object"
+          },
+          "best_set": {
+            "title": "Best Set",
+            "type": "object"
+          },
+          "exercise_id": {
+            "title": "Exercise Id",
+            "type": "integer"
+          },
+          "exercise_name": {
+            "title": "Exercise Name",
+            "type": "string"
+          },
+          "pr_flags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Pr Flags",
+            "type": "array"
+          }
+        },
+        "required": [
+          "exercise_id",
+          "exercise_name",
+          "pr_flags"
+        ],
+        "title": "WorkoutAnalysisExerciseResponse",
+        "type": "object"
+      },
+      "WorkoutAnalysisPrResponse": {
+        "properties": {
+          "exercise_name": {
+            "title": "Exercise Name",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "exercise_name",
+          "type"
+        ],
+        "title": "WorkoutAnalysisPrResponse",
+        "type": "object"
+      },
+      "WorkoutAnalysisResponse": {
+        "properties": {
+          "exercises": {
+            "items": {
+              "$ref": "#/components/schemas/WorkoutAnalysisExerciseResponse"
+            },
+            "title": "Exercises",
+            "type": "array"
+          },
+          "prs": {
+            "items": {
+              "$ref": "#/components/schemas/WorkoutAnalysisPrResponse"
+            },
+            "title": "Prs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "exercises",
+          "prs"
+        ],
+        "title": "WorkoutAnalysisResponse",
+        "type": "object"
+      },
+      "WorkoutCoreResponse": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "duration_seconds": {
+            "title": "Duration Seconds",
+            "type": "integer"
+          },
+          "finished_at": {
+            "title": "Finished At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "lower_back_pain": {
+            "title": "Lower Back Pain",
+            "type": "integer"
+          },
+          "session_rpe": {
+            "title": "Session Rpe",
+            "type": "integer"
+          },
+          "workout_date": {
+            "title": "Workout Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workout_date",
+          "created_at"
+        ],
+        "title": "WorkoutCoreResponse",
+        "type": "object"
+      },
+      "WorkoutDetailResponse": {
+        "properties": {
+          "analysis": {
+            "$ref": "#/components/schemas/WorkoutAnalysisResponse"
+          },
+          "exercises": {
+            "items": {
+              "$ref": "#/components/schemas/WorkoutExerciseResponse"
+            },
+            "title": "Exercises",
+            "type": "array"
+          },
+          "load_metrics": {
+            "$ref": "#/components/schemas/LoadMetricsResponse"
+          },
+          "total_reps": {
+            "title": "Total Reps",
+            "type": "integer"
+          },
+          "total_sets": {
+            "title": "Total Sets",
+            "type": "integer"
+          },
+          "total_volume": {
+            "title": "Total Volume",
+            "type": "number"
+          },
+          "workout": {
+            "$ref": "#/components/schemas/WorkoutCoreResponse"
+          }
+        },
+        "required": [
+          "workout",
+          "exercises",
+          "total_volume",
+          "total_reps",
+          "total_sets",
+          "load_metrics",
+          "analysis"
+        ],
+        "title": "WorkoutDetailResponse",
+        "type": "object"
+      },
+      "WorkoutExerciseResponse": {
+        "properties": {
+          "configured_weights": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Configured Weights",
+            "type": "array"
+          },
+          "default_reps": {
+            "title": "Default Reps",
+            "type": "integer"
+          },
+          "default_weight": {
+            "title": "Default Weight",
+            "type": "number"
+          },
+          "exercise_id": {
+            "title": "Exercise Id",
+            "type": "integer"
+          },
+          "exercise_name": {
+            "title": "Exercise Name",
+            "type": "string"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "profile_key": {
+            "title": "Profile Key",
+            "type": "string"
+          },
+          "sets": {
+            "items": {
+              "$ref": "#/components/schemas/SetEntryResponse"
+            },
+            "title": "Sets",
+            "type": "array"
+          },
+          "total_reps": {
+            "title": "Total Reps",
+            "type": "integer"
+          },
+          "total_sets": {
+            "title": "Total Sets",
+            "type": "integer"
+          },
+          "total_volume": {
+            "title": "Total Volume",
+            "type": "number"
+          },
+          "workout_exercise_id": {
+            "title": "Workout Exercise Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "workout_exercise_id",
+          "exercise_id",
+          "exercise_name",
+          "profile_key",
+          "position",
+          "sets",
+          "total_sets",
+          "total_reps",
+          "total_volume",
+          "default_weight",
+          "default_reps",
+          "configured_weights"
+        ],
+        "title": "WorkoutExerciseResponse",
+        "type": "object"
+      },
+      "WorkoutMetadataUpdate": {
+        "properties": {
+          "lower_back_pain": {
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Lower Back Pain",
+            "type": "integer"
+          },
+          "session_rpe": {
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Session Rpe",
+            "type": "integer"
+          }
+        },
+        "title": "WorkoutMetadataUpdate",
+        "type": "object"
+      },
+      "WorkoutSummaryResponse": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "duration_seconds": {
+            "title": "Duration Seconds",
+            "type": "integer"
+          },
+          "exercises_count": {
+            "title": "Exercises Count",
+            "type": "integer"
+          },
+          "finished_at": {
+            "title": "Finished At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "load_metrics": {
+            "$ref": "#/components/schemas/LoadMetricsResponse"
+          },
+          "lower_back_pain": {
+            "title": "Lower Back Pain",
+            "type": "integer"
+          },
+          "session_rpe": {
+            "title": "Session Rpe",
+            "type": "integer"
+          },
+          "total_reps": {
+            "title": "Total Reps",
+            "type": "integer"
+          },
+          "total_sets": {
+            "title": "Total Sets",
+            "type": "integer"
+          },
+          "total_volume": {
+            "title": "Total Volume",
+            "type": "number"
+          },
+          "workout_date": {
+            "title": "Workout Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workout_date",
+          "created_at",
+          "total_volume",
+          "total_reps",
+          "total_sets",
+          "exercises_count",
+          "load_metrics"
+        ],
+        "title": "WorkoutSummaryResponse",
+        "type": "object"
+      },
+      "WorkoutUpdateRequest": {
+        "properties": {
+          "created_at": {
+            "maxLength": 19,
+            "minLength": 16,
+            "title": "Created At",
+            "type": "string"
+          },
+          "lower_back_pain": {
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Lower Back Pain",
+            "type": "integer"
+          },
+          "session_rpe": {
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Session Rpe",
+            "type": "integer"
+          }
+        },
+        "title": "WorkoutUpdateRequest",
+        "type": "object"
+      },
+      "WorkoutsResponse": {
+        "properties": {
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "workouts": {
+            "items": {
+              "$ref": "#/components/schemas/WorkoutSummaryResponse"
+            },
+            "title": "Workouts",
+            "type": "array"
+          }
+        },
+        "required": [
+          "limit",
+          "workouts"
+        ],
+        "title": "WorkoutsResponse",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "Training Log",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/backup": {
+      "get": {
+        "operationId": "get_backup_api_v1_backup_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupPayloadResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Backup",
+        "tags": [
+          "backup"
+        ]
+      }
+    },
+    "/api/v1/backup/import": {
+      "post": {
+        "operationId": "import_backup_payload_api_v1_backup_import_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "title": "Payload",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Import Backup Payload",
+        "tags": [
+          "backup"
+        ]
+      }
+    },
+    "/api/v1/backup/reset": {
+      "post": {
+        "operationId": "reset_backup_data_api_v1_backup_reset_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Reset Backup Data",
+        "tags": [
+          "backup"
+        ]
+      }
+    },
+    "/api/v1/current-workout": {
+      "delete": {
+        "operationId": "clear_current_workout_api_v1_current_workout_delete",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentWorkoutResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Clear Current Workout",
+        "tags": [
+          "current-workout"
+        ]
+      },
+      "get": {
+        "operationId": "get_current_workout_api_v1_current_workout_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentWorkoutResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Current Workout",
+        "tags": [
+          "current-workout"
+        ]
+      }
+    },
+    "/api/v1/current-workout/exercises": {
+      "post": {
+        "operationId": "add_current_workout_exercise_api_v1_current_workout_exercises_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddExerciseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentWorkoutResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Current Workout Exercise",
+        "tags": [
+          "current-workout"
+        ]
+      }
+    },
+    "/api/v1/current-workout/exercises/{draft_exercise_id}": {
+      "delete": {
+        "operationId": "delete_current_workout_exercise_api_v1_current_workout_exercises__draft_exercise_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_exercise_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Exercise Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentWorkoutResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Current Workout Exercise",
+        "tags": [
+          "current-workout"
+        ]
+      }
+    },
+    "/api/v1/current-workout/exercises/{draft_exercise_id}/sets": {
+      "post": {
+        "operationId": "add_current_workout_set_api_v1_current_workout_exercises__draft_exercise_id__sets_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_exercise_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Exercise Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddSetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentWorkoutResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Current Workout Set",
+        "tags": [
+          "current-workout"
+        ]
+      }
+    },
+    "/api/v1/current-workout/exercises/{draft_exercise_id}/sets/duplicate": {
+      "post": {
+        "operationId": "duplicate_current_workout_set_api_v1_current_workout_exercises__draft_exercise_id__sets_duplicate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_exercise_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Exercise Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentWorkoutResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Duplicate Current Workout Set",
+        "tags": [
+          "current-workout"
+        ]
+      }
+    },
+    "/api/v1/current-workout/finish": {
+      "post": {
+        "operationId": "finish_current_workout_api_v1_current_workout_finish_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinishCurrentWorkoutResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Finish Current Workout",
+        "tags": [
+          "current-workout"
+        ]
+      }
+    },
+    "/api/v1/current-workout/metadata": {
+      "patch": {
+        "operationId": "update_current_workout_metadata_api_v1_current_workout_metadata_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkoutMetadataUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentWorkoutResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Current Workout Metadata",
+        "tags": [
+          "current-workout"
+        ]
+      }
+    },
+    "/api/v1/current-workout/sets/{draft_set_id}": {
+      "delete": {
+        "operationId": "delete_current_workout_set_api_v1_current_workout_sets__draft_set_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_set_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Set Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentWorkoutResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Current Workout Set",
+        "tags": [
+          "current-workout"
+        ]
+      },
+      "patch": {
+        "operationId": "update_current_workout_set_api_v1_current_workout_sets__draft_set_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_set_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Set Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentWorkoutResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Current Workout Set",
+        "tags": [
+          "current-workout"
+        ]
+      }
+    },
+    "/api/v1/current-workout/start": {
+      "post": {
+        "operationId": "start_current_workout_api_v1_current_workout_start_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentWorkoutResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Start Current Workout",
+        "tags": [
+          "current-workout"
+        ]
+      }
+    },
+    "/api/v1/exercise-profiles": {
+      "get": {
+        "operationId": "get_exercise_profiles_api_v1_exercise_profiles_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExerciseProfilesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Exercise Profiles",
+        "tags": [
+          "exercises"
+        ]
+      }
+    },
+    "/api/v1/exercises": {
+      "get": {
+        "operationId": "get_exercises_api_v1_exercises_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include_inactive",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Inactive",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExercisesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Exercises",
+        "tags": [
+          "exercises"
+        ]
+      },
+      "post": {
+        "operationId": "create_exercise_endpoint_api_v1_exercises_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExerciseCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExerciseMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Exercise Endpoint",
+        "tags": [
+          "exercises"
+        ]
+      }
+    },
+    "/api/v1/exercises/order": {
+      "put": {
+        "operationId": "reorder_exercises_endpoint_api_v1_exercises_order_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExerciseOrderUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExercisesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reorder Exercises Endpoint",
+        "tags": [
+          "exercises"
+        ]
+      }
+    },
+    "/api/v1/exercises/{exercise_id}": {
+      "patch": {
+        "operationId": "update_exercise_endpoint_api_v1_exercises__exercise_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "exercise_id",
+            "required": true,
+            "schema": {
+              "title": "Exercise Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExerciseUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExerciseMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Exercise Endpoint",
+        "tags": [
+          "exercises"
+        ]
+      }
+    },
+    "/api/v1/exercises/{exercise_id}/stats": {
+      "get": {
+        "operationId": "get_exercise_stats_endpoint_api_v1_exercises__exercise_id__stats_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "exercise_id",
+            "required": true,
+            "schema": {
+              "title": "Exercise Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": "30",
+              "title": "Limit",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExerciseStatsResponseModel"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Exercise Stats Endpoint",
+        "tags": [
+          "exercises"
+        ]
+      }
+    },
+    "/api/v1/exercises/{exercise_id}/weights": {
+      "put": {
+        "operationId": "replace_exercise_weights_endpoint_api_v1_exercises__exercise_id__weights_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "exercise_id",
+            "required": true,
+            "schema": {
+              "title": "Exercise Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExerciseWeightsUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExerciseWeightsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Replace Exercise Weights Endpoint",
+        "tags": [
+          "exercises"
+        ]
+      }
+    },
+    "/api/v1/sets/{set_id}": {
+      "delete": {
+        "operationId": "delete_set_endpoint_api_v1_sets__set_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "set_id",
+            "required": true,
+            "schema": {
+              "title": "Set Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkoutDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Set Endpoint",
+        "tags": [
+          "workouts"
+        ]
+      },
+      "patch": {
+        "operationId": "update_set_endpoint_api_v1_sets__set_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "set_id",
+            "required": true,
+            "schema": {
+              "title": "Set Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkoutDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Set Endpoint",
+        "tags": [
+          "workouts"
+        ]
+      }
+    },
+    "/api/v1/stats": {
+      "get": {
+        "operationId": "get_stats_api_v1_stats_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": "30",
+              "title": "Limit",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatsResponseModel"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Stats",
+        "tags": [
+          "stats"
+        ]
+      }
+    },
+    "/api/v1/workout-exercises/{workout_exercise_id}/sets": {
+      "post": {
+        "operationId": "add_workout_exercise_set_endpoint_api_v1_workout_exercises__workout_exercise_id__sets_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workout_exercise_id",
+            "required": true,
+            "schema": {
+              "title": "Workout Exercise Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddSetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkoutDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Workout Exercise Set Endpoint",
+        "tags": [
+          "workouts"
+        ]
+      }
+    },
+    "/api/v1/workout-exercises/{workout_exercise_id}/sets/duplicate": {
+      "post": {
+        "operationId": "duplicate_workout_exercise_set_endpoint_api_v1_workout_exercises__workout_exercise_id__sets_duplicate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workout_exercise_id",
+            "required": true,
+            "schema": {
+              "title": "Workout Exercise Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkoutDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Duplicate Workout Exercise Set Endpoint",
+        "tags": [
+          "workouts"
+        ]
+      }
+    },
+    "/api/v1/workouts": {
+      "get": {
+        "operationId": "get_workouts_api_v1_workouts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "maximum": 500.0,
+              "minimum": 1.0,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkoutsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Workouts",
+        "tags": [
+          "workouts"
+        ]
+      }
+    },
+    "/api/v1/workouts/{workout_id}": {
+      "delete": {
+        "operationId": "delete_workout_endpoint_api_v1_workouts__workout_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workout_id",
+            "required": true,
+            "schema": {
+              "title": "Workout Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteWorkoutResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Workout Endpoint",
+        "tags": [
+          "workouts"
+        ]
+      },
+      "get": {
+        "operationId": "get_workout_detail_api_v1_workouts__workout_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workout_id",
+            "required": true,
+            "schema": {
+              "title": "Workout Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkoutDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Workout Detail",
+        "tags": [
+          "workouts"
+        ]
+      },
+      "patch": {
+        "operationId": "update_workout_endpoint_api_v1_workouts__workout_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workout_id",
+            "required": true,
+            "schema": {
+              "title": "Workout Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkoutUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkoutDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Workout Endpoint",
+        "tags": [
+          "workouts"
+        ]
+      }
+    },
+    "/api/v1/workouts/{workout_id}/exercises": {
+      "post": {
+        "operationId": "add_workout_exercise_endpoint_api_v1_workouts__workout_id__exercises_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workout_id",
+            "required": true,
+            "schema": {
+              "title": "Workout Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddExerciseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkoutDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Workout Exercise Endpoint",
+        "tags": [
+          "workouts"
+        ]
+      }
+    },
+    "/api/v1/workouts/{workout_id}/exercises/{workout_exercise_id}": {
+      "delete": {
+        "operationId": "delete_workout_exercise_endpoint_api_v1_workouts__workout_id__exercises__workout_exercise_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workout_id",
+            "required": true,
+            "schema": {
+              "title": "Workout Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workout_exercise_id",
+            "required": true,
+            "schema": {
+              "title": "Workout Exercise Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkoutDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Workout Exercise Endpoint",
+        "tags": [
+          "workouts"
+        ]
+      }
+    }
+  }
+}

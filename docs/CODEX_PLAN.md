@@ -201,7 +201,7 @@ settings page
 
 ---
 
-## [ ] Phase 7 — Exercise-specific stats
+## [x] Phase 7 — Exercise-specific stats
 
 Branch:
 
@@ -253,7 +253,7 @@ Show summary cards, history, trends, source workout links, inactive label, and 1
 
 ---
 
-## [ ] Phase 8 — Formal migrations and typed API contracts
+## [x] Phase 8 — Formal migrations and typed API contracts
 
 Branch:
 

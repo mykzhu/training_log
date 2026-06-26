@@ -2,6 +2,8 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Query
 
+from app.schemas import StatsResponseModel
+
 from app.services.stats_service import (
     build_stats,
     build_stats2_charts,
@@ -12,7 +14,7 @@ from app.services.stats_service import (
 router = APIRouter(prefix="/api/v1/stats", tags=["stats"])
 
 
-@router.get("")
+@router.get("", response_model=StatsResponseModel)
 def get_stats(
     limit: Annotated[str | None, Query()] = "30",
 ) -> dict[str, Any]:

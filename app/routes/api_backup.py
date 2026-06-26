@@ -4,6 +4,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 
 from app.db import get_db
+from app.schemas import BackupMutationResponse, BackupPayloadResponse
 from app.services.backup_service import (
     build_backup_payload,
     get_table_counts,
@@ -21,12 +22,12 @@ def get_backup_counts() -> dict[str, int]:
         return get_table_counts(conn)
 
 
-@router.get("")
+@router.get("", response_model=BackupPayloadResponse)
 def get_backup() -> dict[str, Any]:
     return build_backup_payload()
 
 
-@router.post("/import")
+@router.post("/import", response_model=BackupMutationResponse)
 def import_backup_payload(payload: dict[str, Any]) -> dict[str, Any]:
     try:
         restore_backup_payload(payload)
@@ -41,7 +42,7 @@ def import_backup_payload(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-@router.post("/reset")
+@router.post("/reset", response_model=BackupMutationResponse)
 def reset_backup_data() -> dict[str, Any]:
     clear_active_workout_draft()
     reset_database_data()

@@ -17,9 +17,14 @@ from app.services.analysis_service import list_exercise_profiles
 from app.services.stats_service import build_exercise_stats, parse_limit
 from app.schemas import (
     ExerciseCreateRequest,
+    ExerciseMutationResponse,
     ExerciseOrderUpdateRequest,
+    ExerciseProfilesResponse,
+    ExerciseStatsResponseModel,
     ExerciseUpdateRequest,
+    ExerciseWeightsResponse,
     ExerciseWeightsUpdateRequest,
+    ExercisesResponse,
 )
 
 
@@ -31,7 +36,7 @@ def clean_exercise_name(name: str) -> str:
     return normalize_exercise_name(name)
 
 
-@router.get("")
+@router.get("", response_model=ExercisesResponse)
 def get_exercises(
     include_inactive: bool = False,
 ) -> dict[str, list[dict[str, Any]]]:
@@ -40,7 +45,7 @@ def get_exercises(
     }
 
 
-@router.get("/{exercise_id}/stats")
+@router.get("/{exercise_id}/stats", response_model=ExerciseStatsResponseModel)
 def get_exercise_stats_endpoint(
     exercise_id: int,
     limit: Annotated[str | None, Query()] = "30",
@@ -54,7 +59,7 @@ def get_exercise_stats_endpoint(
     return stats
 
 
-@router.post("")
+@router.post("", response_model=ExerciseMutationResponse)
 def create_exercise_endpoint(
     payload: ExerciseCreateRequest,
 ) -> dict[str, Any]:
@@ -85,12 +90,12 @@ def create_exercise_endpoint(
     }
 
 
-@router.patch("/{exercise_id}")
+@router.patch("/{exercise_id}", response_model=ExerciseMutationResponse)
 def update_exercise_endpoint(
     exercise_id: int,
     payload: ExerciseUpdateRequest,
 ) -> dict[str, Any]:
-    changed_fields = payload.__fields_set__
+    changed_fields = payload.model_fields_set
     if not changed_fields:
         raise HTTPException(status_code=400, detail="No exercise fields provided.")
 
@@ -130,7 +135,7 @@ def update_exercise_endpoint(
     return {"exercise": exercise}
 
 
-@router.put("/order")
+@router.put("/order", response_model=ExercisesResponse)
 def reorder_exercises_endpoint(
     payload: ExerciseOrderUpdateRequest,
 ) -> dict[str, Any]:
@@ -142,7 +147,7 @@ def reorder_exercises_endpoint(
     return {"exercises": exercises}
 
 
-@router.put("/{exercise_id}/weights")
+@router.put("/{exercise_id}/weights", response_model=ExerciseWeightsResponse)
 def replace_exercise_weights_endpoint(
     exercise_id: int,
     payload: ExerciseWeightsUpdateRequest,
@@ -162,6 +167,6 @@ def replace_exercise_weights_endpoint(
     }
 
 
-@profiles_router.get("")
+@profiles_router.get("", response_model=ExerciseProfilesResponse)
 def get_exercise_profiles() -> dict[str, list[dict[str, str]]]:
     return {"profiles": list_exercise_profiles()}
