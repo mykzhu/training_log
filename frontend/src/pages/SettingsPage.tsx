@@ -145,6 +145,7 @@ export default function SettingsPage() {
     setGarminError(null);
     const response = await getGarminStatus();
     setGarminStatus(response);
+    return response;
   }
 
   useEffect(() => {
@@ -377,6 +378,7 @@ export default function SettingsPage() {
 
   async function connectGarmin(event?: FormEvent) {
     event?.preventDefault();
+
     const username = garminUsername.trim();
     if (!username || !garminPassword) {
       return;
@@ -385,30 +387,52 @@ export default function SettingsPage() {
     await runGarminAction("login", async () => {
       const response = await loginGarmin(username, garminPassword);
       setGarminPassword("");
+
       if (response.mfa_required && response.mfa_token) {
         setGarminMfaToken(response.mfa_token);
         setGarminMessage("Enter Garmin MFA code");
-      } else {
-        setGarminMfaToken(null);
-        setGarminMfaCode("");
-        setGarminMessage("Garmin connected");
+        return;
       }
-      await loadGarminStatus();
+
+      setGarminMfaToken(null);
+      setGarminMfaCode("");
+
+      const status = await loadGarminStatus();
+
+      if (status.connected) {
+        setGarminMessage("Garmin connected");
+      } else {
+        setGarminMessage(null);
+        setGarminError(
+          "Garmin login succeeded, but tokens were not saved. Check /data/garmin_tokens.",
+        );
+      }
     });
   }
 
   async function submitGarminCode(event?: FormEvent) {
     event?.preventDefault();
+
     if (!garminMfaToken || !garminMfaCode.trim()) {
       return;
     }
 
     await runGarminAction("mfa", async () => {
       await submitGarminMfa(garminMfaToken, garminMfaCode.trim());
+
       setGarminMfaToken(null);
       setGarminMfaCode("");
-      setGarminMessage("Garmin connected");
-      await loadGarminStatus();
+
+      const status = await loadGarminStatus();
+
+      if (status.connected) {
+        setGarminMessage("Garmin connected");
+      } else {
+        setGarminMessage(null);
+        setGarminError(
+          "Garmin MFA succeeded, but tokens were not saved. Check /data/garmin_tokens.",
+        );
+      }
     });
   }
 

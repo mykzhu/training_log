@@ -240,7 +240,14 @@ class GarminService:
                 "mfa_token": mfa_token,
             }
 
-        return {"connected": True, "mfa_required": False, "mfa_token": None}
+        if not self.client.has_tokens():
+            raise RuntimeError("Garmin login succeeded but tokens were not saved.")
+
+        return {
+            "connected": True,
+            "mfa_required": False,
+            "mfa_token": None,
+        }
 
     def submit_mfa(self, mfa_token: str, code: str) -> dict[str, Any]:
         session = PENDING_MFA.pop(mfa_token, None)

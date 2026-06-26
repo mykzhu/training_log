@@ -24,7 +24,14 @@ class GarminClientAdapter:
         self.client_factory = client_factory or Garmin
 
     def has_tokens(self) -> bool:
-        return self.token_dir.is_dir() and any(self.token_dir.iterdir())
+        token_file = self.token_dir / "garmin_tokens.json"
+        if token_file.is_file():
+            return True
+
+        return self.token_dir.is_dir() and any(
+            child.is_file()
+            for child in self.token_dir.rglob("*")
+        )
 
     def _new_client(self, *args: Any, **kwargs: Any) -> Any:
         if self.client_factory is None:
@@ -36,11 +43,23 @@ class GarminClientAdapter:
 
     def _persist_tokens(self, client: Any) -> None:
         self.token_dir.mkdir(parents=True, exist_ok=True)
-        garth = getattr(client, "garth", None)
-        if garth is not None and hasattr(garth, "dump"):
-            garth.dump(str(self.token_dir))
+
+        internal_client = getattr(client, "client", None)
+        if internal_client is not None and hasattr(internal_client, "dump"):
+            internal_client.dump(str(self.token_dir))
+        else:
+            garth = getattr(client, "garth", None)
+            if garth is not None and hasattr(garth, "dump"):
+                garth.dump(str(self.token_dir))
+
+        if not self.has_tokens():
+            raise GarminClientUnavailableError(
+                f"Garmin login succeeded but tokenstore was not written to {self.token_dir}"
+            )
 
     def _login_with_tokenstore(self, client: Any) -> Any:
+        self.token_dir.mkdir(parents=True, exist_ok=True)
+
         try:
             return client.login(str(self.token_dir))
         except TypeError:
