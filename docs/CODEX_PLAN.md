@@ -1,623 +1,251 @@
-# Training Log — Codex Plan
+# Training Log — Garmin Recovery and Stats Detailed Codex Plan
 
 Repository: `mykzhu/training_log`  
-Reviewed branch: `master`  
-Reviewed head: `40bc338ee4a5936ffb7b284443acae41e8da00d2`  
-Reviewed head message: `Fixed garmin sync`  
-Current add-on version: `1.0.1`  
-Current backup schema: `4`  
-Plan status: merged replacement for `docs/CODEX_PLAN.md` and `docs/CODEX_PLAN_UPDATED.md`
+Target branch: latest `master`  
+Purpose: replace or extend the Garmin phases in `docs/CODEX_PLAN.md`.
 
-## Repository cleanup instruction
-
-Keep one plan only:
-
-```text
-docs/CODEX_PLAN.md
-```
-
-After adding this merged plan, remove:
-
-```text
-docs/CODEX_PLAN_UPDATED.md
-```
-
-The previous two docs drifted apart. `CODEX_PLAN.md` marked exercise stats and typed API/migrations as complete, while `CODEX_PLAN_UPDATED.md` still showed them as unchecked. This merged file treats the latest code as source of truth.
+This version intentionally expands the Garmin work beyond the previous high-level plan. It includes concrete backend payloads, UI sections, metric ranges, chart behavior, tests, and acceptance criteria.
 
 ---
 
 ## Execution rule for Codex
 
 1. Pull latest `master`.
-2. Re-read this file and the changed code before editing.
+2. Re-read `docs/CODEX_PLAN.md` and current Garmin/recovery code before editing.
 3. Execute only the first unchecked phase unless explicitly told otherwise.
-4. Keep the branch focused.
-5. Do not continue to later phases.
-6. Update the completed phase to `[x]`.
+4. Keep each branch focused.
+5. Do not mix unrelated stats refactors, release work, or UI redesign into Garmin explainability.
+6. Do not commit runtime databases, Garmin tokens, logs, private Garmin payloads, or local generated artifacts.
 7. Report changed files, tests, builds, manual checks, and known gaps.
-8. Do not commit runtime databases, Garmin tokens, logs, private Garmin payloads, or local generated artifacts.
 
 ---
 
-## Hard constraints
+## Hard Garmin constraints
 
-- Preserve atomic workout finalization and empty-workout rejection.
-- Preserve chronological/no-future analytics.
-- Preserve backup restore compatibility for schema versions `1`, `2`, `3`, and `4`.
-- Preserve the `1.0.1` legacy-style active, read-only, and edit workout flows.
-- Preserve current manual routing until the React Router phase.
-- Do not add multi-user support.
-- Do not add Home Assistant route-prefix logic unless explicitly required and tested in ingress.
-- Do not introduce Redux.
-- Do not add a new charting dependency; the frontend already uses Recharts.
-- Keep SQL in repositories.
-- Keep calculations in backend services.
-- Keep Garmin network access out of read-only recovery/current-workout paths.
-- Keep Garmin credentials out of SQLite, backup payloads, logs, frontend storage, and URL parameters.
-- Do not expose Garmin `raw_diagnostics` on new chart/stats endpoints.
-- Avoid unrelated UI redesign.
+- Garmin network calls are allowed only for explicit login/MFA/sync actions.
+- Rendering `/`, `/garmin`, recommendations, stats, or recovery context must never contact Garmin.
+- Garmin credentials must not be stored in SQLite, backup payloads, frontend storage, logs, URLs, or diagnostics.
+- `raw_diagnostics` may remain in local debug/daily payloads if already present, but must not be returned from stats/insights endpoints.
+- Garmin readiness must remain based on local persisted daily metrics.
+- Current-date RHR, HRV, and Body Battery start are eligible for scoring.
+- Current-day stress is display-only because a partial day is not comparable to full-day history.
+- Previous-day stress is eligible for scoring.
+- Steps are informational for now; do not score steps into readiness unless a later phase explicitly changes this.
+- Garmin metrics must not be passed into per-exercise target logic.
+- Existing safety caps after Garmin adjustment must remain in force.
+- Do not change scoring thresholds unless tests expose a concrete bug.
 
 ---
 
-## Current architecture snapshot
+# Recommended next Garmin work
 
-### Backend
-
-Important files:
-
-```text
-app/main.py
-app/db.py
-app/config.py
-app/schemas.py
-
-app/migrations/
-  runner.py
-  v001_initial.py
-  v002_workout_metadata.py
-  v003_active_draft.py
-  v004_exercise_settings.py
-  v005_performance_indexes.py
-  v006_garmin_daily_metrics.py
-
-app/repositories/
-  exercises.py
-  workouts.py
-  drafts.py
-  garmin.py
-
-app/routes/
-  api_backup.py
-  api_current_workout.py
-  api_exercises.py
-  api_garmin.py
-  api_stats.py
-  api_workouts.py
-
-app/services/
-  analysis_service.py
-  backup_service.py
-  draft_service.py
-  garmin_client.py
-  garmin_readiness_service.py
-  garmin_service.py
-  recommendation_service.py
-  recovery_service.py
-  stats_service.py
-```
-
-Current registered routers include Garmin, exercise profiles, exercises, current workout, stats, workouts, workout item mutation, and backup.
-
-Current database initialization runs formal migrations, seeds default exercises, initializes exercise settings, normalizes ordering columns, ensures case-insensitive exercise names, and creates performance indexes.
-
-Current Garmin storage is migration `v006_garmin_daily_metrics`:
-
-```sql
-CREATE TABLE IF NOT EXISTS garmin_daily_metrics (
-    date TEXT PRIMARY KEY,
-    resting_heart_rate INTEGER,
-    hrv_ms REAL,
-    stress_avg INTEGER,
-    body_battery_start INTEGER,
-    body_battery_end INTEGER,
-    steps INTEGER,
-    synced_at TEXT NOT NULL,
-    raw_diagnostics TEXT NOT NULL DEFAULT '{}'
-);
-```
-
-Current backup schema is `4`. Garmin metrics are included in backup, while SQLite sequence reset intentionally applies only to the non-Garmin base tables.
-
-### Frontend
-
-Important files:
-
-```text
-frontend/src/App.tsx
-frontend/src/api/client.ts
-frontend/src/api/currentWorkout.ts
-frontend/src/api/exercises.ts
-frontend/src/api/garmin.ts
-frontend/src/api/types.ts
-frontend/src/pages/CurrentWorkoutPage.tsx
-frontend/src/pages/ExerciseStatsPage.tsx
-frontend/src/pages/HistoryPage.tsx
-frontend/src/pages/SettingsPage.tsx
-frontend/src/pages/StatsPage.tsx
-frontend/src/styles.css
-```
-
-Current routing is manual `pushState` / `popstate` routing in `App.tsx`.
-
-Current page set:
-
-```text
-/                              CurrentWorkoutPage
-/history                       HistoryPage
-/workouts/{id}                 read-only workout detail
-/workouts/{id}/edit            edit workout
-/stats                         StatsPage
-/exercises/{exerciseId}/stats  ExerciseStatsPage
-/backup                        BackupPage
-/settings                      SettingsPage
-```
-
-Current frontend build commands:
-
-```bash
-cd frontend
-npm run typecheck
-npm run build
-```
-
----
-
-# Completed phases
-
-## [x] Phase 1 — Settings, draft, and backup consistency
-
-Completed before this merged plan.
-
-Key outcomes expected to remain true:
-
-- SQLite is the authoritative active-draft state.
-- Settings changes immediately affect active workout data.
-- Exercise profiles are explicit and validated.
-- Case-insensitive exercise names are rejected.
-- Active exercises require configured weights.
-- Backup schema 3 preserves exercise settings and weight options.
-
----
-
-## [x] Phase 2 — CI and repository guardrails
-
-Completed before this merged plan.
-
-Key outcomes expected to remain true:
-
-- GitHub Actions runs backend tests, frontend typecheck/build, and Docker build.
-- Runtime database files are ignored and no longer tracked.
-- Node 22 frontend build is used.
-- README/changelog/release notes exist.
-
----
-
-## [x] Phase 3 — SQLite and analytics performance
-
-Completed before this merged plan.
-
-Key outcomes expected to remain true:
-
-- SQLite busy timeout, WAL, and indexes are present.
-- Workout details can be batch-loaded.
-- Recovery uses one 42-day query and partitions windows in Python.
-- Chronological e1RM baselines are built in one pass.
-- Query-count tests protect important paths.
-
----
-
-## [x] Phase 4 — Recovery quality
-
-Completed before this merged plan.
-
-Key outcomes expected to remain true:
-
-- Recommendation source honors `recovery_context["as_of"]`.
-- Recovery windows expose coverage and active-week fields.
-- Baseline confidence depends on history spread, not only count.
-- Overall workout interval context exists.
-- Short-gap readiness uses previous-session load/back stress.
-- Long-layoff caps exist.
-- Missing RPE/back feedback returns `needs_feedback`.
-- Recommendations expose `suggested_sets` and `target_strategy`.
-- UI displays actual suggested sets.
-
----
-
-## [x] Phase 5 — Release 1.0.1 UI restoration
-
-Completed before this merged plan.
-
-Key outcomes expected to remain true:
-
-- Add-on version is `1.0.1`.
-- Changelog documents `1.0.0` and `1.0.1`.
-- Read-only workout detail flow exists.
-- Legacy-style edit workout flow exists.
-- Legacy-style active workout flow exists.
-- Current workout supports inline exercise creation.
-- History separates read-only and edit flows.
-- Mobile layouts for active/history/edit/stats/backup are improved.
-
----
-
-## [x] Phase 6 — 1.0.1 stabilization and plan cleanup
-
-Completed before this merged plan.
-
-Key outcomes expected to remain true:
-
-- New legacy-style React flows have backend/API regression coverage where practical.
-- Frontend typecheck/build passes.
-- Docker build passes.
-- No stale release target remains in the active plan.
-- No new feature work was mixed into stabilization.
-
----
-
-## [x] Phase 7 — Exercise-specific stats
-
-Completed before this merged plan.
-
-Current expected behavior:
-
-```text
-GET /api/v1/exercises/{exercise_id}/stats?limit=10|30|90|all
-```
-
-Expected response includes exercise identity, profile, active state, totals, best weight/reps/e1RM, latest result, chronological history, per-workout sets, PR flags, trend data, and source workout IDs.
-
-Frontend route:
-
-```text
-/exercises/{exerciseId}/stats
-```
-
-Expected UI includes summary cards, history, trends, source workout links, inactive label, and 10/30/90/All selector.
-
-Regression expectations:
-
-- active exercise with history;
-- inactive exercise with history;
-- exercise with no history;
-- nonexistent exercise;
-- PR markers;
-- no future-data leakage;
-- frontend typecheck/build.
-
----
-
-## [x] Phase 8 — Formal migrations and typed API contracts
-
-Completed before this merged plan.
-
-Expected state:
-
-- Formal migration runner exists.
-- `schema_migrations` exists.
-- Fresh databases and existing production databases both start safely.
-- Backup schema version remains separate from migration version.
-- Pydantic response models are used on API routes where implemented.
-- Deprecated `payload.__fields_set__` usage is replaced or wrapped through the project compatibility model.
-- Omitted fields and explicit `null` are tested where relevant.
-- OpenAPI schema is checked in under `docs/openapi.json`.
-
----
-
-## [x] Phase 9 — Garmin observational integration
-
-Completed before this merged plan.
-
-Expected state:
-
-- `garminconnect==0.3.6` is pinned.
-- Only `app/services/garmin_client.py` imports the external Garmin package.
-- Garmin Settings section exists.
-- Garmin status/login/MFA/disconnect/sync/daily routes exist.
-- Garmin metrics are stored in `garmin_daily_metrics`.
-- Default sync is 35 days; allowed range is 1..90.
-- Partial failures preserve existing valid values.
-- No empty row is inserted when every source fails.
-- Garmin credentials never persist.
-- Tokens live under `/data/garmin_tokens`.
-- Database reset clears Garmin metrics but preserves tokens.
-- No Garmin network calls happen from current-workout or recovery reads.
-- Backup schema is `4`.
-- Restore versions `1`, `2`, `3`, and `4` work.
-- Version 3 restore preserves exercise settings.
-
----
-
-## [x] Phase 10 — Garmin readiness adjustment
-
-Completed before this merged plan.
-
-Expected state:
-
-- Garmin readiness uses 28 prior calendar days.
-- Baseline is median-based.
-- Minimum is 7 samples per metric.
-- Only fresh current-date RHR, HRV, and Body Battery start can score.
-- Current-day stress is display-only.
-- Previous-day completed stress can score.
-- Garmin adjustment is applied after existing gap/RPE/pain/load/back rules and before safety caps.
-- Garmin total is clamped to `+10/-20`.
-- Structured `garmin_adjustment` is exposed in recommendation responses.
-- Garmin metrics are not passed into exercise target logic.
-- No-Garmin behavior remains unchanged.
-
----
-
-## [x] Phase 11 — Garmin sync token persistence fix
-
-Completed at reviewed head `40bc338ee4a5936ffb7b284443acae41e8da00d2`.
-
-Expected state:
-
-- `has_tokens()` checks for `/data/garmin_tokens/garmin_tokens.json` and falls back to nested token files.
-- Token directory is created before Garmin login/tokenstore loading.
-- Token persistence uses the internal Garmin auth client dump when available.
-- Login raises an error if Garmin accepts credentials but token files are not written.
-- Settings UI confirms connection from `/api/v1/garmin/status`, not just the login response.
-- MFA success also refreshes status before showing “Garmin connected”.
-
-Regression tests to add or keep:
-
-- fake login that does not persist tokens must not return `connected: true`;
-- status returns connected only after token files exist;
-- UI message uses refreshed status.
-
----
-
-# Future phases
-
-## [x] Phase 12 — Garmin stats charts page
+## [ ] Phase 14 — Garmin recovery explainability and local-date correctness
 
 Branch:
 
 ```text
-feat/garmin-stats-page
+fix/garmin-readiness-explainability
 ```
 
 ### Goal
 
-Add a separate page for synced Garmin daily metrics with charts and range controls.
+Make the Current Workout “Next workout” and “Garmin recovery” cards explain exactly why Garmin changed readiness, why it did not change readiness, or why data is missing/stale.
 
-This is a read-only analytics page over already-synced local Garmin data. It must not contact Garmin while rendering. Network access remains limited to explicit login/sync actions.
+Also make the Garmin scoring date explicit and safe for Home Assistant deployments in Ukraine.
 
-### Route and navigation
+### Problem to solve
 
-Add a top-level page:
-
-```text
-/garmin
-```
-
-Suggested tab label:
+Current code already computes a structured `garmin_adjustment` with per-metric rules, but the UI mostly shows only:
 
 ```text
-Garmin
+Garmin adj: -N
+Garmin: Garmin recovery metrics reduce readiness.
 ```
 
-Current manual routing should be extended consistently with existing `App.tsx` route parsing. Do not introduce React Router in this phase.
+That is not enough. The user should be able to see:
 
-After the later React Router phase, this page should become:
+- which date is treated as “today”;
+- which baseline window is used;
+- which metrics were scored;
+- which metrics were missing;
+- which metrics had insufficient baseline samples;
+- which metrics were display-only;
+- how raw Garmin delta was clamped;
+- why stale/historical latest data did not score as current.
 
-```text
-/garmin                       GarminStatsPage
+### Backend: local date helper
+
+Add app timezone configuration.
+
+Suggested default:
+
+```python
+APP_TIMEZONE = os.getenv("APP_TIMEZONE", "Europe/Uzhgorod")
 ```
 
-### Backend API
+Add a focused helper, for example:
 
-Keep the existing raw-ish endpoint for debugging/backward compatibility:
+```python
+# app/services/date_service.py
 
-```text
-GET /api/v1/garmin/daily?days=35
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
+
+from app import config
+
+def app_today() -> date:
+    return datetime.now(ZoneInfo(config.APP_TIMEZONE)).date()
+
+def parse_local_date_from_as_of(as_of: str | None) -> tuple[date, str]:
+    if as_of:
+        try:
+            return datetime.fromisoformat(str(as_of)).date(), "as_of"
+        except ValueError:
+            pass
+    return app_today(), "configured_timezone_today"
 ```
 
-Add a chart-friendly endpoint that does not expose `raw_diagnostics`:
+Use this helper in:
 
-```text
-GET /api/v1/garmin/stats?range=35|90|180|365|all
-```
+- `garmin_readiness_service.parse_as_of_date()` or replacement;
+- `garmin_service.local_date_range()` when no test `today` is passed;
+- `garmin_service.stats()` when no test `today` is passed;
+- `garmin_service.recovery_snapshot()` when no test `today` is passed.
 
-Suggested response:
+Keep tests deterministic by allowing `today` and/or `as_of` injection.
 
-```json
+### Backend: enrich `garmin_adjustment`
+
+Keep the existing `rules` array.
+
+Add top-level fields:
+
+```python
 {
-  "range": "90",
-  "date_from": "2026-03-29",
-  "date_to": "2026-06-26",
-  "metric_count": 90,
-  "coverage": {
-    "expected_days": 90,
-    "available_days": 88,
-    "missing_days": 2
-  },
-  "latest_metric": {
-    "date": "2026-06-26",
-    "synced_at": "2026-06-26T20:30:00"
-  },
-  "series": [
-    {
-      "date": "2026-06-01",
-      "resting_heart_rate": 60,
-      "hrv_ms": 38.0,
-      "stress_avg": 31,
-      "body_battery_start": 72,
-      "body_battery_end": 18,
-      "steps": 8430
-    }
-  ],
-  "baselines": {
-    "resting_heart_rate": 59.0,
-    "hrv_ms": 41.0,
-    "stress_avg": 29.0,
-    "steps": 7200.0
-  }
+    "applied": bool,
+    "status": "positive" | "negative" | "neutral" | "display_only" | "insufficient_baseline" | "not_available",
+    "score_delta": int,
+    "raw_score_delta": int,
+    "min_score_delta": -20,
+    "max_score_delta": 10,
+
+    "current_date": "2026-06-27",
+    "previous_date": "2026-06-26",
+    "baseline_start_date": "2026-05-30",
+    "baseline_end_date": "2026-06-26",
+    "baseline_days": 28,
+    "minimum_baseline_samples": 7,
+    "local_date_source": "as_of" | "configured_timezone_today",
+
+    "available_rule_count": 4,
+    "scored_rule_count": 3,
+    "missing_rule_count": 1,
+    "insufficient_baseline_rule_count": 0,
+    "display_only_rule_count": 1,
+
+    "scored_metrics_summary": "HRV -6, RHR -6, previous-day stress -5",
+    "summary": "Garmin recovery metrics reduce readiness.",
+    "rules": [...]
 }
 ```
 
-Rules:
-
-- return rows sorted ascending by date;
-- accept only supported ranges;
-- `all` returns all local rows, not remote Garmin data;
-- never include `raw_diagnostics`;
-- never contact Garmin;
-- work when disconnected but historical rows exist;
-- show empty stable response when there are no metrics;
-- null metric values remain null and chart gaps are handled in the frontend.
-
-### Backend implementation
-
-Add to `app/repositories/garmin.py`:
+Each rule should stay renderable:
 
 ```python
-def list_daily_metrics_chronological(
-    *,
-    start_date: str | None = None,
-    end_date: str | None = None,
-) -> list[dict[str, Any]]:
-    ...
+{
+    "metric": "hrv_ms",
+    "label": "HRV",
+    "source_date": "2026-06-27",
+    "current": 35.0,
+    "baseline_median": 42.0,
+    "baseline_sample_count": 21,
+    "score_delta": -6,
+    "status": "scored" | "neutral" | "missing_current" | "missing_baseline" | "insufficient_baseline" | "display_only",
+    "message": "HRV is below baseline."
+}
 ```
 
-Add to `app/services/garmin_service.py` or a new focused service:
+### Frontend: Next Workout Garmin detail block
 
-```python
-def stats(self, range_value: str = "90", *, today: date | None = None) -> dict[str, Any]:
-    ...
-```
-
-Add route:
-
-```text
-GET /api/v1/garmin/stats
-```
-
-Add Pydantic response models in `app/schemas.py`.
-
-### Frontend API and types
-
-Add to `frontend/src/api/garmin.ts`:
-
-```typescript
-getGarminStats(range: "35" | "90" | "180" | "365" | "all")
-```
-
-Add types:
-
-```typescript
-export type GarminStatsRange = "35" | "90" | "180" | "365" | "all";
-
-export type GarminStatsPoint = {
-  date: string;
-  resting_heart_rate: number | null;
-  hrv_ms: number | null;
-  stress_avg: number | null;
-  body_battery_start: number | null;
-  body_battery_end: number | null;
-  steps: number | null;
-};
-
-export type GarminStatsResponse = {
-  range: GarminStatsRange;
-  date_from: string | null;
-  date_to: string | null;
-  metric_count: number;
-  coverage: {
-    expected_days: number | null;
-    available_days: number;
-    missing_days: number | null;
-  };
-  latest_metric: {
-    date: string;
-    synced_at: string;
-  } | null;
-  series: GarminStatsPoint[];
-  baselines: {
-    resting_heart_rate: number | null;
-    hrv_ms: number | null;
-    stress_avg: number | null;
-    steps: number | null;
-  };
-};
-```
-
-### Frontend page
-
-Create:
-
-```text
-frontend/src/pages/GarminStatsPage.tsx
-```
-
-Use existing Recharts dependency. Do not add a new chart library.
+In `CurrentWorkoutPage.tsx`, replace the single Garmin summary paragraph with a compact detail section.
 
 Suggested layout:
 
 ```text
-Header:
-  Garmin stats
-  range selector: 35 / 90 / 180 / 365 / all
-  Sync 35 days button
-  link to Settings
+Garmin adjustment: -17
+Status: negative
+Window: today 2026-06-27, baseline 2026-05-30..2026-06-26
 
-Summary cards:
-  latest date
-  last sync
-  available days
-  missing days
-  current HRV
-  current resting HR
-  current Body Battery
+Scored
+  HRV: 35 ms vs 42 ms median — -6
+  Resting HR: 67 bpm vs 60 bpm median — -6
+  Previous-day stress: 68 vs 40 median — -5
 
-Charts:
-  HRV over time with 28-day median/baseline
-  Resting HR over time with 28-day median/baseline
-  Body Battery start/end over time
-  Stress average over time
-  Steps over time
+Not scored
+  Body Battery start: missing today
+  Current stress: 45 — display-only partial day
+
+Clamp
+  Raw -17, applied -17, bounds -20..+10
 ```
 
-Chart rules:
+Rules:
 
-- line charts for HRV, RHR, Body Battery, and stress;
-- bar or line chart for steps;
-- use concise date labels;
-- show missing values as gaps, not zeros;
-- mobile layout must stack charts cleanly;
-- if fewer than 7 rows exist, show an explanatory empty/low-data state;
-- Sync button must refresh only Garmin stats and status, not unrelated workout state;
-- do not display `raw_diagnostics`.
+- Show current value, baseline median, sample count, status, source date, and score delta.
+- Show `display_only` clearly for current stress.
+- Show `missing_current` clearly when today’s metric is absent.
+- Show `insufficient_baseline` clearly when fewer than 7 baseline samples exist.
+- Show `raw_score_delta` vs `score_delta` and clamp bounds.
+- Keep the default view compact on mobile.
+- Use `<details>` / expandable panel if the card becomes too tall.
+- Do not duplicate full `/garmin` charts inside Current Workout.
+- Add a link to `/garmin`.
 
-### Tests
+### Frontend: Garmin Recovery card improvements
 
-Backend tests:
+Current “Garmin recovery” card should show freshness, not just latest values.
 
-- status with no Garmin rows;
-- stats endpoint with no rows;
-- 35/90/180/365/all ranges;
-- chronological sorting;
-- null values preserved;
-- coverage counts;
-- baselines with enough samples;
-- baselines with insufficient samples;
-- disconnected but local historical data exists;
-- no `raw_diagnostics` in response;
-- no Garmin client/network method called.
+Add:
 
-Frontend checks:
+```text
+Garmin: connected/off
+Scoring date: Jun 27
+Today: present / missing
+Yesterday: present / missing
+Latest synced row: Jun 26
+35d samples: 28
+Status: today synced / historical only / connected, not synced / not connected
+```
+
+Rules:
+
+- If latest data is historical, show: “Historical only — not scored as today.”
+- If today is missing, show what is missing.
+- Keep “Sync 35 days”.
+- Add a `/garmin` link.
+
+### Backend tests
+
+Add or update tests for:
+
+- configured timezone local date is used when no `as_of` is passed;
+- explicit `as_of` wins over configured timezone today;
+- current-date RHR scores only when current local date row exists;
+- current-date HRV scores only when current local date row exists;
+- current-date Body Battery start scores only when current local date row exists;
+- previous-day stress uses local previous date;
+- current-day stress remains display-only;
+- stale historical latest metric is displayed but not scored;
+- insufficient baseline counts are correct;
+- missing-current counts are correct;
+- display-only counts are correct;
+- `scored_metrics_summary` is stable;
+- no-Garmin behavior remains unchanged;
+- positive Garmin delta is still capped by short-gap safety rule;
+- negative Garmin delta respects clamp lower bound;
+- no Garmin client/network method is called from recommendation/current-workout reads.
+
+### Frontend checks
 
 ```bash
 cd frontend
@@ -625,90 +253,612 @@ npm run typecheck
 npm run build
 ```
 
-Manual smoke:
+### Manual smoke
 
 ```text
-/garmin direct navigation
-/garmin through Home Assistant ingress
-desktop layout
-mobile layout
-range selector
-sync button
-empty state
-partial-data state
-disconnected-with-history state
+Current page with no Garmin data
+Current page with connected but never synced Garmin
+Current page with historical-only Garmin data
+Current page with insufficient baseline
+Current page with positive Garmin adjustment
+Current page with negative Garmin adjustment
+Current page with clamped Garmin adjustment
+Current page on mobile width
+/garmin link from Current page
+Settings Garmin sync/login still works
 ```
 
-Acceptance criteria:
+### Acceptance criteria
 
-- New Garmin page renders from local synced data.
-- New endpoint never exposes raw diagnostics.
-- Existing Settings Garmin panel still works.
-- Existing Current page Garmin recovery still works.
-- Existing readiness scoring is unchanged.
-- Existing backup/export/restore behavior is unchanged.
+- User can tell exactly why Garmin changed readiness.
+- User can tell exactly why Garmin did not change readiness.
+- Stale/historical Garmin data is visible but not incorrectly scored as today.
+- Current stress is clearly display-only.
+- No raw diagnostics are exposed in UI.
+- No Garmin network request occurs during Current Workout/recommendation rendering.
+- Existing Garmin readiness score behavior is unchanged except local-date correctness.
+
+---
+
+## [ ] Phase 15 — Garmin Stats insights and better metric representation
+
+Branch:
+
+```text
+feat/garmin-stats-insights
+```
+
+### Goal
+
+Turn `/garmin` from a raw chart page into an interpretation page.
+
+The page should still show charts, but it should answer:
+
+```text
+Are today’s recovery metrics normal for me?
+Which metric is the biggest concern?
+Is the data fresh enough to trust?
+Which values are good / warning / poor?
+Which metrics affect readiness and which are only informational?
+```
+
+### Problem to solve
+
+Current `/garmin` already has:
+
+- range selector;
+- sync button;
+- latest date and sync cards;
+- available/missing day cards;
+- HRV chart with median/balanced band;
+- resting HR chart with baseline bands;
+- Body Battery start/end chart;
+- stress chart with bands;
+- steps chart with median baseline.
+
+But it lacks:
+
+- a top-level interpretation;
+- per-metric status chips;
+- deltas versus baseline in summary cards;
+- clear freshness status;
+- readiness impact explanation;
+- 7-day trend overlays;
+- Body Battery recharge/drain;
+- missing-data/freshness hints.
+
+### Backend: add stats insights object
+
+Extend `GET /api/v1/garmin/stats?range=...`.
+
+Keep existing fields:
+
+```python
+{
+    "range": ...,
+    "date_from": ...,
+    "date_to": ...,
+    "metric_count": ...,
+    "coverage": ...,
+    "latest_metric": ...,
+    "series": ...,
+    "baselines": ...
+}
+```
+
+Add:
+
+```python
+{
+    "insights": {
+        "current_date": "2026-06-27",
+        "previous_date": "2026-06-26",
+        "baseline_start_date": "2026-05-30",
+        "baseline_end_date": "2026-06-26",
+        "baseline_days": 28,
+        "minimum_baseline_samples": 7,
+        "freshness": {
+            "status": "fresh" | "historical_only" | "missing" | "not_connected",
+            "latest_metric_date": "2026-06-27",
+            "days_since_latest_metric": 0,
+            "message": "Today synced"
+        },
+        "overall_status": "good" | "watch" | "poor" | "not_enough_data" | "no_data",
+        "overall_message": "HRV and resting HR are worse than baseline.",
+        "readiness_impact": {
+            "score_delta": -12,
+            "raw_score_delta": -12,
+            "min_score_delta": -20,
+            "max_score_delta": 10,
+            "used_metric_count": 3,
+            "display_only_metric_count": 2
+        },
+        "signals": []
+    }
+}
+```
+
+Each `signals[]` item:
+
+```python
+{
+    "metric": "hrv_ms",
+    "label": "HRV",
+    "unit": "ms",
+    "source_date": "2026-06-27",
+    "current": 35.0,
+    "baseline_median": 42.0,
+    "baseline_sample_count": 21,
+    "delta": -7.0,
+    "delta_percent": -16.67,
+    "status": "good" | "normal" | "watch" | "poor" | "missing" | "insufficient_baseline" | "display_only",
+    "direction": "higher_is_better" | "lower_is_better" | "contextual",
+    "used_for_readiness": true,
+    "score_delta": -6,
+    "message": "HRV is below your baseline."
+}
+```
+
+### Backend: status heuristics
+
+Use personal baseline zones, not universal medical critical values.
+
+#### HRV
+
+Higher than baseline is usually better, but too much “better” should not be over-celebrated.
+
+Suggested zones:
+
+```text
+good:   current >= baseline * 1.05
+normal: baseline * 0.95 <= current < baseline * 1.05
+watch:  baseline * 0.85 <= current < baseline * 0.95
+poor:   current < baseline * 0.85
+```
+
+For chart shading:
+
+```text
+poor:   below baseline * 0.85
+watch:  baseline * 0.85 .. baseline * 0.95
+normal: baseline * 0.95 .. baseline * 1.05
+good:   above baseline * 1.05
+```
+
+#### Resting heart rate
+
+Lower or stable is generally better.
+
+Suggested zones:
+
+```text
+good:   current <= baseline - 3 bpm
+normal: baseline - 2 .. baseline + 3 bpm
+watch:  baseline + 4 .. baseline + 7 bpm
+poor:   current >= baseline + 8 bpm
+```
+
+Chart shading:
+
+```text
+good/normal: <= baseline + 3
+watch:       baseline + 4 .. baseline + 7
+poor:        >= baseline + 8
+```
+
+#### Body Battery start
+
+Use baseline-relative morning value.
+
+Suggested zones:
+
+```text
+good:   current >= baseline + 10
+normal: baseline - 10 .. baseline + 9
+watch:  baseline - 25 .. baseline - 11
+poor:   current <= baseline - 26
+```
+
+If no Body Battery baseline exists, fall back to simple absolute display bands:
+
+```text
+low:      0..25
+limited:  26..50
+ok:       51..75
+high:     76..100
+```
+
+#### Body Battery drain / recharge
+
+Derived values:
+
+```python
+daily_drain = body_battery_start - body_battery_end
+overnight_recharge = today.body_battery_start - yesterday.body_battery_end
+```
+
+Add these to insights only when both required values exist.
+
+Suggested labels:
+
+```text
+overnight recharge:
+  good:   >= +35
+  normal: +20 .. +34
+  watch:  +10 .. +19
+  poor:   < +10
+
+daily drain:
+  informational only
+```
+
+Do not score these into readiness yet unless a later phase explicitly changes scoring.
+
+#### Stress average
+
+For readiness, use previous-day stress, not partial current-day stress.
+
+Suggested zones relative to baseline:
+
+```text
+good:   current <= baseline - 10
+normal: baseline - 9 .. baseline + 10
+watch:  baseline + 11 .. baseline + 20
+poor:   current >= baseline + 21
+```
+
+Absolute background bands for chart remain useful:
+
+```text
+rest/very low: 0..25
+low:           26..50
+medium:        51..75
+high:          76..100
+```
+
+#### Steps
+
+Steps should remain informational.
+
+Suggested zones relative to baseline:
+
+```text
+very_low: current < baseline * 0.5
+low:      baseline * 0.5 .. baseline * 0.8
+normal:   baseline * 0.8 .. baseline * 1.2
+high:     current > baseline * 1.2
+```
+
+Rules:
+
+- Do not include steps in readiness score.
+- Show “low steps” as context, not as a recovery penalty.
+- Low steps can mean rest, travel, illness, or inactivity.
+
+### Frontend: new top section
+
+Add this above the charts:
+
+```text
+Garmin overview
+
+Status: Watch
+Message: HRV is below baseline and resting HR is elevated.
+Freshness: Today synced
+Range: 90 days
+Coverage: 82/90 days
+Baseline: 28-day median, 21 valid samples
+Readiness impact: -12
+```
+
+Use compact cards:
+
+```text
+[Overall] Watch
+[Readiness impact] -12
+[Freshness] Today synced
+[Coverage] 82/90
+[Baseline] 21 samples
+```
+
+### Frontend: Today readiness signals strip
+
+Add a horizontal or responsive grid:
+
+```text
+Today readiness signals
+
+HRV
+35 ms
+-16.7% vs 42 ms median
+Poor
+Used: -6
+
+Resting HR
+67 bpm
++7 bpm vs 60 median
+Watch
+Used: -6
+
+Body Battery start
+42
+-26 vs 68 median
+Poor
+Used: -6
+
+Previous-day stress
+68
++23 vs 45 median
+Poor
+Used: -5
+
+Current stress
+45
+Display-only partial day
+Not scored
+
+Steps
+4,200
+-46% vs 7,800 median
+Informational
+```
+
+Rules:
+
+- Use status chips: `Good`, `Normal`, `Watch`, `Poor`, `Missing`, `Not enough baseline`, `Display only`.
+- Make the source date visible for each signal.
+- Show baseline sample count in a tooltip or subtitle.
+- Use the same labels in `/garmin` and Current Workout.
+
+### Frontend: readiness impact panel
+
+Add a panel that mirrors the recommendation Garmin adjustment:
+
+```text
+Readiness impact
+
+Used for readiness:
+✓ HRV: -6
+✓ Resting HR: -6
+✓ Body Battery start: 0
+✓ Previous-day stress: -5
+
+Display only:
+• Current stress: partial day
+• Steps: informational
+
+Result:
+Raw Garmin delta: -17
+Applied Garmin delta: -17
+Clamp: -20..+10
+```
+
+If no current-date data:
+
+```text
+Readiness impact
+No current Garmin row for Jun 27. Latest row is Jun 26, so HRV/RHR/Body Battery are shown as historical but not scored as today.
+```
+
+### Frontend: chart upgrades
+
+#### Shared chart rules
+
+- Always show baseline median when available.
+- Add legend explaining zones.
+- Use consistent status names across all charts.
+- Missing values should stay as gaps, not zero.
+- Highlight the latest point.
+- Highlight the scoring date and previous-day stress date.
+- Tooltips should show:
+  - date;
+  - metric value;
+  - baseline median;
+  - delta vs baseline;
+  - status;
+  - whether it is used for readiness.
+
+#### HRV chart
+
+Keep median and baseline band, but improve zones:
+
+```text
+poor:   < baseline * 0.85
+watch:  0.85x .. 0.95x
+normal: 0.95x .. 1.05x
+good:   > 1.05x
+```
+
+Add:
+
+- 7-day rolling median line;
+- latest point status chip;
+- “used for readiness today” marker.
+
+#### Resting HR chart
+
+Add:
+
+- 7-day rolling average line;
+- zones based on baseline:
+  - normal <= baseline + 3;
+  - watch baseline +4..+7;
+  - poor >= baseline +8;
+- latest point label like `+7 bpm`;
+- combined warning if latest RHR is high and latest HRV is low.
+
+#### Body Battery chart
+
+Keep start/end lines, add:
+
+- horizontal zones:
+  - 0..25 low;
+  - 26..50 limited;
+  - 51..75 okay;
+  - 76..100 high;
+- optional bar below chart for daily drain;
+- optional derived card:
+  - overnight recharge;
+  - daily drain;
+  - morning value vs baseline.
+
+#### Stress chart
+
+Keep stress bands and bar colors.
+
+Add:
+
+- 7-day average line;
+- previous-day stress marker;
+- high-stress day count in selected range;
+- average stress in selected range;
+- show current-day stress separately as display-only.
+
+#### Steps chart
+
+Add:
+
+- 7-day average line;
+- 28-day median line;
+- 7-day total;
+- average/day;
+- days below 50% baseline;
+- make it visually neutral/informational, not recovery-negative.
+
+### Frontend: mobile behavior
+
+- Signal cards should become a one-column list on narrow screens.
+- Readiness impact details can be collapsed by default.
+- Chart legends should wrap.
+- Avoid huge fixed-height sections.
+- Keep sync/range controls easy to tap.
+
+### API/type work
+
+Update:
+
+- `app/schemas.py`
+- `app/services/garmin_service.py`
+- `app/routes/api_garmin.py`
+- `docs/openapi.json`
+- `frontend/src/api/generated.ts`
+- `frontend/src/api/types.ts`
+- `frontend/src/pages/GarminStatsPage.tsx`
+- CSS in `frontend/src/styles.css`
+
+Run the API contract generator if that is the repo convention:
+
+```bash
+python scripts/generate_api_contracts.py
+```
+
+### Backend tests
+
+Add tests for:
+
+- `/api/v1/garmin/stats` includes `insights`;
+- no `raw_diagnostics` in stats response;
+- fresh current date status;
+- historical-only status;
+- missing/no-data status;
+- HRV good/normal/watch/poor;
+- RHR good/normal/watch/poor;
+- Body Battery good/normal/watch/poor;
+- previous-day stress good/normal/watch/poor;
+- current stress display-only;
+- steps informational only;
+- insufficient baseline;
+- missing current metric;
+- baseline sample count per metric;
+- derived Body Battery recharge when values exist;
+- no Body Battery recharge when values are missing;
+- 7-day rolling values if computed backend-side;
+- endpoint never calls Garmin client/network methods.
+
+### Frontend checks
+
+```bash
+cd frontend
+npm run typecheck
+npm run build
+```
+
+### Manual smoke
+
+```text
+/garmin with no rows
+/garmin with 1..6 rows
+/garmin with enough baseline
+/garmin with missing HRV
+/garmin with missing Body Battery
+/garmin with historical-only latest row
+/garmin positive-looking day
+/garmin negative-looking day
+/garmin mobile width
+/garmin range 35
+/garmin range 90
+/garmin range 180
+/garmin range 365
+/garmin range all
+Sync button invalidates Garmin stats/status
+Settings link works
+Current Workout link to /garmin works
+```
+
+### Acceptance criteria
+
+- `/garmin` answers whether current Garmin metrics look normal for the user.
+- Critical-looking values are highlighted relative to personal baseline.
+- HRV and RHR statuses are not based on generic population thresholds.
+- Current stress is clearly display-only.
+- Steps are clearly informational.
+- Stale/historical data is visible but not treated as current readiness data.
+- Users can understand Garmin readiness impact without opening developer tools.
+- No Garmin raw diagnostics are exposed.
+- No Garmin network request occurs during `/garmin` rendering.
 - Frontend typecheck/build passes.
 - Backend tests pass.
 
 ---
 
-## [x] Phase 13 — React routing and server-state management
+## [ ] Phase 16 — Garmin insights reuse and cleanup
 
 Branch:
 
 ```text
-refactor/react-router-query
+refactor/garmin-insights-shared
 ```
 
-### React Router
+### Goal
 
-Replace manual `pushState`, `popstate`, and pathname parsing.
+Avoid two independent Garmin interpretation systems.
 
-Routes:
+After Phase 14 and Phase 15, ensure Current Workout and `/garmin` use shared backend insight/status logic.
 
-```text
-/                              CurrentWorkoutPage
-/history                       HistoryPage
-/workouts/:workoutId           ReadonlyWorkoutDetail
-/workouts/:workoutId/edit      EditWorkout
-/stats                         StatsPage
-/exercises/:exerciseId/stats   ExerciseStatsPage
-/garmin                        GarminStatsPage
-/settings                      SettingsPage
-/backup                        BackupPage
-*                              NotFoundPage
-```
+### Tasks
 
-### TanStack Query
+- Extract shared Garmin signal classification helpers.
+- Reuse signal status names in readiness and stats.
+- Ensure Current Workout and `/garmin` agree on:
+  - scoring date;
+  - previous-day stress date;
+  - baseline window;
+  - status labels;
+  - baseline sample counts;
+  - display-only logic;
+  - freshness logic.
+- Add regression tests proving both endpoints classify the same fixture consistently.
 
-Suggested query keys:
+### Acceptance criteria
 
-```text
-["current-workout"]
-["exercises", includeInactive]
-["exercise-profiles"]
-["workouts", limit]
-["workout", workoutId]
-["stats", limit]
-["exercise-stats", exerciseId, limit]
-["garmin-status"]
-["garmin-daily", days]
-["garmin-stats", range]
-["backup"]
-```
-
-Rules:
-
-- do not add Redux;
-- migrate one page family at a time;
-- preserve Home Assistant ingress behavior;
-- preserve mobile navigation;
-- keep mutation-specific pending state;
-- use explicit query invalidation after workout, exercise, backup, and Garmin mutations.
+- No duplicated threshold tables in React.
+- No disagreement between `/garmin` and Current Workout for the same data.
+- Shared backend helpers have focused unit tests.
+- Existing UI behavior remains unchanged except consistency improvements.
 
 ---
 
-## [ ] Phase 14 — Stats page componentization
+## [ ] Phase 17 — Stats page componentization
 
 Branch:
 
@@ -716,9 +866,11 @@ Branch:
 refactor/stats-page-components
 ```
 
+Only after Garmin explainability and insights are stable.
+
 ### Goal
 
-Split the large stats page without changing behavior.
+Split the large global stats page without changing behavior.
 
 ### Scope
 
@@ -740,11 +892,11 @@ Rules:
 - no new data endpoints;
 - keep current API response shape;
 - preserve mobile behavior;
-- do not mix global Stats refactor with Garmin Stats feature work unless the Garmin page phase explicitly extracted a reusable chart primitive.
+- do not mix global Stats refactor with Garmin Stats work.
 
 ---
 
-## [ ] Phase 15 — Next release
+## [ ] Phase 18 — Next release
 
 Branch:
 
@@ -752,7 +904,7 @@ Branch:
 chore/release-next
 ```
 
-### Required checks
+Required checks:
 
 ```bash
 python -m unittest discover -s tests
@@ -764,7 +916,7 @@ cd ..
 docker build -t training-log:release-candidate .
 ```
 
-### Manual smoke matrix
+Manual smoke matrix:
 
 ```text
 Home Assistant ingress
@@ -784,38 +936,12 @@ backup restore validation screen
 settings page
 ```
 
-### Release tasks
+Release tasks:
 
-- Update README.
-- Update changelog.
-- Update docs.
-- Update add-on version according to actual delivered scope.
-- Delete duplicate stale plan files.
-- Confirm `docs/openapi.json` is current.
-- Scan repository, fixtures, logs, DB exports, backups, and docs for secrets.
-- Confirm no runtime SQLite database or Garmin token file is tracked.
-
----
-
-## Always-run commands for feature branches
-
-```bash
-python -m unittest discover -s tests
-cd frontend
-npm ci
-npm run typecheck
-npm run build
-cd ..
-docker build -t training-log:local .
-```
-
-For documentation-only branches, run at least:
-
-```bash
-python -m unittest discover -s tests
-cd frontend
-npm run typecheck
-npm run build
-```
-
-If dependencies changed, run `npm ci` and a Docker build.
+- update README;
+- update changelog;
+- update docs;
+- update add-on version according to actual delivered scope;
+- confirm `docs/openapi.json` is current;
+- scan repository, fixtures, logs, DB exports, backups, and docs for secrets;
+- confirm no runtime SQLite database or Garmin token file is tracked.
