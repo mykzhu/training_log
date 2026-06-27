@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
   Bar,
@@ -15,6 +16,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import {
   getGarminStats,
@@ -76,9 +78,6 @@ function parseRange(value: string | null): GarminStatsRange {
   return "90";
 }
 
-function readRangeFromUrl() {
-  return parseRange(new URLSearchParams(window.location.search).get("range"));
-}
 
 function formatDate(value: string | null | undefined) {
   if (!value) {
@@ -386,12 +385,35 @@ function tooltipProps() {
 }
 
 export default function GarminStatsPage() {
-  const [range, setRange] = useState<GarminStatsRange>(() => readRangeFromUrl());
-  const [stats, setStats] = useState<GarminStatsResponse | null>(null);
-  const [status, setStatus] = useState<GarminStatus | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [searchParams] = useSearchParams();
+  const range = parseRange(searchParams.get("range"));
   const [isSyncing, setIsSyncing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const {
+    data: stats,
+    error: statsQueryError,
+    isLoading: isStatsLoading,
+  } = useQuery<GarminStatsResponse>({
+    queryKey: ["garmin-stats", range],
+    queryFn: () => getGarminStats(range),
+  });
+  const {
+    data: status,
+    error: statusQueryError,
+    isLoading: isStatusLoading,
+  } = useQuery<GarminStatus>({
+    queryKey: ["garmin-status"],
+    queryFn: getGarminStatus,
+  });
+  const queryError = statsQueryError ?? statusQueryError;
+  const error = syncError ?? (queryError instanceof Error
+    ? queryError.message
+    : queryError
+      ? "Unable to load Garmin stats."
+      : null);
+  const isLoading = isStatsLoading || isStatusLoading;
 
   const chartData = useMemo<GarminChartPoint[]>(
     () =>
@@ -402,7 +424,7 @@ export default function GarminStatsPage() {
     [stats],
   );
 
-  const currentPoint = latestPoint(stats);
+  const currentPoint = latestPoint(stats ?? null);
   const hasLowData = Boolean(stats && stats.metric_count > 0 && stats.metric_count < 7);
   const hasNoData = Boolean(stats && stats.metric_count === 0);
   const hrvChartDomain = hrvDomain(chartData, stats?.baselines.hrv_ms ?? null);
@@ -415,84 +437,29 @@ export default function GarminStatsPage() {
       point.body_battery_start !== null || point.body_battery_end !== null,
   );
 
-  async function load(nextRange: GarminStatsRange, options = { showLoading: true }) {
-    if (options.showLoading) {
-      setIsLoading(true);
-    }
-    setError(null);
-
-    try {
-      const [nextStats, nextStatus] = await Promise.all([
-        getGarminStats(nextRange),
-        getGarminStatus(),
-      ]);
-      setStats(nextStats);
-      setStatus(nextStatus);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to load Garmin stats.");
-    } finally {
-      if (options.showLoading) {
-        setIsLoading(false);
-      }
-    }
-  }
-
-  useEffect(() => {
-    let cancelled = false;
-    setIsLoading(true);
-    setError(null);
-
-    Promise.all([getGarminStats(range), getGarminStatus()])
-      .then(([nextStats, nextStatus]) => {
-        if (!cancelled) {
-          setStats(nextStats);
-          setStatus(nextStatus);
-        }
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Unable to load Garmin stats.");
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [range]);
-
-  useEffect(() => {
-    function syncRangeFromUrl() {
-      setRange(readRangeFromUrl());
-    }
-
-    window.addEventListener("popstate", syncRangeFromUrl);
-    return () => window.removeEventListener("popstate", syncRangeFromUrl);
-  }, []);
-
   function changeRange(nextRange: GarminStatsRange) {
-    setRange(nextRange);
-    const path = nextRange === "90" ? "/garmin" : `/garmin?range=${nextRange}`;
-    window.history.pushState(null, "", path);
+    setSyncError(null);
+    navigate(nextRange === "90" ? "/garmin" : `/garmin?range=${nextRange}`);
   }
 
   async function handleSync() {
     setIsSyncing(true);
-    setError(null);
+    setSyncError(null);
 
     try {
       await syncGarmin(35);
-      await load(range, { showLoading: false });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["garmin-stats"] }),
+        queryClient.invalidateQueries({ queryKey: ["garmin-status"] }),
+        queryClient.invalidateQueries({ queryKey: ["garmin-daily"] }),
+      ]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to sync Garmin data.");
+      setSyncError(err instanceof Error ? err.message : "Unable to sync Garmin data.");
     } finally {
       setIsSyncing(false);
     }
   }
+
 
   return (
     <section className="page-stack garmin-stats-page">
@@ -530,7 +497,7 @@ export default function GarminStatsPage() {
             {isSyncing ? "Syncing" : "Sync 35 days"}
           </button>
 
-          <a className="card-link" href="/settings">Settings</a>
+          <Link className="card-link" to="/settings">Settings</Link>
         </div>
       </div>
 

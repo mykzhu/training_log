@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
 import {
   addCurrentWorkoutExercise,
@@ -524,9 +525,9 @@ function RecoveryContextCard({ context }: RecoveryContextCardProps) {
           </div>
         </div>
         {context.previous_workout_id && (
-          <a className="card-link" href={`/workouts/${context.previous_workout_id}`}>
+          <Link className="card-link" to={`/workouts/${context.previous_workout_id}`}>
             Last workout
-          </a>
+          </Link>
         )}
       </div>
 
@@ -706,12 +707,12 @@ function NextWorkoutCard({ recommendation }: NextWorkoutCardProps) {
           </div>
         </div>
         {recommendation.last_workout_id && (
-          <a
+          <Link
             className="card-link"
-            href={`/workouts/${recommendation.last_workout_id}`}
+            to={`/workouts/${recommendation.last_workout_id}`}
           >
             Source
-          </a>
+          </Link>
         )}
       </div>
 

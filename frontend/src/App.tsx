@@ -1,13 +1,32 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { lazy, Suspense } from "react";
+import {
+  BrowserRouter,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+  useParams,
+} from "react-router-dom";
 
 import BackupPage from "./pages/BackupPage";
 import CurrentWorkoutPage from "./pages/CurrentWorkoutPage";
 import HistoryPage from "./pages/HistoryPage";
+import NotFoundPage from "./pages/NotFoundPage";
 import SettingsPage from "./pages/SettingsPage";
 
 const ExerciseStatsPage = lazy(() => import("./pages/ExerciseStatsPage"));
 const GarminStatsPage = lazy(() => import("./pages/GarminStatsPage"));
 const StatsPage = lazy(() => import("./pages/StatsPage"));
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      staleTime: 30_000,
+    },
+  },
+});
 
 type PageKey =
   | "current"
@@ -17,6 +36,14 @@ type PageKey =
   | "garmin"
   | "backup"
   | "settings";
+
+type ShellPageKey = PageKey | "not-found";
+
+type RouteInfo = {
+  editMode?: boolean;
+  page: ShellPageKey;
+  workoutId?: number;
+};
 
 const pages: Array<{ key: PageKey; label: string }> = [
   { key: "current", label: "Current" },
@@ -40,29 +67,6 @@ const historyNavItems: Array<{
   { key: "settings", label: "Settings", page: "settings", path: "/settings" },
 ];
 
-function pageFromPath(pathname: string): PageKey {
-  if (/^\/exercises\/\d+\/stats\/?$/.test(pathname)) {
-    return "exercise-stats";
-  }
-  if (pathname.startsWith("/history") || pathname.startsWith("/workouts/")) {
-    return "history";
-  }
-  if (pathname.startsWith("/stats")) {
-    return "stats";
-  }
-  if (pathname.startsWith("/garmin")) {
-    return "garmin";
-  }
-  if (pathname.startsWith("/backup")) {
-    return "backup";
-  }
-  if (pathname.startsWith("/settings")) {
-    return "settings";
-  }
-
-  return "current";
-}
-
 function pathForPage(page: PageKey): string {
   if (page === "current") {
     return "/";
@@ -74,79 +78,121 @@ function pathForPage(page: PageKey): string {
   return `/${page}`;
 }
 
-function workoutIdFromPath(pathname: string): number | null {
-  const match = pathname.match(/^\/workouts\/(\d+)/);
-  return match ? Number(match[1]) : null;
-}
-
-function exerciseStatsIdFromPath(pathname: string): number | null {
-  const match = pathname.match(/^\/exercises\/(\d+)\/stats\/?$/);
-  return match ? Number(match[1]) : null;
-}
-
-function workoutEditModeFromPath(pathname: string): boolean {
-  return /^\/workouts\/\d+\/edit\/?$/.test(pathname);
-}
-
-export default function App() {
-  const [activePage, setActivePage] = useState<PageKey>(() =>
-    pageFromPath(window.location.pathname),
-  );
-  const [initialWorkoutId, setInitialWorkoutId] = useState<number | null>(() =>
-    workoutIdFromPath(window.location.pathname),
-  );
-  const [initialWorkoutEditMode, setInitialWorkoutEditMode] = useState(() =>
-    workoutEditModeFromPath(window.location.pathname),
-  );
-  const [exerciseStatsId, setExerciseStatsId] = useState<number | null>(() =>
-    exerciseStatsIdFromPath(window.location.pathname),
-  );
-
-  useEffect(() => {
-    function syncFromPath() {
-      setActivePage(pageFromPath(window.location.pathname));
-      setInitialWorkoutId(workoutIdFromPath(window.location.pathname));
-      setInitialWorkoutEditMode(workoutEditModeFromPath(window.location.pathname));
-      setExerciseStatsId(exerciseStatsIdFromPath(window.location.pathname));
-    }
-
-    window.addEventListener("popstate", syncFromPath);
-    return () => window.removeEventListener("popstate", syncFromPath);
-  }, []);
-
-  function navigate(page: PageKey, path = pathForPage(page)) {
-    setActivePage(page);
-    setInitialWorkoutId(null);
-    setInitialWorkoutEditMode(false);
-    setExerciseStatsId(null);
-    window.history.pushState(null, "", path);
+function numericRouteParam(value: string | undefined) {
+  if (!value) {
+    return null;
   }
 
-  const isHistoryList = activePage === "history" && initialWorkoutId === null;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function routeInfoFromPath(pathname: string): RouteInfo {
+  const cleanPath = pathname.replace(/\/$/, "") || "/";
+  const editWorkoutMatch = cleanPath.match(/^\/workouts\/(\d+)\/edit$/);
+  if (editWorkoutMatch) {
+    return {
+      editMode: true,
+      page: "history",
+      workoutId: Number(editWorkoutMatch[1]),
+    };
+  }
+
+  const readonlyWorkoutMatch = cleanPath.match(/^\/workouts\/(\d+)$/);
+  if (readonlyWorkoutMatch) {
+    return {
+      editMode: false,
+      page: "history",
+      workoutId: Number(readonlyWorkoutMatch[1]),
+    };
+  }
+
+  if (cleanPath === "/") {
+    return { page: "current" };
+  }
+  if (cleanPath === "/history") {
+    return { page: "history" };
+  }
+  if (cleanPath === "/stats") {
+    return { page: "stats" };
+  }
+  if (/^\/exercises\/\d+\/stats$/.test(cleanPath)) {
+    return { page: "exercise-stats" };
+  }
+  if (cleanPath === "/garmin") {
+    return { page: "garmin" };
+  }
+  if (cleanPath === "/backup") {
+    return { page: "backup" };
+  }
+  if (cleanPath === "/settings") {
+    return { page: "settings" };
+  }
+
+  return { page: "not-found" };
+}
+
+function LoadingPanel() {
+  return <section className="panel">Loading</section>;
+}
+
+function WorkoutRoute({ initialEditMode }: { initialEditMode: boolean }) {
+  const { workoutId } = useParams();
+  const parsedWorkoutId = numericRouteParam(workoutId);
+
+  if (parsedWorkoutId === null) {
+    return <NotFoundPage />;
+  }
+
+  return (
+    <HistoryPage
+      initialEditMode={initialEditMode}
+      initialWorkoutId={parsedWorkoutId}
+    />
+  );
+}
+
+function ExerciseStatsRoute() {
+  const { exerciseId } = useParams();
+  const parsedExerciseId = numericRouteParam(exerciseId);
+
+  if (parsedExerciseId === null) {
+    return <NotFoundPage />;
+  }
+
+  return <ExerciseStatsPage exerciseId={parsedExerciseId} />;
+}
+
+function AppLayout() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const routeInfo = routeInfoFromPath(location.pathname);
+  const activePage = routeInfo.page;
+  const workoutId = routeInfo.workoutId ?? null;
+  const isHistoryList = activePage === "history" && workoutId === null;
   const isReadonlyWorkout =
-    activePage === "history" &&
-    initialWorkoutId !== null &&
-    !initialWorkoutEditMode;
+    activePage === "history" && workoutId !== null && !routeInfo.editMode;
   const isEditWorkout =
-    activePage === "history" &&
-    initialWorkoutId !== null &&
-    initialWorkoutEditMode;
+    activePage === "history" && workoutId !== null && routeInfo.editMode;
   const isBackupPage = activePage === "backup";
   const isExerciseStats = activePage === "exercise-stats";
+  const isNotFound = activePage === "not-found";
   const headerTitle = isHistoryList
     ? "History"
     : isReadonlyWorkout
-      ? `Workout #${initialWorkoutId}`
+      ? `Workout #${workoutId}`
       : isEditWorkout
-        ? `Edit Workout #${initialWorkoutId}`
+        ? `Edit Workout #${workoutId}`
         : isBackupPage
           ? "Backup"
           : isExerciseStats
             ? "Exercise stats"
-            : "Training Log";
+            : isNotFound
+              ? "Not found"
+              : "Training Log";
   const headerSubtitle = isHistoryList
     ? "Last 30 workouts"
-    : isReadonlyWorkout || isEditWorkout
+    : isReadonlyWorkout || isEditWorkout || isNotFound
       ? null
       : isBackupPage
         ? "Export, restore, or reset training history"
@@ -178,7 +224,7 @@ export default function App() {
             <button
               className={item.page === navActivePage ? "tab tab-active" : "tab"}
               key={item.key}
-              onClick={() => navigate(item.page, item.path)}
+              onClick={() => navigate(item.path)}
               type="button"
             >
               {item.label}
@@ -187,30 +233,44 @@ export default function App() {
         </nav>
       </header>
 
-      {activePage === "current" && <CurrentWorkoutPage />}
-      {activePage === "history" && (
-        <HistoryPage
-          initialEditMode={initialWorkoutEditMode}
-          initialWorkoutId={initialWorkoutId}
-        />
-      )}
-      {activePage === "stats" && (
-        <Suspense fallback={<section className="panel">Loading</section>}>
-          <StatsPage />
-        </Suspense>
-      )}
-      {activePage === "exercise-stats" && exerciseStatsId !== null && (
-        <Suspense fallback={<section className="panel">Loading</section>}>
-          <ExerciseStatsPage exerciseId={exerciseStatsId} />
-        </Suspense>
-      )}
-      {activePage === "garmin" && (
-        <Suspense fallback={<section className="panel">Loading</section>}>
-          <GarminStatsPage />
-        </Suspense>
-      )}
-      {activePage === "backup" && <BackupPage />}
-      {activePage === "settings" && <SettingsPage />}
+      <Suspense fallback={<LoadingPanel />}>
+        <Routes>
+          <Route path="/" element={<CurrentWorkoutPage />} />
+          <Route
+            path="/history"
+            element={
+              <HistoryPage initialEditMode={false} initialWorkoutId={null} />
+            }
+          />
+          <Route
+            path="/workouts/:workoutId"
+            element={<WorkoutRoute initialEditMode={false} />}
+          />
+          <Route
+            path="/workouts/:workoutId/edit"
+            element={<WorkoutRoute initialEditMode />}
+          />
+          <Route path="/stats" element={<StatsPage />} />
+          <Route
+            path="/exercises/:exerciseId/stats"
+            element={<ExerciseStatsRoute />}
+          />
+          <Route path="/garmin" element={<GarminStatsPage />} />
+          <Route path="/backup" element={<BackupPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="*" element={<NotFoundPage />} />
+        </Routes>
+      </Suspense>
     </main>
+  );
+}
+
+export default function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <AppLayout />
+      </BrowserRouter>
+    </QueryClientProvider>
   );
 }

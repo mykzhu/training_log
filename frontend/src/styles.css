@@ -488,6 +488,19 @@ label {
   color: #ffffff;
 }
 
+a.primary-button,
+a.secondary-button,
+a.danger-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  border: 0;
+  border-radius: 14px;
+  padding: 12px 14px;
+  text-decoration: none;
+}
+
 .danger-button {
   background: var(--red);
   color: #ffffff;
@@ -523,6 +536,17 @@ label {
 .compact-button {
   min-height: 36px;
   padding: 6px 8px;
+}
+
+a.compact-button {
+  min-height: 36px;
+  padding: 6px 8px;
+}
+
+.not-found-panel {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
 }
 
 .compact-action {

@@ -652,7 +652,7 @@ Acceptance criteria:
 
 ---
 
-## [ ] Phase 13 — React routing and server-state management
+## [x] Phase 13 — React routing and server-state management
 
 Branch:
 

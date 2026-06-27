@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
@@ -16,6 +17,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { getStats } from "../api/stats";
 
@@ -272,17 +274,8 @@ function parseStatsLimit(value: string | null): StatsLimit {
   return 30;
 }
 
-function readStatsLimitFromUrl() {
-  return parseStatsLimit(new URLSearchParams(window.location.search).get("limit"));
-}
-
-function statsBasePath() {
-  const exerciseStatsMatch = window.location.pathname.match(/^\/exercises\/\d+\/stats/);
-  return exerciseStatsMatch ? exerciseStatsMatch[0] : "/stats";
-}
-
 function statsLimitPath(limit: StatsLimit) {
-  return `${statsBasePath()}?limit=${limit}`;
+  return `/stats?limit=${limit}`;
 }
 
 type WorkoutChartClickState = {
@@ -853,9 +846,22 @@ function backPainTone(
 }
 
 export default function StatsPage() {
-  const [statsLimit, setStatsLimit] = useState<StatsLimit>(() => readStatsLimitFromUrl());
-  const [stats, setStats] = useState<StatsResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const statsLimit = parseStatsLimit(searchParams.get("limit"));
+  const {
+    data: stats,
+    error: statsQueryError,
+    isLoading,
+  } = useQuery<StatsResponse>({
+    queryKey: ["stats", statsLimit],
+    queryFn: () => getStats(statsLimit),
+  });
+  const error = statsQueryError instanceof Error
+    ? statsQueryError.message
+    : statsQueryError
+      ? "Failed to load."
+      : null;
 
   const [selectedStrengthExerciseId, setSelectedStrengthExerciseId] =
   useState<number | null>(null);
@@ -891,52 +897,17 @@ export default function StatsPage() {
     setSelectedBenchmarkExerciseIds,
   ] = useState<number[]>([]);
 
-  useEffect(() => {
-    function syncLimitFromUrl() {
-      setStatsLimit(readStatsLimitFromUrl());
-    }
-
-    window.history.replaceState(null, "", statsLimitPath(readStatsLimitFromUrl()));
-    window.addEventListener("popstate", syncLimitFromUrl);
-    return () => window.removeEventListener("popstate", syncLimitFromUrl);
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    setError(null);
-    setStats(null);
-
-    getStats(statsLimit)
-      .then((response) => {
-        if (!cancelled) {
-          setStats(response);
-        }
-      })
-      .catch((reason: unknown) => {
-        if (!cancelled) {
-          setError(reason instanceof Error ? reason.message : "Failed to load.");
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [statsLimit]);
 
   function selectStatsLimit(limit: StatsLimit) {
-    setStatsLimit(limit);
-    window.history.pushState(null, "", statsLimitPath(limit));
+    navigate(statsLimitPath(limit));
   }
 
   function navigateToWorkout(workoutId: number) {
-    window.history.pushState(null, "", `/workouts/${workoutId}`);
-    window.dispatchEvent(new PopStateEvent("popstate"));
+    navigate(`/workouts/${workoutId}`);
   }
 
   function navigateToExerciseStats(exerciseId: number) {
-    window.history.pushState(null, "", `/exercises/${exerciseId}/stats?limit=${statsLimit}`);
-    window.dispatchEvent(new PopStateEvent("popstate"));
+    navigate(`/exercises/${exerciseId}/stats?limit=${statsLimit}`);
   }
 
   function openWorkoutFromChart(state: unknown) {
@@ -1942,7 +1913,7 @@ const strengthWorkloadData =
       </section>
 
       {error && <div className="error-banner">{error}</div>}
-      {!stats && !error && <section className="panel">Loading</section>}
+      {isLoading && <section className="panel">Loading</section>}
       {stats && workoutData.length === 0 && <EmptyStats />}
 
       {stats && summary && workoutData.length > 0 && (

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { getExercises } from "../api/exercises";
 import type { Exercise, WorkoutDetail, WorkoutSummary } from "../api/types";
@@ -134,10 +135,6 @@ function scoreMetricClass(value: number | null | undefined) {
   return "metric-red";
 }
 
-function pushHistoryRoute(path: string) {
-  window.history.pushState(null, "", path);
-  window.dispatchEvent(new PopStateEvent("popstate"));
-}
 
 type HistoryPageProps = {
   initialEditMode: boolean;
@@ -148,6 +145,8 @@ export default function HistoryPage({
   initialEditMode,
   initialWorkoutId,
 }: HistoryPageProps) {
+  const navigate = useNavigate();
+
   const [workouts, setWorkouts] = useState<WorkoutSummary[]>([]);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<number | null>(
@@ -267,7 +266,7 @@ export default function HistoryPage({
       await deleteWorkout(detail.workout.id);
       setSelectedWorkoutId(null);
       setDetail(null);
-      pushHistoryRoute("/history");
+      navigate("/history");
       await loadWorkouts();
       setMessage("Workout deleted");
     } catch (reason: unknown) {
@@ -279,15 +278,13 @@ export default function HistoryPage({
 
   function openWorkout(workoutId: number, editMode = false) {
     setSelectedWorkoutId(workoutId);
-    pushHistoryRoute(
-      editMode ? `/workouts/${workoutId}/edit` : `/workouts/${workoutId}`,
-    );
+    navigate(editMode ? `/workouts/${workoutId}/edit` : `/workouts/${workoutId}`);
   }
 
   function backToHistory() {
     setSelectedWorkoutId(null);
     setDetail(null);
-    pushHistoryRoute("/history");
+    navigate("/history");
   }
 
   async function deleteWorkoutFromList(workout: WorkoutSummary) {
@@ -325,8 +322,7 @@ export default function HistoryPage({
   }
 
   function openSettings() {
-    window.history.pushState(null, "", "/settings");
-    window.dispatchEvent(new PopStateEvent("popstate"));
+    navigate("/settings");
   }
 
   return (

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 import type { ReactNode } from "react";
 import {
   CartesianGrid,
@@ -10,6 +11,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { getExerciseStats } from "../api/exerciseStats";
 import type {
@@ -68,10 +70,6 @@ function parseStatsLimit(value: string | null): StatsLimit {
   return 30;
 }
 
-function readStatsLimitFromUrl() {
-  return parseStatsLimit(new URLSearchParams(window.location.search).get("limit"));
-}
-
 function exerciseStatsLimitPath(exerciseId: number, limit: StatsLimit) {
   return `/exercises/${exerciseId}/stats?limit=${limit}`;
 }
@@ -127,10 +125,6 @@ function commonTooltipProps() {
   };
 }
 
-function navigateToWorkout(workoutId: number) {
-  window.history.pushState(null, "", `/workouts/${workoutId}`);
-  window.dispatchEvent(new PopStateEvent("popstate"));
-}
 
 function SummaryCard({
   label,
@@ -195,52 +189,29 @@ function buildTrendData(history: ExerciseStatsHistoryEntry[]): TrendPoint[] {
 }
 
 export default function ExerciseStatsPage({ exerciseId }: { exerciseId: number }) {
-  const [statsLimit, setStatsLimit] = useState<StatsLimit>(() =>
-    readStatsLimitFromUrl(),
-  );
-  const [stats, setStats] = useState<ExerciseStatsResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    function syncLimitFromUrl() {
-      setStatsLimit(readStatsLimitFromUrl());
-    }
-
-    window.history.replaceState(
-      null,
-      "",
-      exerciseStatsLimitPath(exerciseId, readStatsLimitFromUrl()),
-    );
-    window.addEventListener("popstate", syncLimitFromUrl);
-    return () => window.removeEventListener("popstate", syncLimitFromUrl);
-  }, [exerciseId]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    setError(null);
-    setStats(null);
-
-    getExerciseStats(exerciseId, statsLimit)
-      .then((response) => {
-        if (!cancelled) {
-          setStats(response);
-        }
-      })
-      .catch((reason: unknown) => {
-        if (!cancelled) {
-          setError(reason instanceof Error ? reason.message : "Failed to load.");
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [exerciseId, statsLimit]);
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const statsLimit = parseStatsLimit(searchParams.get("limit"));
+  const {
+    data: stats,
+    error: statsQueryError,
+    isLoading,
+  } = useQuery<ExerciseStatsResponse>({
+    queryKey: ["exercise-stats", exerciseId, statsLimit],
+    queryFn: () => getExerciseStats(exerciseId, statsLimit),
+  });
+  const error = statsQueryError instanceof Error
+    ? statsQueryError.message
+    : statsQueryError
+      ? "Failed to load."
+      : null;
 
   function selectStatsLimit(limit: StatsLimit) {
-    setStatsLimit(limit);
-    window.history.pushState(null, "", exerciseStatsLimitPath(exerciseId, limit));
+    navigate(exerciseStatsLimitPath(exerciseId, limit));
+  }
+
+  function navigateToWorkout(workoutId: number) {
+    navigate(`/workouts/${workoutId}`);
   }
 
   function openWorkoutFromChart(state: unknown) {
@@ -279,7 +250,7 @@ export default function ExerciseStatsPage({ exerciseId }: { exerciseId: number }
       </section>
 
       {error && <div className="error-banner">{error}</div>}
-      {!stats && !error && <section className="panel">Loading</section>}
+      {isLoading && <section className="panel">Loading</section>}
 
       {stats && (
         <>
