@@ -3,10 +3,12 @@ import type { ReactNode } from "react";
 import {
   Bar,
   BarChart,
+  Cell,
   CartesianGrid,
   Legend,
   Line,
   LineChart,
+  ReferenceArea,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -33,6 +35,7 @@ const chartColors = {
   orange: "#ff9f0a",
   red: "#ff453a",
   purple: "#af52de",
+  yellow: "#ffd60a",
   muted: "#999999",
   grid: "#2e2e2e",
   card: "#171717",
@@ -55,8 +58,9 @@ type ChartCardProps = {
   children: ReactNode;
   subtitle?: string;
   title: string;
-  wide?: boolean;
 };
+
+type MetricDomain = [number, number];
 
 function parseRange(value: string | null): GarminStatsRange {
   if (
@@ -131,18 +135,6 @@ function latestPoint(stats: GarminStatsResponse | null) {
   return stats.series[stats.series.length - 1];
 }
 
-function coverageSubvalue(stats: GarminStatsResponse | null) {
-  if (!stats) {
-    return "loading";
-  }
-
-  if (stats.coverage.expected_days === null) {
-    return "all local days";
-  }
-
-  return `of ${stats.coverage.expected_days} days`;
-}
-
 function bodyBatteryValue(point: GarminStatsPoint | null) {
   if (!point) {
     return "n/a";
@@ -184,9 +176,9 @@ function tooltipFormatter(value: unknown, name: unknown): [ReactNode, string] {
   ];
 }
 
-function ChartCard({ children, subtitle, title, wide = false }: ChartCardProps) {
+function ChartCard({ children, subtitle, title }: ChartCardProps) {
   return (
-    <section className={wide ? "chart-card chart-card-wide" : "chart-card"}>
+    <section className="chart-card">
       <div className="chart-heading">
         <h2>{title}</h2>
         {subtitle && <p className="muted">{subtitle}</p>}
@@ -201,6 +193,96 @@ function commonAxisProps() {
     stroke: chartColors.muted,
     tick: { fill: chartColors.muted, fontSize: 12 },
   };
+}
+
+function numericMetricValues(
+  data: GarminChartPoint[],
+  key: keyof GarminStatsPoint,
+) {
+  return data.reduce<number[]>((values, point) => {
+    const value = point[key];
+    if (typeof value === "number") {
+      values.push(value);
+    }
+    return values;
+  }, []);
+}
+
+function paddedDomain(
+  values: number[],
+  fallback: MetricDomain,
+  minPadding: number,
+): MetricDomain {
+  if (values.length === 0) {
+    return fallback;
+  }
+
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const spread = Math.max(max - min, minPadding);
+  const padding = Math.max(spread * 0.22, minPadding);
+
+  return [
+    Math.max(0, Math.floor(min - padding)),
+    Math.ceil(max + padding),
+  ];
+}
+
+function hrvBalancedRange(baseline: number | null) {
+  if (baseline === null || baseline <= 0) {
+    return null;
+  }
+
+  return {
+    low: Math.round(baseline * 0.9),
+    high: Math.round(baseline * 1.1),
+  };
+}
+
+function hrvDomain(data: GarminChartPoint[], baseline: number | null): MetricDomain {
+  const values = numericMetricValues(data, "hrv_ms");
+  const balanced = hrvBalancedRange(baseline);
+  const domainValues = balanced ? [...values, balanced.low, balanced.high] : values;
+  return paddedDomain(domainValues, [20, 100], 5);
+}
+
+function rhrRanges(baseline: number | null) {
+  if (baseline === null || baseline <= 0) {
+    return null;
+  }
+
+  return {
+    goodMax: baseline + 3,
+    elevatedMax: baseline + 7,
+  };
+}
+
+function restingHeartRateDomain(
+  data: GarminChartPoint[],
+  baseline: number | null,
+): MetricDomain {
+  const values = numericMetricValues(data, "resting_heart_rate");
+  const ranges = rhrRanges(baseline);
+  const domainValues = ranges && baseline !== null
+    ? [...values, baseline - 8, ranges.goodMax, ranges.elevatedMax, baseline + 12]
+    : values;
+  return paddedDomain(domainValues, [45, 85], 3);
+}
+
+function stressColor(value: number | null | undefined) {
+  if (typeof value !== "number") {
+    return chartColors.muted;
+  }
+  if (value < 25) {
+    return chartColors.blue;
+  }
+  if (value < 50) {
+    return chartColors.green;
+  }
+  if (value < 75) {
+    return chartColors.orange;
+  }
+  return chartColors.red;
 }
 
 function baselineLine(value: number | null, label: string) {
@@ -220,6 +302,74 @@ function baselineLine(value: number | null, label: string) {
       strokeDasharray="5 5"
       y={value}
     />
+  );
+}
+
+function hrvRangeAreas(domain: MetricDomain, baseline: number | null) {
+  const balanced = hrvBalancedRange(baseline);
+  if (!balanced) {
+    return null;
+  }
+
+  return (
+    <>
+      <ReferenceArea fill="rgba(255, 69, 58, 0.13)" y1={domain[0]} y2={balanced.low} />
+      <ReferenceArea fill="rgba(48, 209, 88, 0.13)" y1={balanced.low} y2={balanced.high} />
+      <ReferenceArea fill="rgba(255, 214, 10, 0.11)" y1={balanced.high} y2={domain[1]} />
+      <ReferenceLine
+        label={{
+          value: "balanced",
+          position: "insideTopRight",
+          fill: chartColors.green,
+          fontSize: 12,
+        }}
+        stroke={chartColors.green}
+        strokeDasharray="4 4"
+        y={balanced.low}
+      />
+      <ReferenceLine
+        stroke={chartColors.green}
+        strokeDasharray="4 4"
+        y={balanced.high}
+      />
+    </>
+  );
+}
+
+function restingHeartRateAreas(domain: MetricDomain, baseline: number | null) {
+  const ranges = rhrRanges(baseline);
+  if (!ranges) {
+    return null;
+  }
+
+  return (
+    <>
+      <ReferenceArea fill="rgba(48, 209, 88, 0.13)" y1={domain[0]} y2={ranges.goodMax} />
+      <ReferenceArea fill="rgba(255, 214, 10, 0.12)" y1={ranges.goodMax} y2={ranges.elevatedMax} />
+      <ReferenceArea fill="rgba(255, 69, 58, 0.13)" y1={ranges.elevatedMax} y2={domain[1]} />
+      <ReferenceLine
+        label={{
+          value: "baseline",
+          position: "insideTopRight",
+          fill: chartColors.orange,
+          fontSize: 12,
+        }}
+        stroke={chartColors.orange}
+        strokeDasharray="5 5"
+        y={baseline ?? undefined}
+      />
+    </>
+  );
+}
+
+function stressRangeAreas() {
+  return (
+    <>
+      <ReferenceArea fill="rgba(10, 132, 255, 0.1)" y1={0} y2={25} />
+      <ReferenceArea fill="rgba(48, 209, 88, 0.1)" y1={25} y2={50} />
+      <ReferenceArea fill="rgba(255, 159, 10, 0.1)" y1={50} y2={75} />
+      <ReferenceArea fill="rgba(255, 69, 58, 0.12)" y1={75} y2={100} />
+    </>
   );
 }
 
@@ -255,6 +405,15 @@ export default function GarminStatsPage() {
   const currentPoint = latestPoint(stats);
   const hasLowData = Boolean(stats && stats.metric_count > 0 && stats.metric_count < 7);
   const hasNoData = Boolean(stats && stats.metric_count === 0);
+  const hrvChartDomain = hrvDomain(chartData, stats?.baselines.hrv_ms ?? null);
+  const rhrChartDomain = restingHeartRateDomain(
+    chartData,
+    stats?.baselines.resting_heart_rate ?? null,
+  );
+  const hasBodyBatteryData = chartData.some(
+    (point) =>
+      point.body_battery_start !== null || point.body_battery_end !== null,
+  );
 
   async function load(nextRange: GarminStatsRange, options = { showLoading: true }) {
     if (options.showLoading) {
@@ -380,47 +539,38 @@ export default function GarminStatsPage() {
 
       {!isLoading && stats && (
         <>
-          <div className="dashboard-grid garmin-summary-grid">
-            <div className="dashboard-card">
-              <div className="dashboard-label">Latest date</div>
-              <div className="dashboard-value">{formatDate(stats.latest_metric?.date)}</div>
-              <div className="dashboard-subvalue">{stats.range} range</div>
+          <div className="stat-grid garmin-summary-grid">
+            <div className="stat-card">
+              <span>latest date</span>
+              <strong>{formatDate(stats.latest_metric?.date)}</strong>
             </div>
-            <div className="dashboard-card">
-              <div className="dashboard-label">Last sync</div>
-              <div className="dashboard-value">
-                {formatDateTime(status?.last_synced_at ?? stats.latest_metric?.synced_at)}
-              </div>
-              <div className="dashboard-subvalue">
-                {status?.connected ? "connected" : "local history"}
-              </div>
+            <div className="stat-card">
+              <span>last sync</span>
+              <strong>{formatDateTime(status?.last_synced_at ?? stats.latest_metric?.synced_at)}</strong>
             </div>
-            <div className="dashboard-card">
-              <div className="dashboard-label">Available days</div>
-              <div className="dashboard-value">{stats.coverage.available_days}</div>
-              <div className="dashboard-subvalue">{coverageSubvalue(stats)}</div>
+            <div className="stat-card">
+              <span>available days</span>
+              <strong>{stats.coverage.available_days}</strong>
             </div>
-            <div className="dashboard-card">
-              <div className="dashboard-label">Missing days</div>
-              <div className="dashboard-value">
-                {stats.coverage.missing_days === null ? "n/a" : stats.coverage.missing_days}
-              </div>
-              <div className="dashboard-subvalue">not synced in range</div>
+            <div className="stat-card">
+              <span>missing days</span>
+              <strong>{stats.coverage.missing_days === null ? "n/a" : stats.coverage.missing_days}</strong>
             </div>
-            <div className="dashboard-card">
-              <div className="dashboard-label">Current HRV</div>
-              <div className="dashboard-value">{formatWithUnit(currentPoint?.hrv_ms, " ms", 1)}</div>
-              <div className="dashboard-subvalue">latest local metric</div>
+            <div className="stat-card">
+              <span>current HRV</span>
+              <strong>{formatWithUnit(currentPoint?.hrv_ms, " ms", 1)}</strong>
             </div>
-            <div className="dashboard-card">
-              <div className="dashboard-label">Current resting HR</div>
-              <div className="dashboard-value">{formatWithUnit(currentPoint?.resting_heart_rate, " bpm")}</div>
-              <div className="dashboard-subvalue">latest local metric</div>
+            <div className="stat-card">
+              <span>resting HR</span>
+              <strong>{formatWithUnit(currentPoint?.resting_heart_rate, " bpm")}</strong>
             </div>
-            <div className="dashboard-card">
-              <div className="dashboard-label">Current Body Battery</div>
-              <div className="dashboard-value">{bodyBatteryValue(currentPoint)}</div>
-              <div className="dashboard-subvalue">start / end</div>
+            <div className="stat-card">
+              <span>body battery</span>
+              <strong>{bodyBatteryValue(currentPoint)}</strong>
+            </div>
+            <div className="stat-card">
+              <span>stress avg</span>
+              <strong>{formatNumber(currentPoint?.stress_avg)}</strong>
             </div>
           </div>
 
@@ -439,23 +589,23 @@ export default function GarminStatsPage() {
           )}
 
           {stats.metric_count > 0 && (
-            <div className="stats-chart-grid">
+            <div className="garmin-chart-grid">
               <ChartCard
-                subtitle="Nightly HRV with 28-day median baseline when enough samples exist."
+                subtitle="Balanced range is centered on the local 28-day median when enough samples exist."
                 title="HRV"
-                wide
               >
                 <ResponsiveContainer height={260} width="100%">
                   <LineChart data={chartData} margin={{ bottom: 8, left: 0, right: 12, top: 12 }}>
                     <CartesianGrid stroke={chartColors.grid} strokeDasharray="3 3" />
                     <XAxis dataKey="label" minTickGap={18} {...commonAxisProps()} />
-                    <YAxis {...commonAxisProps()} />
+                    <YAxis domain={hrvChartDomain} {...commonAxisProps()} />
                     <Tooltip {...tooltipProps()} />
-                    {baselineLine(stats.baselines.hrv_ms, "28d median")}
+                    {hrvRangeAreas(hrvChartDomain, stats.baselines.hrv_ms)}
+                    {baselineLine(stats.baselines.hrv_ms, "median")}
                     <Line
                       connectNulls={false}
                       dataKey="hrv_ms"
-                      dot={false}
+                      dot={{ r: 2 }}
                       name="HRV"
                       stroke={chartColors.blue}
                       strokeWidth={2}
@@ -466,20 +616,20 @@ export default function GarminStatsPage() {
               </ChartCard>
 
               <ChartCard
-                subtitle="Resting heart rate with 28-day median baseline when enough samples exist."
+                subtitle="Dynamic scale with normal, elevated, and high bands around local baseline."
                 title="Resting heart rate"
               >
                 <ResponsiveContainer height={260} width="100%">
                   <LineChart data={chartData} margin={{ bottom: 8, left: 0, right: 12, top: 12 }}>
                     <CartesianGrid stroke={chartColors.grid} strokeDasharray="3 3" />
                     <XAxis dataKey="label" minTickGap={18} {...commonAxisProps()} />
-                    <YAxis {...commonAxisProps()} />
+                    <YAxis domain={rhrChartDomain} {...commonAxisProps()} />
                     <Tooltip {...tooltipProps()} />
-                    {baselineLine(stats.baselines.resting_heart_rate, "28d median")}
+                    {restingHeartRateAreas(rhrChartDomain, stats.baselines.resting_heart_rate)}
                     <Line
                       connectNulls={false}
                       dataKey="resting_heart_rate"
-                      dot={false}
+                      dot={{ r: 2 }}
                       name="Resting HR"
                       stroke={chartColors.red}
                       strokeWidth={2}
@@ -490,63 +640,63 @@ export default function GarminStatsPage() {
               </ChartCard>
 
               <ChartCard subtitle="Daily start and end values." title="Body Battery">
+                {hasBodyBatteryData ? (
+                  <ResponsiveContainer height={260} width="100%">
+                    <LineChart data={chartData} margin={{ bottom: 8, left: 0, right: 12, top: 12 }}>
+                      <CartesianGrid stroke={chartColors.grid} strokeDasharray="3 3" />
+                      <XAxis dataKey="label" minTickGap={18} {...commonAxisProps()} />
+                      <YAxis domain={[0, 100]} {...commonAxisProps()} />
+                      <Tooltip {...tooltipProps()} />
+                      <Legend />
+                      <Line
+                        connectNulls={false}
+                        dataKey="body_battery_start"
+                        dot={{ r: 2 }}
+                        name="Body Battery start"
+                        stroke={chartColors.green}
+                        strokeWidth={2}
+                        type="monotone"
+                      />
+                      <Line
+                        connectNulls={false}
+                        dataKey="body_battery_end"
+                        dot={{ r: 2 }}
+                        name="Body Battery end"
+                        stroke={chartColors.orange}
+                        strokeWidth={2}
+                        type="monotone"
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="garmin-chart-empty">No Body Battery values in synced rows.</div>
+                )}
+              </ChartCard>
+
+              <ChartCard
+                subtitle="Garmin-style stress bands: rest, low, medium, and high."
+                title="Stress"
+              >
                 <ResponsiveContainer height={260} width="100%">
-                  <LineChart data={chartData} margin={{ bottom: 8, left: 0, right: 12, top: 12 }}>
+                  <BarChart data={chartData} margin={{ bottom: 8, left: 0, right: 12, top: 12 }}>
                     <CartesianGrid stroke={chartColors.grid} strokeDasharray="3 3" />
                     <XAxis dataKey="label" minTickGap={18} {...commonAxisProps()} />
                     <YAxis domain={[0, 100]} {...commonAxisProps()} />
                     <Tooltip {...tooltipProps()} />
-                    <Legend />
-                    <Line
-                      connectNulls={false}
-                      dataKey="body_battery_start"
-                      dot={false}
-                      name="Body Battery start"
-                      stroke={chartColors.green}
-                      strokeWidth={2}
-                      type="monotone"
-                    />
-                    <Line
-                      connectNulls={false}
-                      dataKey="body_battery_end"
-                      dot={false}
-                      name="Body Battery end"
-                      stroke={chartColors.orange}
-                      strokeWidth={2}
-                      type="monotone"
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </ChartCard>
-
-              <ChartCard
-                subtitle="Average daily stress with 28-day median baseline when enough samples exist."
-                title="Stress average"
-              >
-                <ResponsiveContainer height={260} width="100%">
-                  <LineChart data={chartData} margin={{ bottom: 8, left: 0, right: 12, top: 12 }}>
-                    <CartesianGrid stroke={chartColors.grid} strokeDasharray="3 3" />
-                    <XAxis dataKey="label" minTickGap={18} {...commonAxisProps()} />
-                    <YAxis {...commonAxisProps()} />
-                    <Tooltip {...tooltipProps()} />
-                    {baselineLine(stats.baselines.stress_avg, "28d median")}
-                    <Line
-                      connectNulls={false}
-                      dataKey="stress_avg"
-                      dot={false}
-                      name="Stress avg"
-                      stroke={chartColors.purple}
-                      strokeWidth={2}
-                      type="monotone"
-                    />
-                  </LineChart>
+                    {stressRangeAreas()}
+                    {baselineLine(stats.baselines.stress_avg, "median")}
+                    <Bar dataKey="stress_avg" name="Stress avg" radius={[4, 4, 0, 0]}>
+                      {chartData.map((point) => (
+                        <Cell fill={stressColor(point.stress_avg)} key={point.date} />
+                      ))}
+                    </Bar>
+                  </BarChart>
                 </ResponsiveContainer>
               </ChartCard>
 
               <ChartCard
                 subtitle="Step count with 28-day median baseline when enough samples exist."
                 title="Steps"
-                wide
               >
                 <ResponsiveContainer height={260} width="100%">
                   <BarChart data={chartData} margin={{ bottom: 8, left: 0, right: 12, top: 12 }}>

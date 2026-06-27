@@ -229,29 +229,81 @@ def extract_stress_avg(stress_payload: Any) -> int | None:
     return integer_or_none(mean(values)) if values else None
 
 
+BODY_BATTERY_ARRAY_KEYS = (
+    "bodyBatteryValuesArray",
+    "bodyBatteryValues",
+    "bodyBatteryValueDescriptorDTOList",
+    "bodyBatteryReadingDTOList",
+    "values",
+)
+BODY_BATTERY_VALUE_KEYS = (
+    "bodyBatteryValue",
+    "bodyBatteryLevel",
+    "bodyBattery",
+    "value",
+    "level",
+    "percentage",
+)
+
+
+def body_battery_number(value: Any) -> int | None:
+    if isinstance(value, (int, float)) and 0 <= value <= 100:
+        return int(round(value))
+    return None
+
+
+def body_battery_value_from_item(item: Any) -> int | None:
+    candidate = body_battery_number(item)
+    if candidate is not None:
+        return candidate
+
+    if isinstance(item, (list, tuple)):
+        for child in reversed(item):
+            candidate = body_battery_number(child)
+            if candidate is not None:
+                return candidate
+        return None
+
+    if not isinstance(item, dict):
+        return None
+
+    for key in BODY_BATTERY_VALUE_KEYS:
+        candidate = body_battery_number(item.get(key))
+        if candidate is not None:
+            return candidate
+
+    for key in ("descriptor", "valueDescriptorDTO", "bodyBatteryValueDescriptorDTO"):
+        nested = item.get(key)
+        if isinstance(nested, dict):
+            candidate = body_battery_value_from_item(nested)
+            if candidate is not None:
+                return candidate
+
+    return None
+
+
 def body_battery_values(body_battery_payload: Any) -> list[int]:
-    source = body_battery_payload
-    if isinstance(body_battery_payload, dict):
-        for key in ("bodyBatteryValuesArray", "bodyBatteryValues", "values"):
-            if isinstance(body_battery_payload.get(key), list):
-                source = body_battery_payload[key]
-                break
+    sources: list[Any] = []
+    if isinstance(body_battery_payload, list):
+        sources.append(body_battery_payload)
+    elif isinstance(body_battery_payload, dict):
+        for key in BODY_BATTERY_ARRAY_KEYS:
+            value = body_battery_payload.get(key)
+            if isinstance(value, list):
+                sources.append(value)
+
+        nested = body_battery_payload.get("bodyBattery")
+        if isinstance(nested, (dict, list)) and not sources:
+            return body_battery_values(nested)
 
     values: list[int] = []
-    if not isinstance(source, list):
-        return values
-
-    for item in source:
-        candidate: Any = None
-        if isinstance(item, (list, tuple)) and len(item) >= 2:
-            candidate = item[-1]
-        elif isinstance(item, dict):
-            candidate = item.get("bodyBatteryValue") or item.get("value")
-        elif isinstance(item, (int, float)):
-            candidate = item
-
-        if isinstance(candidate, (int, float)):
-            values.append(int(round(candidate)))
+    for source in sources:
+        if not isinstance(source, list):
+            continue
+        for item in source:
+            candidate = body_battery_value_from_item(item)
+            if candidate is not None:
+                values.append(candidate)
 
     return values
 
@@ -260,13 +312,36 @@ def extract_body_battery(body_battery_payload: Any) -> tuple[int | None, int | N
     start = integer_or_none(
         number_from_keys(
             body_battery_payload,
-            ("bodyBatteryStart", "bodyBatteryStarting", "startValue"),
+            (
+                "bodyBatteryStart",
+                "bodyBatteryStarting",
+                "bodyBatteryStartValue",
+                "bodyBatteryAtStart",
+                "bodyBatteryAtWakeTime",
+                "bodyBatteryWakeupValue",
+                "bodyBatteryHighestValue",
+                "startBodyBattery",
+                "startValue",
+                "morningBodyBattery",
+            ),
         )
     )
     end = integer_or_none(
         number_from_keys(
             body_battery_payload,
-            ("bodyBatteryEnd", "bodyBatteryEnding", "endValue"),
+            (
+                "bodyBatteryEnd",
+                "bodyBatteryEnding",
+                "bodyBatteryEndValue",
+                "bodyBatteryAtEnd",
+                "bodyBatteryMostRecentValue",
+                "bodyBatteryLatestValue",
+                "bodyBatteryLowestValue",
+                "endBodyBattery",
+                "endValue",
+                "currentValue",
+                "latestValue",
+            ),
         )
     )
     values = body_battery_values(body_battery_payload)
@@ -390,6 +465,13 @@ class GarminService:
         body_battery_start, body_battery_end = extract_body_battery(
             payloads.get("body_battery")
         )
+        if body_battery_start is None or body_battery_end is None:
+            summary_start, summary_end = extract_body_battery(payloads.get("summary"))
+            body_battery_start = (
+                summary_start if body_battery_start is None else body_battery_start
+            )
+            body_battery_end = summary_end if body_battery_end is None else body_battery_end
+
         return {
             "date": metric_date,
             "resting_heart_rate": extract_resting_heart_rate(payloads.get("summary")),

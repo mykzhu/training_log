@@ -194,6 +194,46 @@ class GarminServiceTests(unittest.TestCase):
         self.assertEqual(metric["steps"], 12345)
         self.assertIn("summary", metric["raw_diagnostics"])
 
+    def test_sync_extracts_body_battery_from_daily_summary_fallback(self) -> None:
+        payloads = {
+            "2026-06-26": {
+                "summary": {
+                    "bodyBatteryAtWakeTime": 84,
+                    "bodyBatteryMostRecentValue": 26,
+                },
+                "body_battery": {},
+            }
+        }
+        service = GarminService(FakeGarminDataClient(payloads))
+
+        service.sync(1, today=date(2026, 6, 26))
+        metric = garmin_repository.get_daily_metric("2026-06-26")
+
+        self.assertEqual(metric["body_battery_start"], 84)
+        self.assertEqual(metric["body_battery_end"], 26)
+
+    def test_sync_extracts_nested_body_battery_payload_shapes(self) -> None:
+        payloads = {
+            "2026-06-26": {
+                "body_battery": {
+                    "bodyBattery": {
+                        "values": [
+                            {"bodyBatteryLevel": 91},
+                            ["12:00", 1687780800000, 64, "MEASURED"],
+                            {"valueDescriptorDTO": {"value": 42}},
+                        ]
+                    }
+                },
+            }
+        }
+        service = GarminService(FakeGarminDataClient(payloads))
+
+        service.sync(1, today=date(2026, 6, 26))
+        metric = garmin_repository.get_daily_metric("2026-06-26")
+
+        self.assertEqual(metric["body_battery_start"], 91)
+        self.assertEqual(metric["body_battery_end"], 42)
+
     def test_partial_sync_preserves_existing_valid_values(self) -> None:
         garmin_repository.upsert_daily_metric(
             {
