@@ -672,7 +672,7 @@ export default function GarminStatsPage() {
                     <YAxis {...commonAxisProps()} />
                     <Tooltip {...tooltipProps()} />
                     {baselineLine(stats.baselines.steps, "28d median")}
-                    <Bar dataKey="steps" fill={chartColors.green} name="Steps" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="steps" fill={chartColors.blue} name="Steps" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </ChartCard>
