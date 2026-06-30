@@ -39,7 +39,7 @@ This version intentionally expands the Garmin work beyond the previous high-leve
 
 # Recommended next Garmin work
 
-## [ ] Phase 14 — Garmin recovery explainability and local-date correctness
+## [x] Phase 14 — Garmin recovery explainability and local-date correctness
 
 Branch:
 

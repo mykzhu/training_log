@@ -6,6 +6,7 @@ from typing import Any, Protocol
 from uuid import uuid4
 
 from app.repositories import garmin as garmin_repository
+from app.services import date_service
 from app.services.garmin_client import GarminClientAdapter
 
 
@@ -52,7 +53,7 @@ def clamp_days(days: int | None) -> int:
 
 
 def local_date_range(days: int, *, today: date | None = None) -> list[str]:
-    today = today or date.today()
+    today = today or date_service.app_today()
     return [
         (today - timedelta(days=offset)).isoformat()
         for offset in range(days)
@@ -486,7 +487,7 @@ class GarminService:
 
     def list_daily(self, days: int | None = None, *, today: date | None = None) -> dict[str, Any]:
         sync_days = clamp_days(days)
-        today = today or date.today()
+        today = today or date_service.app_today()
         start_date = (today - timedelta(days=sync_days - 1)).isoformat()
         return {
             "days": sync_days,
@@ -500,7 +501,7 @@ class GarminService:
         today: date | None = None,
     ) -> dict[str, Any]:
         selected_range, expected_days = garmin_stats_range_days(range_value)
-        today = today or date.today()
+        today = today or date_service.app_today()
 
         if expected_days is None:
             start_date = None
@@ -547,36 +548,79 @@ class GarminService:
         }
 
     def recovery_snapshot(self, *, today: date | None = None) -> dict[str, Any]:
-        today = today or date.today()
-        today_metric = garmin_repository.get_daily_metric(today.isoformat())
-        yesterday_metric = garmin_repository.get_daily_metric(
-            (today - timedelta(days=1)).isoformat()
-        )
+        local_date_source = "explicit_today" if today is not None else "configured_timezone_today"
+        today = today or date_service.app_today()
+        previous_day = today - timedelta(days=1)
+        today_date = today.isoformat()
+        previous_date = previous_day.isoformat()
+        today_metric = garmin_repository.get_daily_metric(today_date)
+        yesterday_metric = garmin_repository.get_daily_metric(previous_date)
         latest_metric = garmin_repository.get_latest_metric()
         sample_start = (today - timedelta(days=34)).isoformat()
+        connected = self.client.has_tokens()
+        freshness_status = self._snapshot_freshness_status(
+            connected=connected,
+            today_metric=today_metric,
+            latest_metric=latest_metric,
+        )
 
         return {
-            "connected": self.client.has_tokens(),
+            "connected": connected,
             "today": today_metric,
             "yesterday": yesterday_metric,
             "latest": latest_metric,
             "last_synced_at": garmin_repository.get_last_synced_at(),
             "sample_count_35d": garmin_repository.get_metric_count_since(sample_start),
-            "message": self._snapshot_message(today_metric, latest_metric),
+            "current_date": today_date,
+            "previous_date": previous_date,
+            "local_date_source": local_date_source,
+            "today_present": today_metric is not None,
+            "yesterday_present": yesterday_metric is not None,
+            "latest_metric_date": str(latest_metric["date"]) if latest_metric else None,
+            "freshness_status": freshness_status,
+            "missing_today_metrics": self._missing_today_metrics(today_metric),
+            "message": self._snapshot_message(freshness_status),
         }
 
-    def _snapshot_message(
+    def _snapshot_freshness_status(
         self,
+        *,
+        connected: bool,
         today_metric: dict[str, Any] | None,
         latest_metric: dict[str, Any] | None,
     ) -> str:
         if today_metric is not None:
-            return "Today synced"
+            return "today_synced"
         if latest_metric is not None:
-            return "Latest Garmin data is historical"
-        if self.client.has_tokens():
+            return "historical_only"
+        if connected:
+            return "connected_not_synced"
+        return "not_connected"
+
+    def _snapshot_message(self, freshness_status: str) -> str:
+        if freshness_status == "today_synced":
+            return "Today synced"
+        if freshness_status == "historical_only":
+            return "Historical only - not scored as today"
+        if freshness_status == "connected_not_synced":
             return "Connected, not synced"
         return "Not connected"
+
+    def _missing_today_metrics(self, today_metric: dict[str, Any] | None) -> list[str]:
+        if today_metric is None:
+            return ["Resting HR", "HRV", "Body Battery start", "Current stress"]
+
+        checks = (
+            ("resting_heart_rate", "Resting HR"),
+            ("hrv_ms", "HRV"),
+            ("body_battery_start", "Body Battery start"),
+            ("stress_avg", "Current stress"),
+        )
+        return [
+            label
+            for key, label in checks
+            if not isinstance(today_metric.get(key), (int, float))
+        ]
 
 
 garmin_service = GarminService()

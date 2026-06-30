@@ -2,6 +2,7 @@ import tempfile
 import unittest
 from datetime import date, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 from app import config
 from app.db import init_db
@@ -66,6 +67,35 @@ class GarminReadinessServiceTests(unittest.TestCase):
         self.assertEqual(adjustment["score_delta"], 0)
         self.assertEqual(adjustment["baseline_days"], 28)
         self.assertEqual(adjustment["minimum_baseline_samples"], 7)
+        self.assertEqual(adjustment["local_date_source"], "as_of")
+        self.assertEqual(adjustment["available_rule_count"], 0)
+        self.assertEqual(adjustment["missing_rule_count"], 5)
+        self.assertEqual(
+            adjustment["scored_metrics_summary"],
+            "No Garmin metric changed readiness.",
+        )
+
+    def test_configured_timezone_today_is_used_when_as_of_is_missing(self) -> None:
+        self.insert_baseline_metrics()
+        self.insert_metric("2026-06-26", resting_heart_rate=72)
+
+        with patch("app.services.date_service.app_today", return_value=date(2026, 6, 26)):
+            adjustment = build_garmin_readiness_adjustment()
+
+        self.assertEqual(adjustment["current_date"], "2026-06-26")
+        self.assertEqual(adjustment["previous_date"], "2026-06-25")
+        self.assertEqual(adjustment["local_date_source"], "configured_timezone_today")
+        self.assertEqual(
+            self.rule_by_metric(adjustment, "resting_heart_rate")["status"],
+            "scored",
+        )
+
+    def test_explicit_as_of_wins_over_configured_timezone_today(self) -> None:
+        with patch("app.services.date_service.app_today", return_value=date(2026, 6, 27)):
+            adjustment = build_garmin_readiness_adjustment("2026-06-26T23:30:00")
+
+        self.assertEqual(adjustment["current_date"], "2026-06-26")
+        self.assertEqual(adjustment["local_date_source"], "as_of")
 
     def test_bad_current_metrics_and_previous_day_stress_clamp_negative_delta(self) -> None:
         self.insert_baseline_metrics()
@@ -87,6 +117,12 @@ class GarminReadinessServiceTests(unittest.TestCase):
         self.assertEqual(adjustment["status"], "negative")
         self.assertLess(adjustment["raw_score_delta"], -20)
         self.assertEqual(adjustment["score_delta"], -20)
+        self.assertEqual(adjustment["available_rule_count"], 5)
+        self.assertEqual(adjustment["scored_rule_count"], 4)
+        self.assertEqual(adjustment["missing_rule_count"], 0)
+        self.assertEqual(adjustment["display_only_rule_count"], 1)
+        self.assertIn("HRV -10", adjustment["scored_metrics_summary"])
+        self.assertIn("Resting heart rate -10", adjustment["scored_metrics_summary"])
         self.assertEqual(
             self.rule_by_metric(adjustment, "current_stress_avg")["status"],
             "display_only",
@@ -129,6 +165,7 @@ class GarminReadinessServiceTests(unittest.TestCase):
 
         self.assertEqual(adjustment["score_delta"], 0)
         self.assertEqual(adjustment["status"], "insufficient_baseline")
+        self.assertEqual(adjustment["insufficient_baseline_rule_count"], 4)
         self.assertEqual(
             self.rule_by_metric(adjustment, "resting_heart_rate")["status"],
             "insufficient_baseline",
@@ -159,9 +196,14 @@ class GarminReadinessServiceTests(unittest.TestCase):
             "missing_current",
         )
         self.assertEqual(
+            self.rule_by_metric(adjustment, "current_stress_avg")["status"],
+            "missing_current",
+        )
+        self.assertEqual(
             self.rule_by_metric(adjustment, "stress_avg")["status"],
             "scored",
         )
+        self.assertEqual(adjustment["missing_rule_count"], 4)
         self.assertEqual(adjustment["score_delta"], -8)
 
 

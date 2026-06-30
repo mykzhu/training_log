@@ -149,6 +149,13 @@ export type GarminReadinessAdjustment = {
   previous_date: string;
   baseline_start_date: string;
   baseline_end_date: string;
+  local_date_source: string;
+  available_rule_count: number;
+  scored_rule_count: number;
+  missing_rule_count: number;
+  insufficient_baseline_rule_count: number;
+  display_only_rule_count: number;
+  scored_metrics_summary: string;
   summary: string;
   rules: GarminReadinessAdjustmentRule[];
 };
@@ -191,6 +198,14 @@ export type GarminRecoverySnapshot = {
   latest: GarminDailyMetric | null;
   last_synced_at: string | null;
   sample_count_35d: number;
+  current_date: string;
+  previous_date: string;
+  local_date_source: string;
+  today_present: boolean;
+  yesterday_present: boolean;
+  latest_metric_date: string | null;
+  freshness_status: string;
+  missing_today_metrics: string[];
   message: string;
 };
 

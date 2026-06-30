@@ -223,6 +223,13 @@ class GarminReadinessAdjustmentResponse(FlexibleResponse):
     previous_date: str
     baseline_start_date: str
     baseline_end_date: str
+    local_date_source: str
+    available_rule_count: int
+    scored_rule_count: int
+    missing_rule_count: int
+    insufficient_baseline_rule_count: int
+    display_only_rule_count: int
+    scored_metrics_summary: str
     summary: str
     rules: list[dict[str, Any]]
 
@@ -264,6 +271,14 @@ class GarminRecoverySnapshotResponse(AppBaseModel):
     latest: GarminDailyMetricResponse | None
     last_synced_at: str | None
     sample_count_35d: int
+    current_date: str
+    previous_date: str
+    local_date_source: str
+    today_present: bool
+    yesterday_present: bool
+    latest_metric_date: str | None
+    freshness_status: str
+    missing_today_metrics: list[str]
     message: str
 
 

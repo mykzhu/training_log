@@ -17,6 +17,8 @@ import { syncGarmin } from "../api/garmin";
 import type {
   CurrentWorkout,
   GarminDailyMetric,
+  GarminReadinessAdjustment,
+  GarminReadinessAdjustmentRule,
   GarminRecoverySnapshot,
   NextWorkoutRecommendation,
   RecoveryContext,
@@ -233,6 +235,118 @@ function metricClassForGarminDelta(value: number | null | undefined) {
   }
 
   return value <= -10 ? "metric-red" : "metric-orange";
+}
+
+function garminAdjustmentStatusLabel(status: string | undefined) {
+  if (!status) {
+    return "unknown";
+  }
+
+  const labels: Record<string, string> = {
+    positive: "positive",
+    negative: "negative",
+    neutral: "neutral",
+    display_only: "display only",
+    insufficient_baseline: "not enough baseline",
+    not_available: "not available",
+  };
+  return labels[status] ?? status.replace(/_/g, " ");
+}
+
+function metricClassForGarminStatus(status: string | undefined) {
+  if (status === "positive" || status === "today_synced") {
+    return "metric-green";
+  }
+  if (status === "negative") {
+    return "metric-red";
+  }
+  if (
+    status === "insufficient_baseline" ||
+    status === "historical_only" ||
+    status === "connected_not_synced"
+  ) {
+    return "metric-yellow";
+  }
+  if (status === "display_only") {
+    return "metric-orange";
+  }
+
+  return "metric-neutral";
+}
+
+function metricClassForPresence(present: boolean) {
+  return present ? "metric-green" : "metric-yellow";
+}
+
+function garminSnapshotStatusLabel(status: string | undefined) {
+  const labels: Record<string, string> = {
+    today_synced: "today synced",
+    historical_only: "historical only",
+    connected_not_synced: "connected, not synced",
+    not_connected: "not connected",
+  };
+  return status ? labels[status] ?? status.replace(/_/g, " ") : "unknown";
+}
+
+function garminRuleStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    scored: "scored",
+    neutral: "neutral",
+    missing_current: "missing today",
+    missing_baseline: "missing baseline",
+    insufficient_baseline: "not enough baseline",
+    display_only: "display only",
+  };
+  return labels[status] ?? status.replace(/_/g, " ");
+}
+
+function metricClassForGarminRule(rule: GarminReadinessAdjustmentRule) {
+  if (rule.status === "scored" || rule.status === "neutral") {
+    return metricClassForGarminDelta(rule.score_delta);
+  }
+  if (rule.status === "display_only") {
+    return "metric-orange";
+  }
+  if (rule.status === "insufficient_baseline" || rule.status === "missing_baseline") {
+    return "metric-yellow";
+  }
+  if (rule.status === "missing_current") {
+    return "metric-neutral";
+  }
+
+  return "metric-neutral";
+}
+
+function garminRuleDigits(rule: GarminReadinessAdjustmentRule) {
+  return rule.metric === "hrv_ms" ? 1 : 0;
+}
+
+function garminRuleUnit(rule: GarminReadinessAdjustmentRule) {
+  if (rule.metric === "resting_heart_rate") {
+    return "bpm";
+  }
+  if (rule.metric === "hrv_ms") {
+    return "ms";
+  }
+
+  return "";
+}
+
+function formatGarminRuleNumber(
+  value: number | null | undefined,
+  rule: GarminReadinessAdjustmentRule,
+) {
+  const formatted = formatGarminMetric(value, garminRuleDigits(rule));
+  const unit = garminRuleUnit(rule);
+  return formatted === "-" || !unit ? formatted : `${formatted} ${unit}`;
+}
+
+function formatGarminRuleBaseline(rule: GarminReadinessAdjustmentRule) {
+  if (rule.baseline_median === null || rule.baseline_median === undefined) {
+    return "-";
+  }
+
+  return `${formatGarminRuleNumber(rule.baseline_median, rule)} median`;
 }
 
 function shouldShowGarminAdjustment(status: string | undefined) {
@@ -613,14 +727,19 @@ function GarminRecoveryCard({
           <h2>Garmin recovery</h2>
           <div className="muted small">{snapshot.message}</div>
         </div>
-        <button
-          className="ghost-button compact-action"
-          disabled={pending || !snapshot.connected}
-          onClick={onSync}
-          type="button"
-        >
-          {pending ? "Syncing" : "Sync"}
-        </button>
+        <div className="garmin-card-actions">
+          <Link className="card-link" to="/garmin">
+            Stats
+          </Link>
+          <button
+            className="ghost-button compact-action"
+            disabled={pending || !snapshot.connected}
+            onClick={onSync}
+            type="button"
+          >
+            {pending ? "Syncing" : "Sync 35 days"}
+          </button>
+        </div>
       </div>
 
       {error && <div className="error-banner">{error}</div>}
@@ -632,6 +751,24 @@ function GarminRecoveryCard({
           label="Garmin"
         />
         <MetricTile
+          value={formatGarminDate(snapshot.current_date)}
+          label="scoring date"
+        />
+        <MetricTile
+          className={metricClassForPresence(snapshot.today_present)}
+          value={snapshot.today_present ? "present" : "missing"}
+          label="today"
+        />
+        <MetricTile
+          className={metricClassForPresence(snapshot.yesterday_present)}
+          value={snapshot.yesterday_present ? "present" : "missing"}
+          label="yesterday"
+        />
+        <MetricTile
+          value={formatGarminDate(snapshot.latest_metric_date)}
+          label="latest row"
+        />
+        <MetricTile
           value={formatGarminDateTime(snapshot.last_synced_at)}
           label="last sync"
         />
@@ -639,7 +776,18 @@ function GarminRecoveryCard({
           value={snapshot.sample_count_35d}
           label="35d samples"
         />
+        <MetricTile
+          className={metricClassForGarminStatus(snapshot.freshness_status)}
+          value={garminSnapshotStatusLabel(snapshot.freshness_status)}
+          label="status"
+        />
       </div>
+
+      {snapshot.missing_today_metrics.length > 0 && (
+        <p className="recovery-hint">
+          Missing today: {snapshot.missing_today_metrics.join(", ")}
+        </p>
+      )}
 
       <div className="garmin-metric-list">
         <GarminMetricRow label="Today" metric={snapshot.today} />
@@ -742,7 +890,7 @@ function NextWorkoutCard({ recommendation }: NextWorkoutCardProps) {
 
       <p className="recovery-hint">{recommendation.summary}</p>
       {showGarminAdjustment && garminAdjustment && (
-        <p className="recovery-hint">Garmin: {garminAdjustment.summary}</p>
+        <GarminAdjustmentDetails adjustment={garminAdjustment} />
       )}
 
       {recommendation.reasons.length > 0 && (
@@ -790,6 +938,127 @@ function NextWorkoutCard({ recommendation }: NextWorkoutCardProps) {
         </div>
       )}
     </section>
+  );
+}
+
+type GarminAdjustmentDetailsProps = {
+  adjustment: GarminReadinessAdjustment;
+};
+
+function GarminAdjustmentDetails({ adjustment }: GarminAdjustmentDetailsProps) {
+  const scoredRules = adjustment.rules.filter((rule) =>
+    ["scored", "neutral"].includes(rule.status),
+  );
+  const notScoredRules = adjustment.rules.filter(
+    (rule) => !["scored", "neutral"].includes(rule.status),
+  );
+
+  return (
+    <details className="garmin-adjustment-details">
+      <summary>
+        <span>
+          Garmin adjustment: {formatScoreDelta(adjustment.score_delta)}
+        </span>
+        <span className={`status-badge ${metricClassForGarminStatus(adjustment.status)}`}>
+          {garminAdjustmentStatusLabel(adjustment.status)}
+        </span>
+      </summary>
+
+      <div className="garmin-adjustment-body">
+        <p className="recovery-hint">{adjustment.summary}</p>
+        <div className="garmin-adjustment-window">
+          <div>
+            <span className="muted">Today</span>
+            <strong>{formatGarminDate(adjustment.current_date)}</strong>
+          </div>
+          <div>
+            <span className="muted">Previous day</span>
+            <strong>{formatGarminDate(adjustment.previous_date)}</strong>
+          </div>
+          <div>
+            <span className="muted">Baseline</span>
+            <strong>
+              {formatGarminDate(adjustment.baseline_start_date)} to {formatGarminDate(adjustment.baseline_end_date)}
+            </strong>
+          </div>
+          <div>
+            <span className="muted">Date source</span>
+            <strong>{adjustment.local_date_source.replace(/_/g, " ")}</strong>
+          </div>
+        </div>
+
+        <div className="garmin-adjustment-counts">
+          <span>{adjustment.available_rule_count} available</span>
+          <span>{adjustment.scored_rule_count} scored</span>
+          <span>{adjustment.missing_rule_count} missing</span>
+          <span>{adjustment.insufficient_baseline_rule_count} low baseline</span>
+          <span>{adjustment.display_only_rule_count} display only</span>
+        </div>
+
+        <GarminRuleSection title="Scored" rules={scoredRules} />
+        <GarminRuleSection title="Not scored" rules={notScoredRules} />
+
+        <div className="garmin-clamp-row">
+          <span>Raw {formatScoreDelta(adjustment.raw_score_delta)}</span>
+          <span>Applied {formatScoreDelta(adjustment.score_delta)}</span>
+          <span>
+            Bounds {formatScoreDelta(adjustment.min_score_delta)}..{formatScoreDelta(adjustment.max_score_delta)}
+          </span>
+        </div>
+
+        <div className="garmin-adjustment-footer">
+          <span className="muted">{adjustment.scored_metrics_summary}</span>
+          <Link className="card-link" to="/garmin">
+            Garmin stats
+          </Link>
+        </div>
+      </div>
+    </details>
+  );
+}
+
+type GarminRuleSectionProps = {
+  rules: GarminReadinessAdjustmentRule[];
+  title: string;
+};
+
+function GarminRuleSection({ rules, title }: GarminRuleSectionProps) {
+  if (rules.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="garmin-rule-section">
+      <strong>{title}</strong>
+      <div className="garmin-rule-list">
+        {rules.map((rule) => (
+          <GarminRuleRow key={`${rule.metric}-${rule.source_date}`} rule={rule} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+type GarminRuleRowProps = {
+  rule: GarminReadinessAdjustmentRule;
+};
+
+function GarminRuleRow({ rule }: GarminRuleRowProps) {
+  return (
+    <div className={`garmin-rule-row ${metricClassForGarminRule(rule)}`}>
+      <div className="garmin-rule-main">
+        <strong>{rule.label}</strong>
+        <span className="status-badge">{garminRuleStatusLabel(rule.status)}</span>
+      </div>
+      <div className="garmin-rule-values">
+        <span>Current {formatGarminRuleNumber(rule.current, rule)}</span>
+        <span>Baseline {formatGarminRuleBaseline(rule)}</span>
+        <span>Samples {rule.baseline_sample_count}</span>
+        <span>Source {formatGarminDate(rule.source_date)}</span>
+        <span>Delta {formatScoreDelta(rule.score_delta)}</span>
+      </div>
+      <div className="garmin-rule-message muted">{rule.message}</div>
+    </div>
   );
 }
 

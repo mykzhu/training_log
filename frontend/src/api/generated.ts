@@ -178,29 +178,44 @@ export type GarminMfaRequest = {
 
 export type GarminReadinessAdjustmentResponse = {
   applied: boolean;
+  available_rule_count: number;
   baseline_days: number;
   baseline_end_date: string;
   baseline_start_date: string;
   current_date: string;
+  display_only_rule_count: number;
+  insufficient_baseline_rule_count: number;
+  local_date_source: string;
   max_score_delta: number;
   min_score_delta: number;
   minimum_baseline_samples: number;
+  missing_rule_count: number;
   previous_date: string;
   raw_score_delta: number;
   rules: Array<Record<string, unknown>>;
   score_delta: number;
+  scored_metrics_summary: string;
+  scored_rule_count: number;
   status: string;
   summary: string;
 };
 
 export type GarminRecoverySnapshotResponse = {
   connected: boolean;
+  current_date: string;
+  freshness_status: string;
   last_synced_at?: string | null;
   latest?: GarminDailyMetricResponse | null;
+  latest_metric_date?: string | null;
+  local_date_source: string;
   message: string;
+  missing_today_metrics: Array<string>;
+  previous_date: string;
   sample_count_35d: number;
   today?: GarminDailyMetricResponse | null;
+  today_present: boolean;
   yesterday?: GarminDailyMetricResponse | null;
+  yesterday_present: boolean;
 };
 
 export type GarminStatsBaselinesResponse = {

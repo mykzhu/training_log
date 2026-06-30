@@ -139,6 +139,37 @@ class ExplodingGarminClient:
     def get_body_battery_data(self, client: Any, metric_date: str) -> Any:
         raise AssertionError("stats must not fetch Garmin Body Battery")
 
+class NoFetchGarminClient:
+    def __init__(self, connected: bool = True) -> None:
+        self.connected = connected
+
+    def has_tokens(self) -> bool:
+        return self.connected
+
+    def login(self, username: str, password: str):
+        raise AssertionError("recovery snapshot must not call Garmin login")
+
+    def resume_mfa(self, client: Any, state: Any, code: str) -> None:
+        raise AssertionError("recovery snapshot must not call Garmin MFA")
+
+    def connect_from_tokens(self) -> object:
+        raise AssertionError("recovery snapshot must not connect to Garmin")
+
+    def disconnect(self) -> None:
+        raise AssertionError("recovery snapshot must not disconnect Garmin")
+
+    def get_daily_summary(self, client: Any, metric_date: str) -> Any:
+        raise AssertionError("recovery snapshot must not fetch Garmin summaries")
+
+    def get_hrv_data(self, client: Any, metric_date: str) -> Any:
+        raise AssertionError("recovery snapshot must not fetch Garmin HRV")
+
+    def get_stress_data(self, client: Any, metric_date: str) -> Any:
+        raise AssertionError("recovery snapshot must not fetch Garmin stress")
+
+    def get_body_battery_data(self, client: Any, metric_date: str) -> Any:
+        raise AssertionError("recovery snapshot must not fetch Garmin Body Battery")
+
 
 class GarminServiceTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -469,6 +500,55 @@ class GarminServiceTests(unittest.TestCase):
         response = service.stats("35", today=date(2026, 6, 26))
 
         self.assertEqual(response["metric_count"], 1)
+    def test_recovery_snapshot_reports_today_synced_status(self) -> None:
+        self.seed_metric("2026-06-25")
+        self.seed_metric("2026-06-26", hrv_ms=None)
+        service = GarminService(NoFetchGarminClient(connected=True))
+
+        response = service.recovery_snapshot(today=date(2026, 6, 26))
+
+        self.assertTrue(response["connected"])
+        self.assertEqual(response["current_date"], "2026-06-26")
+        self.assertEqual(response["previous_date"], "2026-06-25")
+        self.assertEqual(response["freshness_status"], "today_synced")
+        self.assertEqual(response["message"], "Today synced")
+        self.assertTrue(response["today_present"])
+        self.assertTrue(response["yesterday_present"])
+        self.assertEqual(response["latest_metric_date"], "2026-06-26")
+        self.assertIn("HRV", response["missing_today_metrics"])
+
+    def test_recovery_snapshot_reports_historical_only_status(self) -> None:
+        self.seed_metric("2026-06-25")
+        service = GarminService(NoFetchGarminClient(connected=True))
+
+        response = service.recovery_snapshot(today=date(2026, 6, 26))
+
+        self.assertEqual(response["freshness_status"], "historical_only")
+        self.assertEqual(response["message"], "Historical only - not scored as today")
+        self.assertFalse(response["today_present"])
+        self.assertTrue(response["yesterday_present"])
+        self.assertEqual(response["latest_metric_date"], "2026-06-25")
+        self.assertEqual(
+            response["missing_today_metrics"],
+            ["Resting HR", "HRV", "Body Battery start", "Current stress"],
+        )
+
+    def test_recovery_snapshot_reports_connected_not_synced_status(self) -> None:
+        service = GarminService(NoFetchGarminClient(connected=True))
+
+        response = service.recovery_snapshot(today=date(2026, 6, 26))
+
+        self.assertEqual(response["freshness_status"], "connected_not_synced")
+        self.assertEqual(response["message"], "Connected, not synced")
+        self.assertIsNone(response["latest_metric_date"])
+
+    def test_recovery_snapshot_reports_not_connected_status(self) -> None:
+        service = GarminService(NoFetchGarminClient(connected=False))
+
+        response = service.recovery_snapshot(today=date(2026, 6, 26))
+
+        self.assertEqual(response["freshness_status"], "not_connected")
+        self.assertEqual(response["message"], "Not connected")
 
     def test_only_garmin_client_imports_garminconnect(self) -> None:
         app_dir = Path(__file__).resolve().parents[1] / "app"

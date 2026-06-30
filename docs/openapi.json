@@ -737,6 +737,10 @@
             "title": "Applied",
             "type": "boolean"
           },
+          "available_rule_count": {
+            "title": "Available Rule Count",
+            "type": "integer"
+          },
           "baseline_days": {
             "title": "Baseline Days",
             "type": "integer"
@@ -753,6 +757,18 @@
             "title": "Current Date",
             "type": "string"
           },
+          "display_only_rule_count": {
+            "title": "Display Only Rule Count",
+            "type": "integer"
+          },
+          "insufficient_baseline_rule_count": {
+            "title": "Insufficient Baseline Rule Count",
+            "type": "integer"
+          },
+          "local_date_source": {
+            "title": "Local Date Source",
+            "type": "string"
+          },
           "max_score_delta": {
             "title": "Max Score Delta",
             "type": "integer"
@@ -763,6 +779,10 @@
           },
           "minimum_baseline_samples": {
             "title": "Minimum Baseline Samples",
+            "type": "integer"
+          },
+          "missing_rule_count": {
+            "title": "Missing Rule Count",
             "type": "integer"
           },
           "previous_date": {
@@ -782,6 +802,14 @@
           },
           "score_delta": {
             "title": "Score Delta",
+            "type": "integer"
+          },
+          "scored_metrics_summary": {
+            "title": "Scored Metrics Summary",
+            "type": "string"
+          },
+          "scored_rule_count": {
+            "title": "Scored Rule Count",
             "type": "integer"
           },
           "status": {
@@ -806,6 +834,13 @@
           "previous_date",
           "baseline_start_date",
           "baseline_end_date",
+          "local_date_source",
+          "available_rule_count",
+          "scored_rule_count",
+          "missing_rule_count",
+          "insufficient_baseline_rule_count",
+          "display_only_rule_count",
+          "scored_metrics_summary",
           "summary",
           "rules"
         ],
@@ -818,6 +853,14 @@
             "title": "Connected",
             "type": "boolean"
           },
+          "current_date": {
+            "title": "Current Date",
+            "type": "string"
+          },
+          "freshness_status": {
+            "title": "Freshness Status",
+            "type": "string"
+          },
           "last_synced_at": {
             "title": "Last Synced At",
             "type": "string"
@@ -825,8 +868,27 @@
           "latest": {
             "$ref": "#/components/schemas/GarminDailyMetricResponse"
           },
+          "latest_metric_date": {
+            "title": "Latest Metric Date",
+            "type": "string"
+          },
+          "local_date_source": {
+            "title": "Local Date Source",
+            "type": "string"
+          },
           "message": {
             "title": "Message",
+            "type": "string"
+          },
+          "missing_today_metrics": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Today Metrics",
+            "type": "array"
+          },
+          "previous_date": {
+            "title": "Previous Date",
             "type": "string"
           },
           "sample_count_35d": {
@@ -836,13 +898,28 @@
           "today": {
             "$ref": "#/components/schemas/GarminDailyMetricResponse"
           },
+          "today_present": {
+            "title": "Today Present",
+            "type": "boolean"
+          },
           "yesterday": {
             "$ref": "#/components/schemas/GarminDailyMetricResponse"
+          },
+          "yesterday_present": {
+            "title": "Yesterday Present",
+            "type": "boolean"
           }
         },
         "required": [
           "connected",
           "sample_count_35d",
+          "current_date",
+          "previous_date",
+          "local_date_source",
+          "today_present",
+          "yesterday_present",
+          "freshness_status",
+          "missing_today_metrics",
           "message"
         ],
         "title": "GarminRecoverySnapshotResponse",

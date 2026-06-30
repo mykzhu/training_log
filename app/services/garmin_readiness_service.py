@@ -3,6 +3,7 @@ from statistics import median
 from typing import Any, Callable
 
 from app.repositories import garmin as garmin_repository
+from app.services import date_service
 
 
 BASELINE_DAYS = 28
@@ -13,14 +14,12 @@ MAX_GARMIN_DELTA = 10
 MetricDeltaFunction = Callable[[float, float], tuple[int, str]]
 
 
-def parse_as_of_date(as_of: str | None) -> date:
-    if as_of:
-        try:
-            return datetime.fromisoformat(str(as_of)).date()
-        except ValueError:
-            pass
+def parse_as_of_date_with_source(as_of: str | None) -> tuple[date, str]:
+    return date_service.parse_local_date_from_as_of(as_of)
 
-    return date.today()
+
+def parse_as_of_date(as_of: str | None) -> date:
+    return parse_as_of_date_with_source(as_of)[0]
 
 
 def clamp_garmin_delta(value: int) -> int:
@@ -211,8 +210,27 @@ def adjustment_status(
     return "not_available"
 
 
+def has_rule_value(rule: dict[str, Any]) -> bool:
+    return isinstance(rule.get("current"), (int, float))
+
+
+def format_signed_delta(value: int) -> str:
+    return f"+{value}" if value > 0 else str(value)
+
+
+def scored_metrics_summary(scored_rules: list[dict[str, Any]]) -> str:
+    changed_rules = [rule for rule in scored_rules if int(rule.get("score_delta") or 0) != 0]
+    if not changed_rules:
+        return "No Garmin metric changed readiness."
+
+    return ", ".join(
+        f"{rule['label']} {format_signed_delta(int(rule['score_delta']))}"
+        for rule in changed_rules
+    )
+
+
 def build_garmin_readiness_adjustment(as_of: str | None = None) -> dict[str, Any]:
-    as_of_date = parse_as_of_date(as_of)
+    as_of_date, local_date_source = parse_as_of_date_with_source(as_of)
     current_date = as_of_date.isoformat()
     previous_date = (as_of_date - timedelta(days=1)).isoformat()
     baseline_start = (as_of_date - timedelta(days=BASELINE_DAYS)).isoformat()
@@ -268,7 +286,7 @@ def build_garmin_readiness_adjustment(as_of: str | None = None) -> dict[str, Any
     raw_delta = sum(int(rule["score_delta"]) for rule in rules)
     score_delta = clamp_garmin_delta(raw_delta)
     scored_rules = [rule for rule in rules if rule["status"] in {"scored", "neutral"}]
-    has_available_metric = current_metric is not None or previous_metric is not None
+    has_available_metric = any(has_rule_value(rule) for rule in rules)
 
     return {
         "applied": score_delta != 0,
@@ -287,6 +305,15 @@ def build_garmin_readiness_adjustment(as_of: str | None = None) -> dict[str, Any
         "previous_date": previous_date,
         "baseline_start_date": baseline_start,
         "baseline_end_date": baseline_end,
+        "local_date_source": local_date_source,
+        "available_rule_count": sum(1 for rule in rules if has_rule_value(rule)),
+        "scored_rule_count": len(scored_rules),
+        "missing_rule_count": sum(1 for rule in rules if rule["status"] == "missing_current"),
+        "insufficient_baseline_rule_count": sum(
+            1 for rule in rules if rule["status"] == "insufficient_baseline"
+        ),
+        "display_only_rule_count": sum(1 for rule in rules if rule["status"] == "display_only"),
+        "scored_metrics_summary": scored_metrics_summary(scored_rules),
         "summary": adjustment_summary(score_delta, scored_rules),
         "rules": rules,
     }
