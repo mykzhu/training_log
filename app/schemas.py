@@ -345,7 +345,55 @@ class GarminStatsBaselinesResponse(AppBaseModel):
     resting_heart_rate: float | None
     hrv_ms: float | None
     stress_avg: float | None
+    body_battery_start: float | None
     steps: float | None
+
+
+class GarminStatsFreshnessResponse(AppBaseModel):
+    status: str
+    latest_metric_date: str | None
+    days_since_latest_metric: int | None
+    message: str
+
+
+class GarminStatsReadinessImpactResponse(AppBaseModel):
+    score_delta: int
+    raw_score_delta: int
+    min_score_delta: int
+    max_score_delta: int
+    used_metric_count: int
+    display_only_metric_count: int
+
+
+class GarminStatsSignalResponse(AppBaseModel):
+    metric: str
+    label: str
+    unit: str
+    source_date: str
+    current: float | None
+    baseline_median: float | None
+    baseline_sample_count: int
+    delta: float | None
+    delta_percent: float | None
+    status: str
+    direction: str
+    used_for_readiness: bool
+    score_delta: int
+    message: str
+
+
+class GarminStatsInsightsResponse(AppBaseModel):
+    current_date: str
+    previous_date: str
+    baseline_start_date: str
+    baseline_end_date: str
+    baseline_days: int
+    minimum_baseline_samples: int
+    freshness: GarminStatsFreshnessResponse
+    overall_status: str
+    overall_message: str
+    readiness_impact: GarminStatsReadinessImpactResponse
+    signals: list[GarminStatsSignalResponse]
 
 
 class GarminStatsResponse(AppBaseModel):
@@ -357,6 +405,7 @@ class GarminStatsResponse(AppBaseModel):
     latest_metric: GarminStatsLatestMetricResponse | None
     series: list[GarminStatsPointResponse]
     baselines: GarminStatsBaselinesResponse
+    insights: GarminStatsInsightsResponse
 
 
 class CurrentWorkoutResponse(AppBaseModel):

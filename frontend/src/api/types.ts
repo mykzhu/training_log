@@ -241,6 +241,54 @@ export type GarminStatsPoint = {
   steps: number | null;
 };
 
+
+export type GarminStatsFreshness = {
+  status: string;
+  latest_metric_date: string | null;
+  days_since_latest_metric: number | null;
+  message: string;
+};
+
+export type GarminStatsReadinessImpact = {
+  score_delta: number;
+  raw_score_delta: number;
+  min_score_delta: number;
+  max_score_delta: number;
+  used_metric_count: number;
+  display_only_metric_count: number;
+};
+
+export type GarminStatsSignal = {
+  metric: string;
+  label: string;
+  unit: string;
+  source_date: string;
+  current: number | null;
+  baseline_median: number | null;
+  baseline_sample_count: number;
+  delta: number | null;
+  delta_percent: number | null;
+  status: string;
+  direction: string;
+  used_for_readiness: boolean;
+  score_delta: number;
+  message: string;
+};
+
+export type GarminStatsInsights = {
+  current_date: string;
+  previous_date: string;
+  baseline_start_date: string;
+  baseline_end_date: string;
+  baseline_days: number;
+  minimum_baseline_samples: number;
+  freshness: GarminStatsFreshness;
+  overall_status: string;
+  overall_message: string;
+  readiness_impact: GarminStatsReadinessImpact;
+  signals: GarminStatsSignal[];
+};
+
 export type GarminStatsResponse = {
   range: GarminStatsRange;
   date_from: string | null;
@@ -260,8 +308,10 @@ export type GarminStatsResponse = {
     resting_heart_rate: number | null;
     hrv_ms: number | null;
     stress_avg: number | null;
+    body_battery_start: number | null;
     steps: number | null;
   };
+  insights: GarminStatsInsights;
 };
 
 export type CurrentWorkout = {

@@ -2946,3 +2946,221 @@ button.load-calendar-cell:focus-visible {
     grid-template-columns: 1fr;
   }
 }
+
+.garmin-overview-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.garmin-overview-panel .panel-header {
+  align-items: flex-start;
+  margin-bottom: 0;
+}
+
+.garmin-overview-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.garmin-signals-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.garmin-signals-panel .panel-header {
+  margin-bottom: 0;
+}
+
+.garmin-signal-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.garmin-signal-card {
+  display: grid;
+  gap: 8px;
+  min-height: 176px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 12px;
+  background: var(--card2);
+}
+
+.garmin-signal-card.metric-green {
+  border-color: rgba(48, 209, 88, 0.65);
+  background: rgba(48, 209, 88, 0.1);
+}
+
+.garmin-signal-card.metric-yellow {
+  border-color: rgba(255, 214, 10, 0.7);
+  background: rgba(255, 214, 10, 0.09);
+}
+
+.garmin-signal-card.metric-orange {
+  border-color: rgba(255, 159, 10, 0.7);
+  background: rgba(255, 159, 10, 0.1);
+}
+
+.garmin-signal-card.metric-red {
+  border-color: rgba(255, 69, 58, 0.75);
+  background: rgba(255, 69, 58, 0.11);
+}
+
+.garmin-signal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.garmin-signal-header strong,
+.garmin-signal-meta span,
+.garmin-impact-columns li span,
+.garmin-impact-columns li b {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.garmin-signal-value {
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+
+.garmin-signal-detail {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.garmin-signal-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 8px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.garmin-signal-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.garmin-impact-panel {
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--card);
+}
+
+.garmin-impact-panel summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  padding: 12px 14px;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.garmin-impact-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.garmin-impact-panel summary::after {
+  content: "+";
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.garmin-impact-panel[open] summary::after {
+  content: "-";
+}
+
+.garmin-impact-content {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid var(--border);
+  padding: 12px 14px 14px;
+}
+
+.garmin-impact-content > p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.garmin-impact-columns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.garmin-impact-columns > div {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+  background: var(--card2);
+}
+
+.garmin-impact-columns strong {
+  display: block;
+  font-size: 13px;
+}
+
+.garmin-impact-columns ul {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.garmin-impact-columns li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.garmin-impact-columns li b {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 900px) {
+  .garmin-signal-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .garmin-overview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .garmin-impact-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .garmin-stats-header,
+  .garmin-signals-panel .panel-header,
+  .garmin-overview-panel .panel-header,
+  .garmin-impact-panel summary {
+    display: grid;
+  }
+
+  .garmin-signal-grid {
+    grid-template-columns: 1fr;
+  }
+}

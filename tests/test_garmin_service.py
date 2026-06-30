@@ -366,6 +366,7 @@ class GarminServiceTests(unittest.TestCase):
                 "resting_heart_rate": None,
                 "hrv_ms": None,
                 "stress_avg": None,
+                "body_battery_start": None,
                 "steps": None,
             },
         )
@@ -469,10 +470,11 @@ class GarminServiceTests(unittest.TestCase):
 
         response = service.stats("35", today=date(2026, 6, 26))
 
-        self.assertEqual(response["baselines"]["resting_heart_rate"], 53.5)
-        self.assertEqual(response["baselines"]["hrv_ms"], 43.5)
-        self.assertEqual(response["baselines"]["stress_avg"], 23.5)
-        self.assertEqual(response["baselines"]["steps"], 4500.0)
+        self.assertEqual(response["baselines"]["resting_heart_rate"], 54.0)
+        self.assertEqual(response["baselines"]["hrv_ms"], 44.0)
+        self.assertEqual(response["baselines"]["stress_avg"], 24.0)
+        self.assertEqual(response["baselines"]["body_battery_start"], 70.0)
+        self.assertEqual(response["baselines"]["steps"], 5000.0)
 
     def test_stats_works_when_disconnected_but_history_exists(self) -> None:
         self.seed_metric("2026-06-26", hrv_ms=44.0)
@@ -485,12 +487,107 @@ class GarminServiceTests(unittest.TestCase):
         self.assertEqual(response["metric_count"], 1)
         self.assertEqual(response["series"][0]["hrv_ms"], 44.0)
 
+    def signal_by_metric(self, response: dict, metric: str) -> dict:
+        for signal in response["insights"]["signals"]:
+            if signal["metric"] == metric:
+                return signal
+        raise AssertionError(f"Signal not found: {metric}")
+
+    def test_stats_insights_reports_fresh_poor_recovery_signals(self) -> None:
+        for offset in range(1, 29):
+            metric_date = (date(2026, 6, 26) - timedelta(days=offset)).isoformat()
+            self.seed_metric(
+                metric_date,
+                resting_heart_rate=60,
+                hrv_ms=50.0,
+                stress_avg=30,
+                body_battery_start=70,
+                body_battery_end=35,
+                steps=8000,
+            )
+        self.seed_metric(
+            "2026-06-25",
+            stress_avg=58,
+            body_battery_end=20,
+        )
+        self.seed_metric(
+            "2026-06-26",
+            resting_heart_rate=69,
+            hrv_ms=40.0,
+            stress_avg=45,
+            body_battery_start=40,
+            body_battery_end=10,
+            steps=3000,
+        )
+        service = GarminService(ExplodingGarminClient())
+
+        response = service.stats("35", today=date(2026, 6, 26))
+        insights = response["insights"]
+
+        self.assertEqual(insights["freshness"]["status"], "fresh")
+        self.assertEqual(insights["overall_status"], "poor")
+        self.assertEqual(insights["readiness_impact"]["score_delta"], -20)
+        self.assertEqual(self.signal_by_metric(response, "hrv_ms")["status"], "poor")
+        self.assertEqual(
+            self.signal_by_metric(response, "resting_heart_rate")["status"],
+            "poor",
+        )
+        self.assertEqual(
+            self.signal_by_metric(response, "body_battery_start")["status"],
+            "poor",
+        )
+        self.assertEqual(
+            self.signal_by_metric(response, "stress_avg")["source_date"],
+            "2026-06-25",
+        )
+        self.assertEqual(
+            self.signal_by_metric(response, "current_stress_avg")["status"],
+            "display_only",
+        )
+        self.assertTrue(
+            any(
+                signal["metric"] == "overnight_recharge"
+                for signal in insights["signals"]
+            )
+        )
+
+    def test_stats_insights_reports_historical_only_without_scoring_today(self) -> None:
+        self.seed_metric("2026-06-25", hrv_ms=35.0, resting_heart_rate=70)
+        service = GarminService(ExplodingGarminClient())
+
+        response = service.stats("35", today=date(2026, 6, 26))
+        insights = response["insights"]
+
+        self.assertEqual(insights["freshness"]["status"], "historical_only")
+        self.assertEqual(insights["freshness"]["latest_metric_date"], "2026-06-25")
+        self.assertEqual(self.signal_by_metric(response, "hrv_ms")["status"], "missing")
+        self.assertEqual(
+            self.signal_by_metric(response, "resting_heart_rate")["status"],
+            "missing",
+        )
+
+    def test_stats_insights_reports_insufficient_baseline(self) -> None:
+        for offset in range(1, 4):
+            metric_date = (date(2026, 6, 26) - timedelta(days=offset)).isoformat()
+            self.seed_metric(metric_date, hrv_ms=50.0)
+        self.seed_metric("2026-06-26", hrv_ms=45.0)
+        service = GarminService(ExplodingGarminClient())
+
+        response = service.stats("35", today=date(2026, 6, 26))
+
+        self.assertEqual(
+            self.signal_by_metric(response, "hrv_ms")["status"],
+            "insufficient_baseline",
+        )
+        self.assertEqual(response["insights"]["overall_status"], "not_enough_data")
+
     def test_stats_response_never_exposes_raw_diagnostics(self) -> None:
         self.seed_metric("2026-06-26")
         service = GarminService(ExplodingGarminClient())
 
         response = service.stats("35", today=date(2026, 6, 26))
 
+        self.assertIn("insights", response)
         self.assertNotIn("raw_diagnostics", json.dumps(response))
 
     def test_stats_does_not_call_garmin_client(self) -> None:

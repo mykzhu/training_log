@@ -219,6 +219,7 @@ export type GarminRecoverySnapshotResponse = {
 };
 
 export type GarminStatsBaselinesResponse = {
+  body_battery_start?: number | null;
   hrv_ms?: number | null;
   resting_heart_rate?: number | null;
   steps?: number | null;
@@ -229,6 +230,27 @@ export type GarminStatsCoverageResponse = {
   available_days: number;
   expected_days?: number | null;
   missing_days?: number | null;
+};
+
+export type GarminStatsFreshnessResponse = {
+  days_since_latest_metric?: number | null;
+  latest_metric_date?: string | null;
+  message: string;
+  status: string;
+};
+
+export type GarminStatsInsightsResponse = {
+  baseline_days: number;
+  baseline_end_date: string;
+  baseline_start_date: string;
+  current_date: string;
+  freshness: GarminStatsFreshnessResponse;
+  minimum_baseline_samples: number;
+  overall_message: string;
+  overall_status: string;
+  previous_date: string;
+  readiness_impact: GarminStatsReadinessImpactResponse;
+  signals: Array<GarminStatsSignalResponse>;
 };
 
 export type GarminStatsLatestMetricResponse = {
@@ -246,15 +268,42 @@ export type GarminStatsPointResponse = {
   stress_avg?: number | null;
 };
 
+export type GarminStatsReadinessImpactResponse = {
+  display_only_metric_count: number;
+  max_score_delta: number;
+  min_score_delta: number;
+  raw_score_delta: number;
+  score_delta: number;
+  used_metric_count: number;
+};
+
 export type GarminStatsResponse = {
   baselines: GarminStatsBaselinesResponse;
   coverage: GarminStatsCoverageResponse;
   date_from?: string | null;
   date_to?: string | null;
+  insights: GarminStatsInsightsResponse;
   latest_metric?: GarminStatsLatestMetricResponse | null;
   metric_count: number;
   range: string;
   series: Array<GarminStatsPointResponse>;
+};
+
+export type GarminStatsSignalResponse = {
+  baseline_median?: number | null;
+  baseline_sample_count: number;
+  current?: number | null;
+  delta?: number | null;
+  delta_percent?: number | null;
+  direction: string;
+  label: string;
+  message: string;
+  metric: string;
+  score_delta: number;
+  source_date: string;
+  status: string;
+  unit: string;
+  used_for_readiness: boolean;
 };
 
 export type GarminStatusResponse = {
@@ -447,9 +496,13 @@ export type ApiSchemas = {
   GarminRecoverySnapshotResponse: GarminRecoverySnapshotResponse;
   GarminStatsBaselinesResponse: GarminStatsBaselinesResponse;
   GarminStatsCoverageResponse: GarminStatsCoverageResponse;
+  GarminStatsFreshnessResponse: GarminStatsFreshnessResponse;
+  GarminStatsInsightsResponse: GarminStatsInsightsResponse;
   GarminStatsLatestMetricResponse: GarminStatsLatestMetricResponse;
   GarminStatsPointResponse: GarminStatsPointResponse;
+  GarminStatsReadinessImpactResponse: GarminStatsReadinessImpactResponse;
   GarminStatsResponse: GarminStatsResponse;
+  GarminStatsSignalResponse: GarminStatsSignalResponse;
   GarminStatusResponse: GarminStatusResponse;
   GarminSyncRequest: GarminSyncRequest;
   GarminSyncResponse: GarminSyncResponse;

@@ -280,7 +280,7 @@ Settings Garmin sync/login still works
 
 ---
 
-## [ ] Phase 15 — Garmin Stats insights and better metric representation
+## [x] Phase 15 — Garmin Stats insights and better metric representation
 
 Branch:
 

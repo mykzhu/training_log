@@ -927,6 +927,10 @@
       },
       "GarminStatsBaselinesResponse": {
         "properties": {
+          "body_battery_start": {
+            "title": "Body Battery Start",
+            "type": "number"
+          },
           "hrv_ms": {
             "title": "Hrv Ms",
             "type": "number"
@@ -966,6 +970,96 @@
           "available_days"
         ],
         "title": "GarminStatsCoverageResponse",
+        "type": "object"
+      },
+      "GarminStatsFreshnessResponse": {
+        "properties": {
+          "days_since_latest_metric": {
+            "title": "Days Since Latest Metric",
+            "type": "integer"
+          },
+          "latest_metric_date": {
+            "title": "Latest Metric Date",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "message"
+        ],
+        "title": "GarminStatsFreshnessResponse",
+        "type": "object"
+      },
+      "GarminStatsInsightsResponse": {
+        "properties": {
+          "baseline_days": {
+            "title": "Baseline Days",
+            "type": "integer"
+          },
+          "baseline_end_date": {
+            "title": "Baseline End Date",
+            "type": "string"
+          },
+          "baseline_start_date": {
+            "title": "Baseline Start Date",
+            "type": "string"
+          },
+          "current_date": {
+            "title": "Current Date",
+            "type": "string"
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/GarminStatsFreshnessResponse"
+          },
+          "minimum_baseline_samples": {
+            "title": "Minimum Baseline Samples",
+            "type": "integer"
+          },
+          "overall_message": {
+            "title": "Overall Message",
+            "type": "string"
+          },
+          "overall_status": {
+            "title": "Overall Status",
+            "type": "string"
+          },
+          "previous_date": {
+            "title": "Previous Date",
+            "type": "string"
+          },
+          "readiness_impact": {
+            "$ref": "#/components/schemas/GarminStatsReadinessImpactResponse"
+          },
+          "signals": {
+            "items": {
+              "$ref": "#/components/schemas/GarminStatsSignalResponse"
+            },
+            "title": "Signals",
+            "type": "array"
+          }
+        },
+        "required": [
+          "current_date",
+          "previous_date",
+          "baseline_start_date",
+          "baseline_end_date",
+          "baseline_days",
+          "minimum_baseline_samples",
+          "freshness",
+          "overall_status",
+          "overall_message",
+          "readiness_impact",
+          "signals"
+        ],
+        "title": "GarminStatsInsightsResponse",
         "type": "object"
       },
       "GarminStatsLatestMetricResponse": {
@@ -1023,6 +1117,44 @@
         "title": "GarminStatsPointResponse",
         "type": "object"
       },
+      "GarminStatsReadinessImpactResponse": {
+        "properties": {
+          "display_only_metric_count": {
+            "title": "Display Only Metric Count",
+            "type": "integer"
+          },
+          "max_score_delta": {
+            "title": "Max Score Delta",
+            "type": "integer"
+          },
+          "min_score_delta": {
+            "title": "Min Score Delta",
+            "type": "integer"
+          },
+          "raw_score_delta": {
+            "title": "Raw Score Delta",
+            "type": "integer"
+          },
+          "score_delta": {
+            "title": "Score Delta",
+            "type": "integer"
+          },
+          "used_metric_count": {
+            "title": "Used Metric Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "score_delta",
+          "raw_score_delta",
+          "min_score_delta",
+          "max_score_delta",
+          "used_metric_count",
+          "display_only_metric_count"
+        ],
+        "title": "GarminStatsReadinessImpactResponse",
+        "type": "object"
+      },
       "GarminStatsResponse": {
         "properties": {
           "baselines": {
@@ -1038,6 +1170,9 @@
           "date_to": {
             "title": "Date To",
             "type": "string"
+          },
+          "insights": {
+            "$ref": "#/components/schemas/GarminStatsInsightsResponse"
           },
           "latest_metric": {
             "$ref": "#/components/schemas/GarminStatsLatestMetricResponse"
@@ -1063,9 +1198,84 @@
           "metric_count",
           "coverage",
           "series",
-          "baselines"
+          "baselines",
+          "insights"
         ],
         "title": "GarminStatsResponse",
+        "type": "object"
+      },
+      "GarminStatsSignalResponse": {
+        "properties": {
+          "baseline_median": {
+            "title": "Baseline Median",
+            "type": "number"
+          },
+          "baseline_sample_count": {
+            "title": "Baseline Sample Count",
+            "type": "integer"
+          },
+          "current": {
+            "title": "Current",
+            "type": "number"
+          },
+          "delta": {
+            "title": "Delta",
+            "type": "number"
+          },
+          "delta_percent": {
+            "title": "Delta Percent",
+            "type": "number"
+          },
+          "direction": {
+            "title": "Direction",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "metric": {
+            "title": "Metric",
+            "type": "string"
+          },
+          "score_delta": {
+            "title": "Score Delta",
+            "type": "integer"
+          },
+          "source_date": {
+            "title": "Source Date",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          },
+          "used_for_readiness": {
+            "title": "Used For Readiness",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "metric",
+          "label",
+          "unit",
+          "source_date",
+          "baseline_sample_count",
+          "status",
+          "direction",
+          "used_for_readiness",
+          "score_delta",
+          "message"
+        ],
+        "title": "GarminStatsSignalResponse",
         "type": "object"
       },
       "GarminStatusResponse": {

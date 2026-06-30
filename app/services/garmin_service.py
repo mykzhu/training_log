@@ -8,6 +8,7 @@ from uuid import uuid4
 from app.repositories import garmin as garmin_repository
 from app.services import date_service
 from app.services.garmin_client import GarminClientAdapter
+from app.services.garmin_readiness_service import build_garmin_readiness_adjustment
 
 
 logger = logging.getLogger("training_log")
@@ -21,6 +22,7 @@ GARMIN_STATS_BASELINE_COLUMNS = (
     "resting_heart_rate",
     "hrv_ms",
     "stress_avg",
+    "body_battery_start",
     "steps",
 )
 PENDING_MFA: dict[str, "PendingMfaSession"] = {}
@@ -110,6 +112,455 @@ def stats_baselines(
         baselines[column] = rounded_median(values)
 
     return baselines
+
+
+
+def rounded_float(value: float | None, digits: int = 2) -> float | None:
+    if value is None:
+        return None
+    return round(float(value), digits)
+
+
+def metric_date(value: Any) -> date | None:
+    if value is None:
+        return None
+    try:
+        return datetime.fromisoformat(str(value)).date()
+    except ValueError:
+        return None
+
+
+def metric_number(metric: dict[str, Any] | None, key: str) -> float | None:
+    if metric is None:
+        return None
+    value = metric.get(key)
+    return float(value) if isinstance(value, (int, float)) else None
+
+
+def baseline_metric_stats(
+    baseline_metrics: list[dict[str, Any]],
+    key: str,
+    *,
+    exclude_date: str | None = None,
+) -> tuple[float | None, int]:
+    values = [
+        float(metric[key])
+        for metric in baseline_metrics
+        if metric.get("date") != exclude_date and isinstance(metric.get(key), (int, float))
+    ]
+    if len(values) < GARMIN_STATS_MIN_BASELINE_SAMPLES:
+        return None, len(values)
+    return round(float(median(values)), 2), len(values)
+
+
+def signal_delta(current: float | None, baseline: float | None) -> tuple[float | None, float | None]:
+    if current is None or baseline is None:
+        return None, None
+    delta = round(float(current) - float(baseline), 2)
+    delta_percent = None if baseline == 0 else round((delta / float(baseline)) * 100, 2)
+    return delta, delta_percent
+
+
+def classify_hrv(current: float, baseline: float) -> str:
+    if current >= baseline * 1.05:
+        return "good"
+    if current >= baseline * 0.95:
+        return "normal"
+    if current >= baseline * 0.85:
+        return "watch"
+    return "poor"
+
+
+def classify_resting_heart_rate(current: float, baseline: float) -> str:
+    diff = current - baseline
+    if diff <= -3:
+        return "good"
+    if diff <= 3:
+        return "normal"
+    if diff <= 7:
+        return "watch"
+    return "poor"
+
+
+def classify_body_battery_start(current: float, baseline: float | None) -> str:
+    if baseline is None:
+        if current <= 25:
+            return "poor"
+        if current <= 50:
+            return "watch"
+        if current <= 75:
+            return "normal"
+        return "good"
+    diff = current - baseline
+    if diff >= 10:
+        return "good"
+    if diff >= -10:
+        return "normal"
+    if diff >= -25:
+        return "watch"
+    return "poor"
+
+
+def classify_stress(current: float, baseline: float) -> str:
+    diff = current - baseline
+    if diff <= -10:
+        return "good"
+    if diff <= 10:
+        return "normal"
+    if diff <= 20:
+        return "watch"
+    return "poor"
+
+
+def classify_steps(current: float, baseline: float | None) -> str:
+    if baseline is None or baseline <= 0:
+        return "display_only"
+    ratio = current / baseline
+    if ratio > 1.2:
+        return "good"
+    if ratio >= 0.8:
+        return "normal"
+    return "watch"
+
+
+def classify_overnight_recharge(current: float) -> str:
+    if current >= 35:
+        return "good"
+    if current >= 20:
+        return "normal"
+    if current >= 10:
+        return "watch"
+    return "poor"
+
+
+def status_label(status: str) -> str:
+    return {
+        "good": "Good",
+        "normal": "Normal",
+        "watch": "Watch",
+        "poor": "Poor",
+        "missing": "Missing",
+        "insufficient_baseline": "Not enough baseline",
+        "display_only": "Display only",
+    }.get(status, status.replace("_", " ").title())
+
+
+def build_metric_signal(
+    *,
+    metric_key: str,
+    output_metric: str | None = None,
+    label: str,
+    unit: str,
+    source_metric: dict[str, Any] | None,
+    source_date: str,
+    baseline_metrics: list[dict[str, Any]],
+    direction: str,
+    used_for_readiness: bool,
+    score_delta: int,
+    classifier: Any,
+    missing_message: str,
+    display_only: bool = False,
+    baseline_required: bool = True,
+) -> dict[str, Any]:
+    current = metric_number(source_metric, metric_key)
+    baseline, sample_count = baseline_metric_stats(
+        baseline_metrics,
+        metric_key,
+        exclude_date=source_date,
+    )
+    delta, delta_percent = signal_delta(current, baseline)
+
+    if current is None:
+        status = "missing"
+        message = missing_message
+    elif display_only:
+        status = "display_only"
+        message = f"{label} is display-only for readiness."
+    elif baseline is None and baseline_required:
+        status = "insufficient_baseline"
+        message = f"{label} needs at least {GARMIN_STATS_MIN_BASELINE_SAMPLES} baseline samples."
+    else:
+        status = classifier(float(current), baseline)
+        if baseline is None:
+            message = f"{label} is {status_label(status).lower()} by absolute display bands."
+        else:
+            message = f"{label} is {status_label(status).lower()} versus your baseline."
+
+    return {
+        "metric": output_metric or metric_key,
+        "label": label,
+        "unit": unit,
+        "source_date": source_date,
+        "current": rounded_float(current, 1 if unit == "ms" else 0),
+        "baseline_median": baseline,
+        "baseline_sample_count": sample_count,
+        "delta": delta,
+        "delta_percent": delta_percent,
+        "status": status,
+        "direction": direction,
+        "used_for_readiness": used_for_readiness,
+        "score_delta": score_delta,
+        "message": message,
+    }
+
+
+def build_derived_signal(
+    *,
+    metric: str,
+    label: str,
+    unit: str,
+    source_date: str,
+    current: float | None,
+    status: str,
+    message: str,
+) -> dict[str, Any]:
+    return {
+        "metric": metric,
+        "label": label,
+        "unit": unit,
+        "source_date": source_date,
+        "current": rounded_float(current),
+        "baseline_median": None,
+        "baseline_sample_count": 0,
+        "delta": None,
+        "delta_percent": None,
+        "status": status if current is not None else "missing",
+        "direction": "contextual",
+        "used_for_readiness": False,
+        "score_delta": 0,
+        "message": message if current is not None else f"{label} is unavailable.",
+    }
+
+
+def stats_freshness(
+    *,
+    today: date,
+    latest_metric: dict[str, Any] | None,
+) -> dict[str, Any]:
+    latest_date = metric_date(latest_metric.get("date") if latest_metric else None)
+    days_since = (today - latest_date).days if latest_date is not None else None
+    if latest_date == today:
+        status = "fresh"
+        message = "Today synced"
+    elif latest_date is not None:
+        status = "historical_only"
+        message = "Historical only - not scored as today"
+    else:
+        status = "missing"
+        message = "No Garmin rows synced"
+
+    return {
+        "status": status,
+        "latest_metric_date": latest_date.isoformat() if latest_date else None,
+        "days_since_latest_metric": days_since,
+        "message": message,
+    }
+
+
+def stats_overall_status(signals: list[dict[str, Any]]) -> str:
+    if not any(signal.get("current") is not None for signal in signals):
+        return "no_data"
+
+    readiness_signals = [signal for signal in signals if signal.get("used_for_readiness")]
+    if any(signal["status"] == "poor" for signal in readiness_signals):
+        return "poor"
+    if any(signal["status"] == "watch" for signal in readiness_signals):
+        return "watch"
+    if any(signal["status"] == "insufficient_baseline" for signal in readiness_signals):
+        return "not_enough_data"
+    return "good"
+
+
+def stats_overall_message(
+    *,
+    overall_status: str,
+    freshness: dict[str, Any],
+    signals: list[dict[str, Any]],
+) -> str:
+    if overall_status == "no_data":
+        return "No Garmin metrics are available for the scoring date."
+    if freshness["status"] == "historical_only":
+        return "Latest Garmin row is historical, so current-day recovery metrics are not scored as today."
+
+    concerning = [
+        signal["label"]
+        for signal in signals
+        if signal.get("used_for_readiness") and signal["status"] in {"watch", "poor"}
+    ]
+    if concerning:
+        if len(concerning) == 1:
+            return f"{concerning[0]} is outside your usual range."
+        return f"{', '.join(concerning[:-1])} and {concerning[-1]} are outside your usual range."
+    if overall_status == "not_enough_data":
+        return "Garmin data exists, but personal baselines are still building."
+    return "Garmin recovery metrics look normal for your current baseline."
+
+
+def build_garmin_stats_insights(
+    *,
+    today: date,
+    latest_metric: dict[str, Any] | None,
+) -> dict[str, Any]:
+    current_date = today.isoformat()
+    previous_date = (today - timedelta(days=1)).isoformat()
+    baseline_start = (today - timedelta(days=GARMIN_STATS_BASELINE_DAYS)).isoformat()
+    baseline_end = previous_date
+    current_metric = garmin_repository.get_daily_metric(current_date)
+    previous_metric = garmin_repository.get_daily_metric(previous_date)
+    baseline_metrics = garmin_repository.list_daily_metrics(
+        start_date=baseline_start,
+        end_date=baseline_end,
+    )
+    adjustment = build_garmin_readiness_adjustment(f"{current_date}T00:00:00")
+    rules_by_metric = {rule["metric"]: rule for rule in adjustment["rules"]}
+
+    signals = [
+        build_metric_signal(
+            metric_key="hrv_ms",
+            label="HRV",
+            unit="ms",
+            source_metric=current_metric,
+            source_date=current_date,
+            baseline_metrics=baseline_metrics,
+            direction="higher_is_better",
+            used_for_readiness=True,
+            score_delta=int(rules_by_metric.get("hrv_ms", {}).get("score_delta") or 0),
+            classifier=classify_hrv,
+            missing_message="No current-day HRV row for the scoring date.",
+        ),
+        build_metric_signal(
+            metric_key="resting_heart_rate",
+            label="Resting HR",
+            unit="bpm",
+            source_metric=current_metric,
+            source_date=current_date,
+            baseline_metrics=baseline_metrics,
+            direction="lower_is_better",
+            used_for_readiness=True,
+            score_delta=int(rules_by_metric.get("resting_heart_rate", {}).get("score_delta") or 0),
+            classifier=classify_resting_heart_rate,
+            missing_message="No current-day resting heart rate row for the scoring date.",
+        ),
+        build_metric_signal(
+            metric_key="body_battery_start",
+            label="Body Battery start",
+            unit="",
+            source_metric=current_metric,
+            source_date=current_date,
+            baseline_metrics=baseline_metrics,
+            direction="higher_is_better",
+            used_for_readiness=True,
+            score_delta=int(rules_by_metric.get("body_battery_start", {}).get("score_delta") or 0),
+            classifier=classify_body_battery_start,
+            missing_message="No current-day Body Battery start row for the scoring date.",
+            baseline_required=False,
+        ),
+        build_metric_signal(
+            metric_key="stress_avg",
+            label="Previous-day stress",
+            unit="",
+            source_metric=previous_metric,
+            source_date=previous_date,
+            baseline_metrics=baseline_metrics,
+            direction="lower_is_better",
+            used_for_readiness=True,
+            score_delta=int(rules_by_metric.get("stress_avg", {}).get("score_delta") or 0),
+            classifier=classify_stress,
+            missing_message="No previous-day stress row for readiness scoring.",
+        ),
+        build_metric_signal(
+            metric_key="stress_avg",
+            output_metric="current_stress_avg",
+            label="Current stress",
+            unit="",
+            source_metric=current_metric,
+            source_date=current_date,
+            baseline_metrics=baseline_metrics,
+            direction="contextual",
+            used_for_readiness=False,
+            score_delta=0,
+            classifier=classify_stress,
+            missing_message="No current-day stress row for display.",
+            display_only=True,
+            baseline_required=False,
+        ),
+        build_metric_signal(
+            metric_key="steps",
+            label="Steps",
+            unit="",
+            source_metric=current_metric,
+            source_date=current_date,
+            baseline_metrics=baseline_metrics,
+            direction="contextual",
+            used_for_readiness=False,
+            score_delta=0,
+            classifier=classify_steps,
+            missing_message="No current-day step count row for display.",
+            baseline_required=False,
+        ),
+    ]
+
+    current_start = metric_number(current_metric, "body_battery_start")
+    current_end = metric_number(current_metric, "body_battery_end")
+    previous_end = metric_number(previous_metric, "body_battery_end")
+    if current_start is not None and previous_end is not None:
+        recharge = current_start - previous_end
+        signals.append(
+            build_derived_signal(
+                metric="overnight_recharge",
+                label="Overnight recharge",
+                unit="",
+                source_date=current_date,
+                current=recharge,
+                status=classify_overnight_recharge(recharge),
+                message="Overnight recharge is derived from today's start and yesterday's end Body Battery.",
+            )
+        )
+    if current_start is not None and current_end is not None:
+        drain = current_start - current_end
+        signals.append(
+            build_derived_signal(
+                metric="body_battery_daily_drain",
+                label="Daily Body Battery drain",
+                unit="",
+                source_date=current_date,
+                current=drain,
+                status="display_only",
+                message="Daily drain is informational and is not used for readiness.",
+            )
+        )
+
+    freshness = stats_freshness(today=today, latest_metric=latest_metric)
+    overall_status = stats_overall_status(signals)
+
+    return {
+        "current_date": current_date,
+        "previous_date": previous_date,
+        "baseline_start_date": baseline_start,
+        "baseline_end_date": baseline_end,
+        "baseline_days": GARMIN_STATS_BASELINE_DAYS,
+        "minimum_baseline_samples": GARMIN_STATS_MIN_BASELINE_SAMPLES,
+        "freshness": freshness,
+        "overall_status": overall_status,
+        "overall_message": stats_overall_message(
+            overall_status=overall_status,
+            freshness=freshness,
+            signals=signals,
+        ),
+        "readiness_impact": {
+            "score_delta": adjustment["score_delta"],
+            "raw_score_delta": adjustment["raw_score_delta"],
+            "min_score_delta": adjustment["min_score_delta"],
+            "max_score_delta": adjustment["max_score_delta"],
+            "used_metric_count": adjustment["scored_rule_count"],
+            "display_only_metric_count": sum(
+                1
+                for signal in signals
+                if not signal["used_for_readiness"] and signal.get("current") is not None
+            ),
+        },
+        "signals": signals,
+    }
 
 
 def latest_metric_summary(metric: dict[str, Any] | None) -> dict[str, str] | None:
@@ -519,31 +970,36 @@ class GarminService:
         if expected_days is None:
             date_from = metrics[0]["date"] if metrics else None
             date_to = metrics[-1]["date"] if metrics else None
-            baseline_end_date = (
-                datetime.fromisoformat(str(date_to)).date() if date_to else None
-            )
+            baseline_end_date = today - timedelta(days=1)
             missing_days = None
         else:
             date_from = start_date
             date_to = end_date
-            baseline_end_date = today
+            baseline_end_date = today - timedelta(days=1)
             missing_days = max(expected_days - len(metrics), 0)
+
+        coverage = {
+            "expected_days": expected_days,
+            "available_days": len(metrics),
+            "missing_days": missing_days,
+        }
+        latest_metric = garmin_repository.get_latest_metric()
 
         return {
             "range": selected_range,
             "date_from": date_from,
             "date_to": date_to,
             "metric_count": len(metrics),
-            "coverage": {
-                "expected_days": expected_days,
-                "available_days": len(metrics),
-                "missing_days": missing_days,
-            },
-            "latest_metric": latest_metric_summary(garmin_repository.get_latest_metric()),
+            "coverage": coverage,
+            "latest_metric": latest_metric_summary(latest_metric),
             "series": series,
             "baselines": stats_baselines(
                 metrics,
                 baseline_end_date=baseline_end_date,
+            ),
+            "insights": build_garmin_stats_insights(
+                today=today,
+                latest_metric=latest_metric,
             ),
         }
 
