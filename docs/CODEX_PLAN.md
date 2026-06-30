@@ -1,779 +1,1091 @@
-# Training Log — Garmin Recovery and Stats Detailed Codex Plan
+# Training Log — Codex Plan Addendum: Home Assistant Prefix + Configurable Analysis Types
 
 Repository: `mykzhu/training_log`  
 Target branch: latest `master`  
-Purpose: replace or extend the Garmin phases in `docs/CODEX_PLAN.md`.
+Intended baseline: after 1.1.0 release / after Garmin Phase 15  
+Purpose: add two user-requested changes with detailed, token-efficient instructions for Codex.
 
-This version intentionally expands the Garmin work beyond the previous high-level plan. It includes concrete backend payloads, UI sections, metric ranges, chart behavior, tests, and acceptance criteria.
+User requests:
+
+1. Support URL prefixing so the app can open correctly from Home Assistant, including the add-on toolbox / Open Web UI button and Home Assistant ingress paths.
+2. Make Analysis Types configurable: list them, add new ones, edit existing ones, and assign them to exercises.
 
 ---
 
-## Execution rule for Codex
+## How Codex must use this plan
 
 1. Pull latest `master`.
-2. Re-read `docs/CODEX_PLAN.md` and current Garmin/recovery code before editing.
+2. Re-read `docs/CODEX_PLAN.md`, this addendum, and the current code before editing.
 3. Execute only the first unchecked phase unless explicitly told otherwise.
-4. Keep each branch focused.
-5. Do not mix unrelated stats refactors, release work, or UI redesign into Garmin explainability.
-6. Do not commit runtime databases, Garmin tokens, logs, private Garmin payloads, or local generated artifacts.
-7. Report changed files, tests, builds, manual checks, and known gaps.
+4. Do not mix the Home Assistant prefix work with analysis-type persistence.
+5. Do not change Garmin scoring, workout recommendation logic, or exercise progression unless a phase explicitly asks for it.
+6. Keep API changes explicit and regenerate OpenAPI/generated TypeScript when schemas change.
+7. Run only the required checks for the phase, plus any tests touched by the change.
+8. Update `docs/CODEX_PLAN.md` when each phase is complete.
+9. Report changed files, commands run, manual checks, and any untested Home Assistant behavior.
 
 ---
 
-## Hard Garmin constraints
+## Current code facts to preserve
 
-- Garmin network calls are allowed only for explicit login/MFA/sync actions.
-- Rendering `/`, `/garmin`, recommendations, stats, or recovery context must never contact Garmin.
-- Garmin credentials must not be stored in SQLite, backup payloads, frontend storage, logs, URLs, or diagnostics.
-- `raw_diagnostics` may remain in local debug/daily payloads if already present, but must not be returned from stats/insights endpoints.
-- Garmin readiness must remain based on local persisted daily metrics.
-- Current-date RHR, HRV, and Body Battery start are eligible for scoring.
-- Current-day stress is display-only because a partial day is not comparable to full-day history.
-- Previous-day stress is eligible for scoring.
-- Steps are informational for now; do not score steps into readiness unless a later phase explicitly changes this.
-- Garmin metrics must not be passed into per-exercise target logic.
-- Existing safety caps after Garmin adjustment must remain in force.
-- Do not change scoring thresholds unless tests expose a concrete bug.
+### Home Assistant / frontend routing
+
+Current backend serves API routes first and then falls back to the React app for non-API paths. It rejects paths starting with `api/` from the SPA fallback.
+
+Current backend fallback behavior:
+
+```python
+@app.get("/{path:path}", include_in_schema=False)
+def serve_react_app(path: str = "") -> FileResponse:
+    if path.startswith("api/"):
+        raise HTTPException(status_code=404, detail="Not found.")
+```
+
+Current frontend API client fetches the path exactly as passed:
+
+```typescript
+const response = await fetch(path, { ...init, headers });
+```
+
+Current Vite config does not set a relative `base`, so built asset URLs may assume `/assets/...`:
+
+```typescript
+export default defineConfig({
+  plugins: [react()],
+  build: {
+    outDir: "dist",
+    assetsDir: "assets",
+  },
+});
+```
+
+Implication: under a Home Assistant ingress prefix like `/api/hassio_ingress/<token>/`, absolute frontend routes, asset paths, and API fetches can lose the prefix unless the app handles a runtime base path.
+
+### Analysis types
+
+Current analysis profiles are hardcoded in `app/services/analysis_service.py`:
+
+- `LOAD_PROFILES_BY_KEY`
+- `PROFILE_LABELS_BY_KEY`
+- `SUPPORTED_PROFILE_KEYS`
+- `EXERCISE_PROFILE_KEYS_BY_NAME`
+
+Exercises already store a `profile_key`.
+
+Settings already lets the user choose an “Analysis type” for an exercise, but only from hardcoded profiles returned by `GET /api/v1/exercise-profiles`.
+
+Current profile response only exposes:
+
+```python
+class ExerciseProfileResponse(AppBaseModel):
+    key: str
+    label: str
+    category: str
+```
+
+Implication: adding/editing analysis types requires database persistence, migrations, API CRUD, schema changes, frontend UI, backup schema update, and replacing hardcoded profile lookup with DB-backed profile lookup.
 
 ---
 
-# Recommended next Garmin work
+# Recommended next phases
 
-## [x] Phase 14 — Garmin recovery explainability and local-date correctness
+## [ ] Phase 16 — Home Assistant prefix/toolbox launch hardening
 
 Branch:
 
 ```text
-fix/garmin-readiness-explainability
+fix/ha-ingress-prefix-routing
 ```
 
 ### Goal
 
-Make the Current Workout “Next workout” and “Garmin recovery” cards explain exactly why Garmin changed readiness, why it did not change readiness, or why data is missing/stale.
+Make the app work from all expected Home Assistant entry points:
 
-Also make the Garmin scoring date explicit and safe for Home Assistant deployments in Ukraine.
+1. Home Assistant sidebar panel / ingress URL.
+2. Home Assistant add-on page toolbox / “Open Web UI” button.
+3. Direct local development root URL.
+4. Deep links and browser refreshes from all of the above.
 
-### Problem to solve
+The app must not lose the URL prefix when navigating or calling APIs.
 
-Current code already computes a structured `garmin_adjustment` with per-metric rules, but the UI mostly shows only:
+### Definition of “prefixing”
 
-```text
-Garmin adj: -N
-Garmin: Garmin recovery metrics reduce readiness.
-```
-
-That is not enough. The user should be able to see:
-
-- which date is treated as “today”;
-- which baseline window is used;
-- which metrics were scored;
-- which metrics were missing;
-- which metrics had insufficient baseline samples;
-- which metrics were display-only;
-- how raw Garmin delta was clamped;
-- why stale/historical latest data did not score as current.
-
-### Backend: local date helper
-
-Add app timezone configuration.
-
-Suggested default:
-
-```python
-APP_TIMEZONE = os.getenv("APP_TIMEZONE", "Europe/Uzhgorod")
-```
-
-Add a focused helper, for example:
-
-```python
-# app/services/date_service.py
-
-from datetime import date, datetime
-from zoneinfo import ZoneInfo
-
-from app import config
-
-def app_today() -> date:
-    return datetime.now(ZoneInfo(config.APP_TIMEZONE)).date()
-
-def parse_local_date_from_as_of(as_of: str | None) -> tuple[date, str]:
-    if as_of:
-        try:
-            return datetime.fromisoformat(str(as_of)).date(), "as_of"
-        except ValueError:
-            pass
-    return app_today(), "configured_timezone_today"
-```
-
-Use this helper in:
-
-- `garmin_readiness_service.parse_as_of_date()` or replacement;
-- `garmin_service.local_date_range()` when no test `today` is passed;
-- `garmin_service.stats()` when no test `today` is passed;
-- `garmin_service.recovery_snapshot()` when no test `today` is passed.
-
-Keep tests deterministic by allowing `today` and/or `as_of` injection.
-
-### Backend: enrich `garmin_adjustment`
-
-Keep the existing `rules` array.
-
-Add top-level fields:
-
-```python
-{
-    "applied": bool,
-    "status": "positive" | "negative" | "neutral" | "display_only" | "insufficient_baseline" | "not_available",
-    "score_delta": int,
-    "raw_score_delta": int,
-    "min_score_delta": -20,
-    "max_score_delta": 10,
-
-    "current_date": "2026-06-27",
-    "previous_date": "2026-06-26",
-    "baseline_start_date": "2026-05-30",
-    "baseline_end_date": "2026-06-26",
-    "baseline_days": 28,
-    "minimum_baseline_samples": 7,
-    "local_date_source": "as_of" | "configured_timezone_today",
-
-    "available_rule_count": 4,
-    "scored_rule_count": 3,
-    "missing_rule_count": 1,
-    "insufficient_baseline_rule_count": 0,
-    "display_only_rule_count": 1,
-
-    "scored_metrics_summary": "HRV -6, RHR -6, previous-day stress -5",
-    "summary": "Garmin recovery metrics reduce readiness.",
-    "rules": [...]
-}
-```
-
-Each rule should stay renderable:
-
-```python
-{
-    "metric": "hrv_ms",
-    "label": "HRV",
-    "source_date": "2026-06-27",
-    "current": 35.0,
-    "baseline_median": 42.0,
-    "baseline_sample_count": 21,
-    "score_delta": -6,
-    "status": "scored" | "neutral" | "missing_current" | "missing_baseline" | "insufficient_baseline" | "display_only",
-    "message": "HRV is below baseline."
-}
-```
-
-### Frontend: Next Workout Garmin detail block
-
-In `CurrentWorkoutPage.tsx`, replace the single Garmin summary paragraph with a compact detail section.
-
-Suggested layout:
+Support a runtime base path before the app route:
 
 ```text
-Garmin adjustment: -17
-Status: negative
-Window: today 2026-06-27, baseline 2026-05-30..2026-06-26
+/
+          direct root
+/history
+          direct root deep link
+/api/hassio_ingress/<token>/
+          Home Assistant ingress root
+/api/hassio_ingress/<token>/history
+          Home Assistant ingress deep link
+/custom/prefix/
+          optional future reverse-proxy prefix
+/custom/prefix/garmin?range=90
+          optional future reverse-proxy deep link
+```
 
-Scored
-  HRV: 35 ms vs 42 ms median — -6
-  Resting HR: 67 bpm vs 60 bpm median — -6
-  Previous-day stress: 68 vs 40 median — -5
+The exact Home Assistant ingress token is dynamic and must never be hardcoded.
 
-Not scored
-  Body Battery start: missing today
-  Current stress: 45 — display-only partial day
+### Non-goals
 
-Clamp
-  Raw -17, applied -17, bounds -20..+10
+- Do not change business logic.
+- Do not change API schemas.
+- Do not redesign UI.
+- Do not change Garmin behavior.
+- Do not change workout routes.
+- Do not add a new router library.
+- Do not require a compile-time Vite base for Home Assistant.
+- Do not break direct root deployment.
+
+### Expected user-visible result
+
+When opening the add-on from Home Assistant:
+
+- app loads instead of blank page;
+- assets load;
+- `/api/v1/...` calls succeed;
+- navigation works;
+- browser refresh on `/history`, `/settings`, `/garmin`, `/workouts/{id}`, `/exercises/{id}/stats` works;
+- the Settings link, Garmin link, History links, and all React Router navigation preserve the Home Assistant prefix.
+
+### Implementation strategy
+
+Use a runtime base-path helper in the frontend and keep the backend SPA fallback robust.
+
+#### Frontend: add runtime base-path helper
+
+Create:
+
+```text
+frontend/src/utils/basePath.ts
+```
+
+Suggested functions:
+
+```typescript
+export function normalizeBasePath(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "/") return "";
+  return `/${trimmed.replace(/^\/+|\/+$/g, "")}`;
+}
+
+export function detectIngressBasePath(pathname = window.location.pathname): string {
+  const segments = pathname.split("/").filter(Boolean);
+
+  // Home Assistant ingress usually appears as:
+  // /api/hassio_ingress/<token>/...
+  if (segments[0] === "api" && segments[1] === "hassio_ingress" && segments[2]) {
+    return `/${segments.slice(0, 3).join("/")}`;
+  }
+
+  return "";
+}
+
+export function appBasePath(): string {
+  const configured = import.meta.env.VITE_APP_BASE_PATH;
+  if (typeof configured === "string" && configured.trim()) {
+    return normalizeBasePath(configured);
+  }
+
+  return detectIngressBasePath();
+}
+
+export function withAppBasePath(path: string): string {
+  if (!path) return appBasePath() || "/";
+  if (/^[a-z][a-z0-9+.-]*:/i.test(path)) return path;
+
+  const base = appBasePath();
+  if (!base) return path;
+
+  if (path.startsWith("/")) {
+    return `${base}${path}`;
+  }
+
+  return `${base}/${path}`;
+}
 ```
 
 Rules:
 
-- Show current value, baseline median, sample count, status, source date, and score delta.
-- Show `display_only` clearly for current stress.
-- Show `missing_current` clearly when today’s metric is absent.
-- Show `insufficient_baseline` clearly when fewer than 7 baseline samples exist.
-- Show `raw_score_delta` vs `score_delta` and clamp bounds.
-- Keep the default view compact on mobile.
-- Use `<details>` / expandable panel if the card becomes too tall.
-- Do not duplicate full `/garmin` charts inside Current Workout.
-- Add a link to `/garmin`.
+- If there is no prefix, behavior must be unchanged.
+- If path is absolute URL, do not modify it.
+- If path is `/api/v1/...`, return `/api/hassio_ingress/<token>/api/v1/...` under ingress.
+- If path is `/settings`, React Router must navigate under the same base.
+- Keep helper pure and testable.
 
-### Frontend: Garmin Recovery card improvements
+#### Frontend: BrowserRouter basename
 
-Current “Garmin recovery” card should show freshness, not just latest values.
+Update `frontend/src/App.tsx`:
 
-Add:
-
-```text
-Garmin: connected/off
-Scoring date: Jun 27
-Today: present / missing
-Yesterday: present / missing
-Latest synced row: Jun 26
-35d samples: 28
-Status: today synced / historical only / connected, not synced / not connected
+```tsx
+<BrowserRouter basename={appBasePath() || undefined}>
+  ...
+</BrowserRouter>
 ```
 
 Rules:
 
-- If latest data is historical, show: “Historical only — not scored as today.”
-- If today is missing, show what is missing.
-- Keep “Sync 35 days”.
-- Add a `/garmin` link.
+- Import `appBasePath` from the helper.
+- Do not manually prefix every `<Link to="/...">`.
+- Keep route definitions as app-relative paths: `/`, `/history`, `/garmin`, etc.
+- Verify `useNavigate()` keeps prefix automatically with basename.
 
-### Backend tests
+#### Frontend: API client prefixing
 
-Add or update tests for:
+Update `frontend/src/api/client.ts`:
 
-- configured timezone local date is used when no `as_of` is passed;
-- explicit `as_of` wins over configured timezone today;
-- current-date RHR scores only when current local date row exists;
-- current-date HRV scores only when current local date row exists;
-- current-date Body Battery start scores only when current local date row exists;
-- previous-day stress uses local previous date;
-- current-day stress remains display-only;
-- stale historical latest metric is displayed but not scored;
-- insufficient baseline counts are correct;
-- missing-current counts are correct;
-- display-only counts are correct;
-- `scored_metrics_summary` is stable;
-- no-Garmin behavior remains unchanged;
-- positive Garmin delta is still capped by short-gap safety rule;
-- negative Garmin delta respects clamp lower bound;
-- no Garmin client/network method is called from recommendation/current-workout reads.
+```typescript
+import { withAppBasePath } from "../utils/basePath";
 
-### Frontend checks
+const requestPath = withAppBasePath(path);
+const response = await fetch(requestPath, { ...init, headers });
+```
+
+Rules:
+
+- All existing API modules can keep calling `requestJson("/api/v1/...")`.
+- Do not manually edit every API call.
+- Do not prefix already absolute URLs.
+
+#### Frontend: Vite relative assets
+
+Update `frontend/vite.config.ts`:
+
+```typescript
+export default defineConfig({
+  base: "./",
+  plugins: [react()],
+  ...
+});
+```
+
+Reason:
+
+- Built `index.html` should reference assets relatively, so it works under `/`, `/api/hassio_ingress/<token>/`, and any future prefix.
+
+Verify built `frontend/dist/index.html` uses relative script/style asset references, not `/assets/...`.
+
+#### Backend: optional prefix stripping / robust fallback
+
+Most Home Assistant ingress proxies strip the ingress prefix before the request reaches the add-on. But the app should also be robust if a reverse proxy forwards the prefix unchanged.
+
+Add optional environment config:
+
+```python
+APP_URL_PREFIX = os.getenv("APP_URL_PREFIX", "").strip("/")
+```
+
+Add helper in backend, for example `app/main.py`:
+
+```python
+def strip_app_url_prefix(path: str) -> str:
+    prefix = config.APP_URL_PREFIX.strip("/")
+    if not prefix:
+        return path
+    if path == prefix:
+        return ""
+    if path.startswith(f"{prefix}/"):
+        return path[len(prefix) + 1:]
+    return path
+```
+
+Use it in `serve_react_app(path)` before `get_frontend_file`.
+
+Rules:
+
+- Default must be empty and preserve current behavior.
+- This is for non-HA reverse proxy deployments; frontend ingress detection still handles HA dynamically.
+- Do not apply this to API router prefixes unless tests prove the reverse proxy forwards prefixed API paths into the backend. Prefer frontend prefixing for browser calls.
+
+#### Backend: direct toolbox / Open Web UI support
+
+Keep `config.yaml` values compatible with Home Assistant:
+
+```yaml
+ingress: true
+ingress_port: 8000
+ingress_entry: /
+webui: "http://[HOST]:[PORT:8000]/"
+ports:
+  8000/tcp: 8000
+```
+
+Do not remove `webui` or `ports` in this phase.
+
+If direct toolbox open still fails after prefix work, inspect the exact URL opened by Home Assistant and only then adjust `webui`/`ports`.
+
+### Files expected to change
+
+```text
+frontend/vite.config.ts
+frontend/src/utils/basePath.ts
+frontend/src/api/client.ts
+frontend/src/App.tsx
+app/config.py
+app/main.py
+tests/test_frontend_routing_or_main.py     # name may differ
+docs/CODEX_PLAN.md
+```
+
+Potentially update README/Home Assistant notes if there is already a deployment section.
+
+### Tests
+
+#### Frontend helper tests
+
+Only add a frontend test framework if the repo already has one. If there is no frontend unit-test setup, avoid adding Vitest just for this phase unless explicitly needed.
+
+Preferred if no frontend tests exist:
+
+- keep helper simple and pure;
+- rely on TypeScript typecheck/build;
+- document manual smoke.
+
+If frontend tests exist or are added later, cover:
+
+```text
+detectIngressBasePath("/") -> ""
+detectIngressBasePath("/history") -> ""
+detectIngressBasePath("/api/hassio_ingress/abc123/") -> "/api/hassio_ingress/abc123"
+detectIngressBasePath("/api/hassio_ingress/abc123/history") -> "/api/hassio_ingress/abc123"
+withAppBasePath("/api/v1/current-workout") under ingress -> "/api/hassio_ingress/abc123/api/v1/current-workout"
+withAppBasePath("/settings") under ingress -> "/api/hassio_ingress/abc123/settings"
+withAppBasePath("https://example.com/x") -> unchanged
+```
+
+#### Backend tests
+
+Add lightweight backend tests for `strip_app_url_prefix` if implemented:
+
+```text
+prefix empty, path "history" -> "history"
+prefix "custom/prefix", path "custom/prefix" -> ""
+prefix "custom/prefix", path "custom/prefix/history" -> "history"
+prefix "custom/prefix", path "other/history" -> "other/history"
+```
+
+Add SPA fallback test if existing test infrastructure supports it:
+
+```text
+GET /history returns index.html
+GET /assets/missing.js returns 404
+GET /api/unknown returns 404 JSON, not index.html
+```
+
+### Required checks
 
 ```bash
+python -m unittest discover -s tests
+
 cd frontend
 npm run typecheck
 npm run build
+cd ..
 ```
 
-### Manual smoke
+### Manual smoke matrix
+
+Run after build/start.
+
+Direct root:
 
 ```text
-Current page with no Garmin data
-Current page with connected but never synced Garmin
-Current page with historical-only Garmin data
-Current page with insufficient baseline
-Current page with positive Garmin adjustment
-Current page with negative Garmin adjustment
-Current page with clamped Garmin adjustment
-Current page on mobile width
-/garmin link from Current page
-Settings Garmin sync/login still works
+http://localhost:8000/
+http://localhost:8000/history
+http://localhost:8000/settings
+http://localhost:8000/garmin
+http://localhost:8000/exercises/1/stats
+browser refresh on each route
+API calls from each page
+```
+
+Simulated Home Assistant ingress in browser:
+
+```text
+Open /api/hassio_ingress/faketoken/
+Open /api/hassio_ingress/faketoken/history
+Open /api/hassio_ingress/faketoken/settings
+Open /api/hassio_ingress/faketoken/garmin
+Click nav links
+Trigger API calls
+Refresh deep links
+```
+
+Real Home Assistant:
+
+```text
+Open from sidebar panel
+Open from add-on toolbox / Open Web UI
+Refresh page
+Navigate to History
+Navigate to Settings
+Navigate to Garmin
+Start active workout
+Open existing workout detail
+Open exercise stats
+Garmin sync button still calls API
+Backup export still downloads
 ```
 
 ### Acceptance criteria
 
-- User can tell exactly why Garmin changed readiness.
-- User can tell exactly why Garmin did not change readiness.
-- Stale/historical Garmin data is visible but not incorrectly scored as today.
-- Current stress is clearly display-only.
-- No raw diagnostics are exposed in UI.
-- No Garmin network request occurs during Current Workout/recommendation rendering.
-- Existing Garmin readiness score behavior is unchanged except local-date correctness.
+- Direct root deployment still works.
+- Home Assistant ingress route preserves prefix during navigation.
+- Home Assistant toolbox/Open Web UI route opens the app.
+- Built assets load under prefixed URL.
+- API calls use the same runtime prefix as the page.
+- Browser refresh on deep links works.
+- No API schema changed.
+- No Garmin or workout behavior changed.
+- Backend tests pass.
+- Frontend typecheck/build pass.
 
 ---
 
-## [x] Phase 15 — Garmin Stats insights and better metric representation
+## [ ] Phase 17 — Configurable Analysis Types
 
 Branch:
 
 ```text
-feat/garmin-stats-insights
+feat/configurable-analysis-types
 ```
 
 ### Goal
 
-Turn `/garmin` from a raw chart page into an interpretation page.
+Allow the user to create and edit Analysis Types from Settings.
 
-The page should still show charts, but it should answer:
+An Analysis Type defines how an exercise contributes to load/recovery calculations:
 
 ```text
-Are today’s recovery metrics normal for me?
-Which metric is the biggest concern?
-Is the data fresh enough to trust?
-Which values are good / warning / poor?
-Which metrics affect readiness and which are only informational?
+key
+label
+category
+exercise_factor
+compound_factor
+back_factor
+active/inactive
+sort order
 ```
 
-### Problem to solve
+Exercises should continue to reference an analysis type by `profile_key`.
 
-Current `/garmin` already has:
+### User-visible result
 
-- range selector;
-- sync button;
-- latest date and sync cards;
-- available/missing day cards;
-- HRV chart with median/balanced band;
-- resting HR chart with baseline bands;
-- Body Battery start/end chart;
-- stress chart with bands;
-- steps chart with median baseline.
+Settings should have a dedicated “Analysis types” section where the user can:
 
-But it lacks:
+- see existing built-in analysis types;
+- add a custom analysis type;
+- edit label/category/factors for existing analysis types;
+- deactivate unused custom analysis types;
+- see which exercises use each type;
+- assign any active analysis type to an exercise;
+- understand that editing factors affects future displayed analysis and historical recalculation.
 
-- a top-level interpretation;
-- per-metric status chips;
-- deltas versus baseline in summary cards;
-- clear freshness status;
-- readiness impact explanation;
-- 7-day trend overlays;
-- Body Battery recharge/drain;
-- missing-data/freshness hints.
+### Non-goals
 
-### Backend: add stats insights object
+- Do not change workout tables.
+- Do not change set logging.
+- Do not add per-set custom factors.
+- Do not add delete for profiles used by exercises.
+- Do not introduce multiple profiles per exercise.
+- Do not redesign recommendation algorithms.
+- Do not change Garmin logic.
+- Do not change exercise weight presets except where required for compatibility.
+- Do not make profile keys editable after creation.
 
-Extend `GET /api/v1/garmin/stats?range=...`.
+### Current model
 
-Keep existing fields:
+Current hardcoded profile shape:
 
 ```python
 {
-    "range": ...,
-    "date_from": ...,
-    "date_to": ...,
-    "metric_count": ...,
-    "coverage": ...,
-    "latest_metric": ...,
-    "series": ...,
-    "baselines": ...
+  "category": "heavy compound",
+  "exercise_factor": 1.8,
+  "compound_factor": 1.8,
+  "back_factor": 1.8,
 }
 ```
 
-Add:
+Current labels are separate from factors.
+
+Current `exercises.profile_key` already stores the selected profile.
+
+### Proposed database schema
+
+Add migration:
+
+```text
+app/migrations/v007_analysis_profiles.py
+```
+
+Create table:
+
+```sql
+CREATE TABLE IF NOT EXISTS analysis_profiles (
+    key TEXT PRIMARY KEY,
+    label TEXT NOT NULL,
+    category TEXT NOT NULL,
+    exercise_factor REAL NOT NULL CHECK (exercise_factor >= 0),
+    compound_factor REAL NOT NULL CHECK (compound_factor >= 0),
+    back_factor REAL NOT NULL CHECK (back_factor >= 0),
+    is_builtin INTEGER NOT NULL DEFAULT 0 CHECK (is_builtin IN (0, 1)),
+    is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+```
+
+Indexes:
+
+```sql
+CREATE UNIQUE INDEX IF NOT EXISTS idx_analysis_profiles_label_nocase
+ON analysis_profiles(label COLLATE NOCASE);
+
+CREATE INDEX IF NOT EXISTS idx_analysis_profiles_active_order
+ON analysis_profiles(is_active, sort_order, label);
+```
+
+Seed all current built-in profiles into `analysis_profiles`.
+
+Rules:
+
+- Preserve all existing keys:
+  - `deadlift`
+  - `squats`
+  - `db_squats`
+  - `bench_press`
+  - `incline_bench_press`
+  - `db_bench_press`
+  - `shoulder_press`
+  - `db_shoulder_press`
+  - `ez_curl`
+  - `triceps_pushdown`
+  - `crunches`
+  - old compatibility keys: `db_row`, `triceps_extension`, `lateral_raise`, `accessory`
+- Existing exercise `profile_key` values must remain valid.
+- Built-in profiles may be edited, but not deleted.
+- Profile `key` is immutable.
+- `accessory` must always exist and remain a fallback.
+- If an unknown exercise profile is encountered, fallback to `accessory`.
+
+### Backup schema
+
+This phase changes persisted user configuration. Bump backup schema from `4` to `5`.
+
+Add `analysis_profiles` to schema 5 backup export.
+
+Restore rules:
+
+- Schema 1-4 backups do not contain `analysis_profiles`; restore should seed default profiles during DB init/migration.
+- Schema 5 backups restore `analysis_profiles`.
+- Restore must reject invalid profile rows:
+  - empty key;
+  - invalid key format;
+  - empty label;
+  - negative factors;
+  - duplicate labels ignoring case;
+  - missing `accessory`;
+  - exercise references to missing profile keys.
+- Restore must not remove profile keys still referenced by exercises unless the restore payload contains compatible exercises and profiles together.
+- Restore schema 5 must still exclude Garmin tokens.
+
+### API design
+
+Replace read-only profiles with CRUD-style routes under existing prefix:
+
+```text
+GET    /api/v1/exercise-profiles
+POST   /api/v1/exercise-profiles
+PATCH  /api/v1/exercise-profiles/{profile_key}
+DELETE /api/v1/exercise-profiles/{profile_key}   optional, only if unused and non-builtin
+```
+
+Recommendation: implement GET/POST/PATCH first. DELETE can be omitted in this phase unless simple.
+
+#### GET response
+
+Keep old clients working by preserving `key`, `label`, `category`.
+
+Add fields:
 
 ```python
-{
-    "insights": {
-        "current_date": "2026-06-27",
-        "previous_date": "2026-06-26",
-        "baseline_start_date": "2026-05-30",
-        "baseline_end_date": "2026-06-26",
-        "baseline_days": 28,
-        "minimum_baseline_samples": 7,
-        "freshness": {
-            "status": "fresh" | "historical_only" | "missing" | "not_connected",
-            "latest_metric_date": "2026-06-27",
-            "days_since_latest_metric": 0,
-            "message": "Today synced"
-        },
-        "overall_status": "good" | "watch" | "poor" | "not_enough_data" | "no_data",
-        "overall_message": "HRV and resting HR are worse than baseline.",
-        "readiness_impact": {
-            "score_delta": -12,
-            "raw_score_delta": -12,
-            "min_score_delta": -20,
-            "max_score_delta": 10,
-            "used_metric_count": 3,
-            "display_only_metric_count": 2
-        },
-        "signals": []
-    }
-}
+class ExerciseProfileResponse(AppBaseModel):
+    key: str
+    label: str
+    category: str
+    exercise_factor: float
+    compound_factor: float
+    back_factor: float
+    is_builtin: bool
+    is_active: bool
+    sort_order: int
+    exercise_count: int
 ```
 
-Each `signals[]` item:
+Response:
 
 ```python
-{
-    "metric": "hrv_ms",
-    "label": "HRV",
-    "unit": "ms",
-    "source_date": "2026-06-27",
-    "current": 35.0,
-    "baseline_median": 42.0,
-    "baseline_sample_count": 21,
-    "delta": -7.0,
-    "delta_percent": -16.67,
-    "status": "good" | "normal" | "watch" | "poor" | "missing" | "insufficient_baseline" | "display_only",
-    "direction": "higher_is_better" | "lower_is_better" | "contextual",
-    "used_for_readiness": true,
-    "score_delta": -6,
-    "message": "HRV is below your baseline."
-}
+class ExerciseProfilesResponse(AppBaseModel):
+    profiles: list[ExerciseProfileResponse]
 ```
 
-### Backend: status heuristics
-
-Use personal baseline zones, not universal medical critical values.
-
-#### HRV
-
-Higher than baseline is usually better, but too much “better” should not be over-celebrated.
-
-Suggested zones:
+Sorting:
 
 ```text
-good:   current >= baseline * 1.05
-normal: baseline * 0.95 <= current < baseline * 1.05
-watch:  baseline * 0.85 <= current < baseline * 0.95
-poor:   current < baseline * 0.85
+active first
+sort_order ascending
+label ascending
 ```
 
-For chart shading:
-
-```text
-poor:   below baseline * 0.85
-watch:  baseline * 0.85 .. baseline * 0.95
-normal: baseline * 0.95 .. baseline * 1.05
-good:   above baseline * 1.05
-```
-
-#### Resting heart rate
-
-Lower or stable is generally better.
-
-Suggested zones:
-
-```text
-good:   current <= baseline - 3 bpm
-normal: baseline - 2 .. baseline + 3 bpm
-watch:  baseline + 4 .. baseline + 7 bpm
-poor:   current >= baseline + 8 bpm
-```
-
-Chart shading:
-
-```text
-good/normal: <= baseline + 3
-watch:       baseline + 4 .. baseline + 7
-poor:        >= baseline + 8
-```
-
-#### Body Battery start
-
-Use baseline-relative morning value.
-
-Suggested zones:
-
-```text
-good:   current >= baseline + 10
-normal: baseline - 10 .. baseline + 9
-watch:  baseline - 25 .. baseline - 11
-poor:   current <= baseline - 26
-```
-
-If no Body Battery baseline exists, fall back to simple absolute display bands:
-
-```text
-low:      0..25
-limited:  26..50
-ok:       51..75
-high:     76..100
-```
-
-#### Body Battery drain / recharge
-
-Derived values:
+#### POST request
 
 ```python
-daily_drain = body_battery_start - body_battery_end
-overnight_recharge = today.body_battery_start - yesterday.body_battery_end
-```
-
-Add these to insights only when both required values exist.
-
-Suggested labels:
-
-```text
-overnight recharge:
-  good:   >= +35
-  normal: +20 .. +34
-  watch:  +10 .. +19
-  poor:   < +10
-
-daily drain:
-  informational only
-```
-
-Do not score these into readiness yet unless a later phase explicitly changes scoring.
-
-#### Stress average
-
-For readiness, use previous-day stress, not partial current-day stress.
-
-Suggested zones relative to baseline:
-
-```text
-good:   current <= baseline - 10
-normal: baseline - 9 .. baseline + 10
-watch:  baseline + 11 .. baseline + 20
-poor:   current >= baseline + 21
-```
-
-Absolute background bands for chart remain useful:
-
-```text
-rest/very low: 0..25
-low:           26..50
-medium:        51..75
-high:          76..100
-```
-
-#### Steps
-
-Steps should remain informational.
-
-Suggested zones relative to baseline:
-
-```text
-very_low: current < baseline * 0.5
-low:      baseline * 0.5 .. baseline * 0.8
-normal:   baseline * 0.8 .. baseline * 1.2
-high:     current > baseline * 1.2
+class ExerciseProfileCreateRequest(AppBaseModel):
+    key: str | None = Field(default=None, min_length=1, max_length=80)
+    label: str = Field(min_length=1, max_length=120)
+    category: str = Field(min_length=1, max_length=120)
+    exercise_factor: float = Field(ge=0, le=5)
+    compound_factor: float = Field(ge=0, le=5)
+    back_factor: float = Field(ge=0, le=5)
+    is_active: bool = True
 ```
 
 Rules:
 
-- Do not include steps in readiness score.
-- Show “low steps” as context, not as a recovery penalty.
-- Low steps can mean rest, travel, illness, or inactivity.
+- If key omitted, generate from label:
+  - lowercase;
+  - trim;
+  - replace non-alphanumeric with underscore;
+  - collapse underscores;
+  - strip underscores;
+  - max length 80;
+  - reject if empty.
+- Reject duplicate key.
+- Reject duplicate label ignoring case.
+- New custom profiles have `is_builtin = false`.
+- Assign `sort_order` after current max.
 
-### Frontend: new top section
+#### PATCH request
 
-Add this above the charts:
-
-```text
-Garmin overview
-
-Status: Watch
-Message: HRV is below baseline and resting HR is elevated.
-Freshness: Today synced
-Range: 90 days
-Coverage: 82/90 days
-Baseline: 28-day median, 21 valid samples
-Readiness impact: -12
-```
-
-Use compact cards:
-
-```text
-[Overall] Watch
-[Readiness impact] -12
-[Freshness] Today synced
-[Coverage] 82/90
-[Baseline] 21 samples
-```
-
-### Frontend: Today readiness signals strip
-
-Add a horizontal or responsive grid:
-
-```text
-Today readiness signals
-
-HRV
-35 ms
--16.7% vs 42 ms median
-Poor
-Used: -6
-
-Resting HR
-67 bpm
-+7 bpm vs 60 median
-Watch
-Used: -6
-
-Body Battery start
-42
--26 vs 68 median
-Poor
-Used: -6
-
-Previous-day stress
-68
-+23 vs 45 median
-Poor
-Used: -5
-
-Current stress
-45
-Display-only partial day
-Not scored
-
-Steps
-4,200
--46% vs 7,800 median
-Informational
+```python
+class ExerciseProfileUpdateRequest(AppBaseModel):
+    label: str | None = Field(default=None, min_length=1, max_length=120)
+    category: str | None = Field(default=None, min_length=1, max_length=120)
+    exercise_factor: float | None = Field(default=None, ge=0, le=5)
+    compound_factor: float | None = Field(default=None, ge=0, le=5)
+    back_factor: float | None = Field(default=None, ge=0, le=5)
+    is_active: bool | None = None
 ```
 
 Rules:
 
-- Use status chips: `Good`, `Normal`, `Watch`, `Poor`, `Missing`, `Not enough baseline`, `Display only`.
-- Make the source date visible for each signal.
-- Show baseline sample count in a tooltip or subtitle.
-- Use the same labels in `/garmin` and Current Workout.
+- Key is immutable.
+- Reject empty patch.
+- Reject duplicate label ignoring case.
+- Built-ins can be edited but cannot be deleted.
+- Do not allow deactivating `accessory`.
+- Do not allow deactivating a profile currently used by active exercises unless the UI/API explicitly shows a warning and user confirms. Simpler first phase: reject deactivation when `exercise_count > 0`.
+- Existing exercises assigned to an inactive profile remain valid if restored from backup, but UI should not offer inactive profiles for new assignments except the current exercise's own inactive profile.
 
-### Frontend: readiness impact panel
+#### DELETE optional
 
-Add a panel that mirrors the recommendation Garmin adjustment:
+Only implement if it does not expand the phase too much.
+
+Rules:
+
+- 404 if missing.
+- 409 if built-in.
+- 409 if any exercise references it.
+- Delete only unused custom profiles.
+
+### Repository layer
+
+Add:
 
 ```text
-Readiness impact
-
-Used for readiness:
-✓ HRV: -6
-✓ Resting HR: -6
-✓ Body Battery start: 0
-✓ Previous-day stress: -5
-
-Display only:
-• Current stress: partial day
-• Steps: informational
-
-Result:
-Raw Garmin delta: -17
-Applied Garmin delta: -17
-Clamp: -20..+10
+app/repositories/analysis_profiles.py
 ```
 
-If no current-date data:
+Functions:
+
+```python
+normalize_profile_key(value: str) -> str
+profile_key_from_label(label: str) -> str
+list_analysis_profiles(include_inactive: bool = True) -> list[dict]
+get_analysis_profile(profile_key: str) -> dict | None
+get_analysis_profiles_by_key(include_inactive: bool = True) -> dict[str, dict]
+create_analysis_profile(payload) -> dict
+update_analysis_profile(profile_key, payload) -> dict | None
+delete_analysis_profile(profile_key) -> bool
+profile_exercise_counts() -> dict[str, int]
+ensure_default_analysis_profiles(conn) -> None
+```
+
+Validation exceptions:
+
+```python
+DuplicateProfileKeyError
+DuplicateProfileLabelError
+ProfileInUseError
+BuiltinProfileDeleteError
+InvalidProfileKeyError
+AccessoryProfileError
+```
+
+Keep SQL in repository module.
+
+### Service layer
+
+Refactor `app/services/analysis_service.py`.
+
+Split static defaults from runtime DB-backed behavior.
+
+Suggested files:
 
 ```text
-Readiness impact
-No current Garmin row for Jun 27. Latest row is Jun 26, so HRV/RHR/Body Battery are shown as historical but not scored as today.
+app/services/default_analysis_profiles.py
+app/services/analysis_service.py
+app/repositories/analysis_profiles.py
 ```
 
-### Frontend: chart upgrades
+`default_analysis_profiles.py` contains immutable defaults:
 
-#### Shared chart rules
+```python
+DEFAULT_LOAD_PROFILES_BY_KEY
+DEFAULT_PROFILE_LABELS_BY_KEY
+DEFAULT_EXERCISE_PROFILE_KEYS_BY_NAME
+DEFAULT_PROFILE_ORDER
+DEFAULT_PROFILE_KEY = "accessory"
+```
 
-- Always show baseline median when available.
-- Add legend explaining zones.
-- Use consistent status names across all charts.
-- Missing values should stay as gaps, not zero.
-- Highlight the latest point.
-- Highlight the scoring date and previous-day stress date.
-- Tooltips should show:
-  - date;
-  - metric value;
-  - baseline median;
-  - delta vs baseline;
-  - status;
-  - whether it is used for readiness.
+`analysis_service.py` responsibilities:
 
-#### HRV chart
+```python
+profile_key_for_exercise_name(exercise_name: str) -> str
+list_exercise_profiles() -> list[dict]
+is_supported_profile_key(profile_key: str) -> bool
+get_exercise_load_profile(exercise_name: str, profile_key: str | None = None) -> dict
+calculate_workout_load_metrics(...)
+```
 
-Keep median and baseline band, but improve zones:
+Runtime behavior:
+
+- `list_exercise_profiles()` returns DB profiles if DB initialized; otherwise defaults.
+- `get_exercise_load_profile(..., profile_key)` returns DB profile if available, else default by key, else fallback `accessory`.
+- `profile_key_for_exercise_name()` can keep default name-fragment inference for new exercise creation.
+- Calculations should avoid one DB query per set/exercise when possible:
+  - load profile map once per calculation;
+  - pass map into helper;
+  - or cache for request scope.
+- Do not add a global unbounded cache unless invalidated on profile edits.
+
+### Exercise API behavior
+
+Current exercise create/update already accepts `profile_key`.
+
+Update validation:
+
+- `create_exercise(... profile_key=...)` must accept active custom profile keys.
+- If profile_key is missing, infer from exercise name using default name inference.
+- If inferred key is not present/active, fallback `accessory`.
+- `update_exercise(... profile_key=...)` must reject missing profile keys.
+- Exercise listing must include current profile key even if inactive.
+- Settings UI must display the label for inactive current profile.
+
+Files likely touched:
 
 ```text
-poor:   < baseline * 0.85
-watch:  0.85x .. 0.95x
-normal: 0.95x .. 1.05x
-good:   > 1.05x
+app/repositories/exercises.py
+app/routes/api_exercises.py
+app/schemas.py
+app/services/analysis_service.py
+app/services/default_analysis_profiles.py
+app/repositories/analysis_profiles.py
 ```
 
-Add:
-
-- 7-day rolling median line;
-- latest point status chip;
-- “used for readiness today” marker.
-
-#### Resting HR chart
-
-Add:
-
-- 7-day rolling average line;
-- zones based on baseline:
-  - normal <= baseline + 3;
-  - watch baseline +4..+7;
-  - poor >= baseline +8;
-- latest point label like `+7 bpm`;
-- combined warning if latest RHR is high and latest HRV is low.
-
-#### Body Battery chart
-
-Keep start/end lines, add:
-
-- horizontal zones:
-  - 0..25 low;
-  - 26..50 limited;
-  - 51..75 okay;
-  - 76..100 high;
-- optional bar below chart for daily drain;
-- optional derived card:
-  - overnight recharge;
-  - daily drain;
-  - morning value vs baseline.
-
-#### Stress chart
-
-Keep stress bands and bar colors.
-
-Add:
-
-- 7-day average line;
-- previous-day stress marker;
-- high-stress day count in selected range;
-- average stress in selected range;
-- show current-day stress separately as display-only.
-
-#### Steps chart
-
-Add:
-
-- 7-day average line;
-- 28-day median line;
-- 7-day total;
-- average/day;
-- days below 50% baseline;
-- make it visually neutral/informational, not recovery-negative.
-
-### Frontend: mobile behavior
-
-- Signal cards should become a one-column list on narrow screens.
-- Readiness impact details can be collapsed by default.
-- Chart legends should wrap.
-- Avoid huge fixed-height sections.
-- Keep sync/range controls easy to tap.
-
-### API/type work
+### Frontend API/types
 
 Update:
 
-- `app/schemas.py`
-- `app/services/garmin_service.py`
-- `app/routes/api_garmin.py`
-- `docs/openapi.json`
-- `frontend/src/api/generated.ts`
-- `frontend/src/api/types.ts`
-- `frontend/src/pages/GarminStatsPage.tsx`
-- CSS in `frontend/src/styles.css`
+```text
+frontend/src/api/exercises.ts
+frontend/src/api/types.ts
+frontend/src/api/generated.ts
+docs/openapi.json
+```
 
-Run the API contract generator if that is the repo convention:
+New API helpers:
+
+```typescript
+getExerciseProfiles()
+createExerciseProfile(payload)
+updateExerciseProfile(profileKey, payload)
+deleteExerciseProfile(profileKey) // only if backend implements delete
+```
+
+Types:
+
+```typescript
+export type ExerciseProfile = {
+  key: string;
+  label: string;
+  category: string;
+  exercise_factor: number;
+  compound_factor: number;
+  back_factor: number;
+  is_builtin: boolean;
+  is_active: boolean;
+  sort_order: number;
+  exercise_count: number;
+};
+```
+
+### Settings UI
+
+Refactor `frontend/src/pages/SettingsPage.tsx` enough to avoid a giant component if practical.
+
+Suggested split:
+
+```text
+frontend/src/components/settings/GarminSettingsPanel.tsx
+frontend/src/components/settings/AnalysisProfilesPanel.tsx
+frontend/src/components/settings/ExerciseSettingsPanel.tsx
+frontend/src/components/settings/WeightEditor.tsx
+```
+
+Keep split minimal if it risks broad churn.
+
+#### Add Analysis Types panel
+
+Position:
+
+```text
+Settings
+  Garmin
+  Analysis types
+  Exercises and weights
+```
+
+Analysis Types panel should show:
+
+- profile label;
+- immutable key;
+- category;
+- exercise factor;
+- compound factor;
+- back factor;
+- active/inactive;
+- built-in/custom;
+- exercise count;
+- warning text: “Changing factors recalculates displayed historical load analysis.”
+
+Profile card edit controls:
+
+```text
+Label input
+Category input
+Exercise factor number input
+Compound factor number input
+Back factor number input
+Active toggle
+Save button
+```
+
+Add-profile form:
+
+```text
+Label
+Key optional / auto generated preview
+Category
+Exercise factor
+Compound factor
+Back factor
+Add
+```
+
+Validation UI:
+
+- label required;
+- category required;
+- factors must be 0..5;
+- key must match slug format if provided;
+- duplicate errors from backend displayed clearly;
+- prevent saving unchanged profile;
+- disable deactivation when `exercise_count > 0`;
+- show “Used by N exercises.”
+
+#### Exercise profile dropdown behavior
+
+In Add Exercise and Exercise cards:
+
+- list active profiles;
+- include current inactive profile if an exercise already uses it;
+- label inactive profiles as `(inactive)`;
+- group or sort active first;
+- when selecting an analysis type, show its category and factors in small muted text if easy.
+
+Do not require editing exercise weights when only profile changes.
+
+### CSS / mobile
+
+Add styles for:
+
+```text
+.analysis-profile-panel
+.analysis-profile-grid
+.analysis-profile-card
+.analysis-profile-form
+.profile-factor-grid
+.profile-meta
+.profile-warning
+```
+
+Mobile rules:
+
+- cards one column below mobile breakpoint;
+- factor inputs in 2-column or 1-column grid;
+- Save/Add buttons full width on narrow screens;
+- avoid horizontal scroll.
+
+### OpenAPI/contracts
+
+Because this phase changes API schemas:
 
 ```bash
 python scripts/generate_api_contracts.py
 ```
 
+Then ensure:
+
+```text
+docs/openapi.json updated
+frontend/src/api/generated.ts updated
+frontend/src/api/types.ts updated if manually maintained
+```
+
+### Backup service
+
+Update:
+
+```text
+app/services/backup_service.py
+```
+
+Required changes:
+
+- `BACKUP_SCHEMA_VERSION = 5`
+- include `analysis_profiles` in export;
+- validate profile rows on import;
+- restore profile rows before restoring exercises;
+- preserve schema 1-4 restore behavior;
+- ensure default profiles are available after older backup restore;
+- ensure Garmin tokens remain excluded.
+
+Schema 5 backup content should include:
+
+```json
+{
+  "schema_version": 5,
+  "analysis_profiles": [
+    {
+      "key": "deadlift",
+      "label": "Deadlift",
+      "category": "heavy compound",
+      "exercise_factor": 1.8,
+      "compound_factor": 1.8,
+      "back_factor": 1.8,
+      "is_builtin": true,
+      "is_active": true,
+      "sort_order": 10
+    }
+  ]
+}
+```
+
+### Data migration details
+
+Migration should be idempotent.
+
+Pseudo-flow:
+
+```python
+def migrate(conn):
+    create analysis_profiles table if missing
+    seed defaults with INSERT ... ON CONFLICT DO NOTHING
+    ensure all exercises.profile_key values exist:
+        for each distinct unknown profile_key:
+            insert custom inactive profile with label derived from key
+            category = "imported"
+            factors = accessory defaults
+            is_builtin = 0
+            is_active = 0
+```
+
+Reason:
+
+- Protects old/invalid/custom DBs.
+- Avoids breaking calculations if an exercise references a profile key not known by defaults.
+
 ### Backend tests
 
-Add tests for:
+Add tests for repository:
 
-- `/api/v1/garmin/stats` includes `insights`;
-- no `raw_diagnostics` in stats response;
-- fresh current date status;
-- historical-only status;
-- missing/no-data status;
-- HRV good/normal/watch/poor;
-- RHR good/normal/watch/poor;
-- Body Battery good/normal/watch/poor;
-- previous-day stress good/normal/watch/poor;
-- current stress display-only;
-- steps informational only;
-- insufficient baseline;
-- missing current metric;
-- baseline sample count per metric;
-- derived Body Battery recharge when values exist;
-- no Body Battery recharge when values are missing;
-- 7-day rolling values if computed backend-side;
-- endpoint never calls Garmin client/network methods.
+```text
+default profiles are seeded
+list profiles includes built-ins
+create custom profile with explicit key
+create custom profile with generated key
+reject duplicate key
+reject duplicate label ignoring case
+reject invalid key
+reject negative factor
+update custom profile factors
+update built-in profile factors
+cannot deactivate accessory
+cannot deactivate profile used by exercise
+unknown profile fallback returns accessory
+unknown exercise name infers accessory
+existing exercise with custom profile calculates custom load factors
+```
+
+Add API tests:
+
+```text
+GET /api/v1/exercise-profiles returns new fields
+POST /api/v1/exercise-profiles creates profile
+PATCH /api/v1/exercise-profiles/{key} edits profile
+POST exercise accepts custom profile_key
+PATCH exercise accepts custom profile_key
+PATCH exercise rejects missing profile_key
+inactive profile not accepted for new assignment unless rules allow it
+```
+
+Add calculation tests:
+
+```text
+custom profile exercise_factor changes load_score
+custom compound_factor changes compound_score
+custom back_factor changes back_stress_score
+editing profile affects recalculated historical workout analysis
+default built-in profile values remain same as before migration
+```
+
+Add backup tests:
+
+```text
+schema 5 export includes analysis_profiles
+schema 5 restore restores custom profile
+schema 5 restore restores exercise using custom profile
+schema 1-4 restore seeds default profiles
+schema 5 restore rejects duplicate labels
+schema 5 restore rejects missing profile referenced by exercise
+schema 5 backup excludes Garmin tokens
+schema 5 restore keeps Garmin daily metrics behavior from schema 4
+```
 
 ### Frontend checks
 
@@ -783,45 +1095,56 @@ npm run typecheck
 npm run build
 ```
 
+### Backend checks
+
+```bash
+python -m unittest discover -s tests
+```
+
 ### Manual smoke
 
 ```text
-/garmin with no rows
-/garmin with 1..6 rows
-/garmin with enough baseline
-/garmin with missing HRV
-/garmin with missing Body Battery
-/garmin with historical-only latest row
-/garmin positive-looking day
-/garmin negative-looking day
-/garmin mobile width
-/garmin range 35
-/garmin range 90
-/garmin range 180
-/garmin range 365
-/garmin range all
-Sync button invalidates Garmin stats/status
-Settings link works
-Current Workout link to /garmin works
+Open Settings
+See Analysis types section
+Add custom profile: “Cable row”
+Assign custom profile to an exercise
+Log workout using that exercise
+Open workout detail and verify load metrics use custom factors
+Edit custom profile factor and refresh workout detail
+Verify load metrics update
+Try duplicate label and see clear error
+Try negative factor and see clear error
+Try deactivating profile used by an exercise and see clear error
+Edit built-in profile label/category/factors
+Open Add Exercise profile dropdown
+Open existing exercise profile dropdown
+Backup export
+Backup validate
+Backup restore into empty DB
+Schema 1/2/3/4 restore still works
+Mobile Settings page
 ```
 
 ### Acceptance criteria
 
-- `/garmin` answers whether current Garmin metrics look normal for the user.
-- Critical-looking values are highlighted relative to personal baseline.
-- HRV and RHR statuses are not based on generic population thresholds.
-- Current stress is clearly display-only.
-- Steps are clearly informational.
-- Stale/historical data is visible but not treated as current readiness data.
-- Users can understand Garmin readiness impact without opening developer tools.
-- No Garmin raw diagnostics are exposed.
-- No Garmin network request occurs during `/garmin` rendering.
-- Frontend typecheck/build passes.
+- User can add a new Analysis Type from Settings.
+- User can edit label/category/factors of existing Analysis Types.
+- Exercises can be assigned to custom Analysis Types.
+- Load metrics use DB-backed custom factors.
+- Existing built-in profile behavior is preserved after migration.
+- Unknown/missing profile keys safely fall back to `accessory`.
+- Backup schema 5 includes analysis profiles.
+- Restoring schema 1-4 still works.
+- Restoring schema 5 with custom profiles works.
+- OpenAPI and generated TypeScript contracts are current.
 - Backend tests pass.
+- Frontend typecheck/build pass.
+- No Garmin behavior changed.
+- No Home Assistant prefix behavior changed beyond Phase 16 work.
 
 ---
 
-## [ ] Phase 16 — Garmin insights reuse and cleanup
+## [ ] Phase 18 — Garmin insights unification and correctness pass
 
 Branch:
 
@@ -829,36 +1152,20 @@ Branch:
 refactor/garmin-insights-shared
 ```
 
-### Goal
+Keep this after the two user-requested features unless the user explicitly reprioritizes.
 
-Avoid two independent Garmin interpretation systems.
+Goal:
 
-After Phase 14 and Phase 15, ensure Current Workout and `/garmin` use shared backend insight/status logic.
+- Avoid separate Garmin interpretation logic between Current Workout and `/garmin`.
+- Keep readiness scoring behavior stable.
+- Share date/baseline/freshness helpers.
+- Add fixture tests proving both representations agree.
 
-### Tasks
-
-- Extract shared Garmin signal classification helpers.
-- Reuse signal status names in readiness and stats.
-- Ensure Current Workout and `/garmin` agree on:
-  - scoring date;
-  - previous-day stress date;
-  - baseline window;
-  - status labels;
-  - baseline sample counts;
-  - display-only logic;
-  - freshness logic.
-- Add regression tests proving both endpoints classify the same fixture consistently.
-
-### Acceptance criteria
-
-- No duplicated threshold tables in React.
-- No disagreement between `/garmin` and Current Workout for the same data.
-- Shared backend helpers have focused unit tests.
-- Existing UI behavior remains unchanged except consistency improvements.
+Do not change Garmin scoring thresholds in this phase.
 
 ---
 
-## [ ] Phase 17 — Stats page componentization
+## [ ] Phase 19 — Global Stats page componentization
 
 Branch:
 
@@ -866,82 +1173,59 @@ Branch:
 refactor/stats-page-components
 ```
 
-Only after Garmin explainability and insights are stable.
+Goal:
 
-### Goal
-
-Split the large global stats page without changing behavior.
-
-### Scope
-
-Extract pure helpers/components for:
-
-- range selector;
-- summary cards;
-- trend charts;
-- heatmaps;
-- workload sections;
-- normalized benchmark chart;
-- strength-versus-workload;
-- empty/loading/error states.
+- Split large global Stats page into focused components without behavior changes.
 
 Rules:
 
-- no algorithm changes;
-- no chart redesign;
-- no new data endpoints;
-- keep current API response shape;
-- preserve mobile behavior;
-- do not mix global Stats refactor with Garmin Stats work.
+- No algorithm changes.
+- No chart redesign.
+- No new endpoints.
+- Preserve mobile behavior.
+- Do not mix with Analysis Types.
 
 ---
 
-## [ ] Phase 18 — Next release
+## Always-run release checks
 
-Branch:
-
-```text
-chore/release-next
-```
-
-Required checks:
+Before any release:
 
 ```bash
 python -m unittest discover -s tests
+
 cd frontend
 npm ci
 npm run typecheck
 npm run build
 cd ..
+
 docker build -t training-log:release-candidate .
 ```
 
-Manual smoke matrix:
+---
 
-```text
-Home Assistant ingress
-desktop browser
-mobile browser width
-active workout start/edit/finish
-read-only workout detail
-edit completed workout
-history navigation
-global stats dashboard
-exercise stats page
-Garmin Settings panel
-Garmin Current page recovery
-Garmin Stats page
-backup export
-backup restore validation screen
-settings page
-```
+## Release checklist
 
-Release tasks:
-
-- update README;
-- update changelog;
-- update docs;
-- update add-on version according to actual delivered scope;
-- confirm `docs/openapi.json` is current;
-- scan repository, fixtures, logs, DB exports, backups, and docs for secrets;
-- confirm no runtime SQLite database or Garmin token file is tracked.
+- Update `CHANGELOG.md`.
+- Bump `config.yaml`.
+- Confirm `docs/openapi.json` is current.
+- Confirm generated TypeScript API/types are current.
+- Run backend tests.
+- Run frontend typecheck.
+- Run frontend build.
+- Run Docker build.
+- Smoke Home Assistant ingress.
+- Smoke toolbox/Open Web UI.
+- Smoke active workout.
+- Smoke read-only workout detail.
+- Smoke edit workout.
+- Smoke global stats.
+- Smoke exercise stats.
+- Smoke Garmin settings.
+- Smoke Garmin current workout recovery.
+- Smoke Garmin Stats page.
+- Smoke Settings Analysis Types.
+- Smoke backup export/validate/restore.
+- Scan repository for runtime DBs, backups, logs, Garmin tokens, and secrets.
+- Tag the release.
