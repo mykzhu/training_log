@@ -2,6 +2,75 @@
 
 All notable changes to this project.
 
+## 1.2.0 - 2026-07-02
+
+Training Log 1.2.0 is a Garmin recovery, Home Assistant ingress, and configuration release. It adds local Garmin metrics and readiness insights, automatic Garmin syncing, runtime-safe Home Assistant prefix handling, configurable Analysis Types, and a componentized Stats page. Backup schema support is extended for Analysis Types and normal backups no longer include Garmin raw diagnostics.
+
+### Highlights
+
+* Garmin daily metrics import with HRV, resting heart rate, stress, Body Battery, steps, local sync status, and Garmin Stats page.
+* Garmin readiness adjustment in Next Workout recommendations using local persisted data only.
+* Garmin auto-sync settings that can refresh recent metrics once per local day.
+* Home Assistant ingress/toolbox prefix handling for deep links, API calls, and built assets.
+* Configurable Analysis Types with custom load, compound, and back factors.
+* Backup schema support for Analysis Types and Garmin daily metrics.
+* Componentized global Stats page cards, charts, load calendar, and strength table.
+
+### Added
+
+* Runtime frontend base-path detection for Home Assistant ingress URLs.
+* React Router basename support for prefixed Home Assistant routes.
+* API request prefixing so `/api/v1/...` calls work under Home Assistant ingress.
+* Backend prefix stripping for configured `APP_URL_PREFIX` and `/api/hassio_ingress/<token>`.
+* `APP_URL_PREFIX` environment setting.
+* Garmin daily metrics database storage and sync endpoints.
+* Garmin Stats page with readiness signals, freshness status, baselines, trend charts, and readiness impact.
+* Garmin recovery snapshot on Current Workout.
+* Detailed Garmin readiness adjustment block in Next Workout.
+* Shared Garmin insights helpers used by stats and readiness.
+* Garmin auto-sync settings table and `GET/PATCH /api/v1/garmin/auto-sync`.
+* Background Garmin auto-sync scheduler with once-per-local-day guard.
+* Settings UI for Garmin auto-sync enable/disable, sync time, sync range, last attempt, last success, last result, and last error.
+* DB-backed Analysis Types table.
+* Settings UI for adding/editing/deactivating Analysis Types.
+* Exercise assignment support for active custom Analysis Types.
+* Backup schema support for Analysis Types.
+* Componentized global Stats page cards, charts, load calendar, and strength table.
+
+### Changed
+
+* Vite build now uses relative asset base for prefixed deployment.
+* Garmin stats and recovery views use application-local dates via `APP_TIMEZONE`.
+* Garmin readiness and Garmin Stats share date, baseline, and freshness interpretation helpers.
+* Exercise load calculations use DB-backed Analysis Type factors.
+* Manual and automatic Garmin sync use the same sync logic.
+* Auto-sync settings are operational config and are intentionally excluded from backups.
+* Normal backup export no longer includes Garmin raw diagnostics.
+* Settings now fold the Garmin and Analysis Types sections by default-open native disclosure panels.
+
+### Fixed
+
+* Fixed Home Assistant ingress deep-link refreshes.
+* Fixed Home Assistant toolbox/Open Web UI prefixed asset/API behavior.
+* Fixed Garmin stats/readiness inconsistencies caused by separate interpretation paths.
+* Fixed stale historical Garmin data being displayed but not scored as current recovery.
+* Fixed Garmin auto-sync blocking the event loop.
+* Fixed `next_eligible_at` after failed auto-sync attempts.
+* Fixed unsafe explicit `null` values in Garmin auto-sync updates.
+* Fixed invalid auto-sync interval env parsing.
+* Fixed long Garmin auto-sync errors from breaking the Settings layout.
+* Fixed manual sync copy so it matches the configured sync range.
+* Fixed normal backup export to exclude Garmin raw diagnostics.
+
+### Upgrade Notes
+
+* Change the Home Assistant add-on version in `config.yaml` to `1.2.0`.
+* Create a backup before upgrading from `1.0.1`.
+* Backup schema version 6 includes Analysis Types and excludes Garmin raw diagnostics from normal exports.
+* Restore remains compatible with older schema versions 4 and 5 backups that include Garmin diagnostics.
+* Auto-sync settings are intentionally not exported in backups and remain disabled after restore.
+* Rebuild the Home Assistant add-on image after deploying the new source.
+
 ## 1.0.1 - 2026-06-18
 
 Training Log 1.0.1 is a UI polish and Home Assistant usability release. It keeps the React/FastAPI architecture from 1.0.0, restores the practical legacy workout workflow where it was faster to use, and fixes mobile layout issues found during phone testing.
