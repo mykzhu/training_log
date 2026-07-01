@@ -14,6 +14,7 @@ import CurrentWorkoutPage from "./pages/CurrentWorkoutPage";
 import HistoryPage from "./pages/HistoryPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import SettingsPage from "./pages/SettingsPage";
+import { appBasePath } from "./utils/basePath";
 
 const ExerciseStatsPage = lazy(() => import("./pages/ExerciseStatsPage"));
 const GarminStatsPage = lazy(() => import("./pages/GarminStatsPage"));
@@ -268,7 +269,7 @@ function AppLayout() {
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
+      <BrowserRouter basename={appBasePath() || undefined}>
         <AppLayout />
       </BrowserRouter>
     </QueryClientProvider>

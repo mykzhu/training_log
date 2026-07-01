@@ -1,3 +1,5 @@
+import { withAppBasePath } from "../utils/basePath";
+
 export class ApiError extends Error {
   status: number;
 
@@ -18,7 +20,7 @@ export async function requestJson<T>(
     headers.set("Content-Type", "application/json");
   }
 
-  const response = await fetch(path, {
+  const response = await fetch(withAppBasePath(path), {
     ...init,
     headers,
   });

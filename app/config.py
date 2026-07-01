@@ -6,6 +6,7 @@ DB_PATH = Path(os.getenv("DB_PATH", "data/training.db"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "DEBUG").upper()
 GARMIN_TOKEN_DIR = Path(os.getenv("GARMIN_TOKEN_DIR", "/data/garmin_tokens"))
 APP_TIMEZONE = os.getenv("APP_TIMEZONE", "Europe/Uzhgorod")
+APP_URL_PREFIX = os.getenv("APP_URL_PREFIX", "").strip("/")
 FRONTEND_DIST_DIR = Path(
     os.getenv(
         "FRONTEND_DIST_DIR",

@@ -81,6 +81,51 @@ def get_frontend_file(path: str) -> Path | None:
     return dist_dir / "index.html"
 
 
+def strip_app_url_prefix(path: str) -> str:
+    normalized_path = path.strip("/")
+    prefix = config.APP_URL_PREFIX.strip("/")
+    if not prefix:
+        return normalized_path
+    if normalized_path == prefix:
+        return ""
+    if normalized_path.startswith(prefix + "/"):
+        return normalized_path[len(prefix) + 1:]
+    return normalized_path
+
+
+def strip_home_assistant_ingress_prefix(path: str) -> str:
+    normalized_path = path.strip("/")
+    segments = normalized_path.split("/") if normalized_path else []
+    if (
+        len(segments) >= 3
+        and segments[0] == "api"
+        and segments[1] == "hassio_ingress"
+        and segments[2]
+    ):
+        return "/".join(segments[3:])
+    return normalized_path
+
+
+def strip_runtime_url_prefix(path: str) -> str:
+    has_leading_slash = path.startswith("/")
+    stripped_path = strip_home_assistant_ingress_prefix(
+        strip_app_url_prefix(path)
+    )
+    if has_leading_slash:
+        return "/" + stripped_path if stripped_path else "/"
+    return stripped_path
+
+
+@app.middleware("http")
+async def strip_prefixed_request_path(request: Request, call_next):
+    original_path = request.scope.get("path", "/")
+    stripped_path = strip_runtime_url_prefix(str(original_path))
+    if stripped_path != original_path:
+        request.scope["path"] = stripped_path
+        request.scope["raw_path"] = stripped_path.encode()
+    return await call_next(request)
+
+
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     request_id = request.headers.get("x-request-id", uuid4().hex[:8])
@@ -140,6 +185,8 @@ def on_startup() -> None:
 
 @app.get("/{path:path}", include_in_schema=False)
 def serve_react_app(path: str = "") -> FileResponse:
+    path = strip_runtime_url_prefix(path).lstrip("/")
+
     if path.startswith("api/"):
         raise HTTPException(status_code=404, detail="Not found.")
 

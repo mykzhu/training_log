@@ -89,7 +89,7 @@ Implication: adding/editing analysis types requires database persistence, migrat
 
 # Recommended next phases
 
-## [ ] Phase 16 — Home Assistant prefix/toolbox launch hardening
+## [x] Phase 16 — Home Assistant prefix/toolbox launch hardening
 
 Branch:
 
