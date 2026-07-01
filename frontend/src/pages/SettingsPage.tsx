@@ -94,6 +94,13 @@ function formatGarminAutoSyncResult(result: Record<string, unknown> | null) {
   return `Saved ${saved}, skipped ${skipped}, warnings ${warnings}`;
 }
 
+function shortText(value: string | null | undefined, maxLength = 80) {
+  if (!value) {
+    return "-";
+  }
+  return value.length > maxLength ? `${value.slice(0, maxLength - 1)}...` : value;
+}
+
 export default function SettingsPage() {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [profiles, setProfiles] = useState<ExerciseProfile[]>([]);
@@ -479,7 +486,10 @@ export default function SettingsPage() {
       setGarminMfaToken(null);
       setGarminMfaCode("");
 
-      const status = await loadGarminStatus();
+      const [status] = await Promise.all([
+        loadGarminStatus(),
+        loadGarminAutoSyncSettings(),
+      ]);
 
       if (status.connected) {
         setGarminMessage("Garmin connected");
@@ -505,7 +515,10 @@ export default function SettingsPage() {
       setGarminMfaToken(null);
       setGarminMfaCode("");
 
-      const status = await loadGarminStatus();
+      const [status] = await Promise.all([
+        loadGarminStatus(),
+        loadGarminAutoSyncSettings(),
+      ]);
 
       if (status.connected) {
         setGarminMessage("Garmin connected");
@@ -520,7 +533,8 @@ export default function SettingsPage() {
 
   async function syncGarminMetrics() {
     await runGarminAction("sync", async () => {
-      const response = await syncGarmin(35);
+      const syncDays = garminAutoSyncDraft.sync_days || 35;
+      const response = await syncGarmin(syncDays);
       const warningCount = Object.keys(response.errors).length;
       setGarminStatus(response.status);
       await loadGarminAutoSyncSettings();
@@ -538,6 +552,7 @@ export default function SettingsPage() {
     await runGarminAction("disconnect", async () => {
       const response = await disconnectGarmin();
       setGarminStatus(response);
+      await loadGarminAutoSyncSettings();
       setGarminPassword("");
       setGarminMfaCode("");
       setGarminMfaToken(null);
@@ -597,8 +612,10 @@ export default function SettingsPage() {
             <div>
               <h3>Auto-sync</h3>
               <p className="muted small">
-                Runs once per day after the selected local time. No Garmin
-                request is made while pages render.
+                Runs once per day after {garminAutoSyncDraft.sync_after_local_time}{" "}
+                {garminAutoSync?.timezone || "local time"}. No Garmin request is
+                made while pages render. Automatic sync runs at most once per
+                day; use manual sync for retries.
               </p>
             </div>
             <label className="garmin-auto-sync-toggle">
@@ -695,7 +712,9 @@ export default function SettingsPage() {
               <span className="muted">last result</span>
             </div>
             <div>
-              <strong>{garminAutoSync?.last_error || "-"}</strong>
+              <strong title={garminAutoSync?.last_error || undefined}>
+                {shortText(garminAutoSync?.last_error)}
+              </strong>
               <span className="muted">last error</span>
             </div>
           </div>
@@ -728,7 +747,7 @@ export default function SettingsPage() {
               onClick={syncGarminMetrics}
               type="button"
             >
-              Sync 35 days
+              Sync {garminAutoSyncDraft.sync_days || 35} days now
             </button>
             <button
               className="ghost-button"

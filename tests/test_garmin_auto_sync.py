@@ -53,11 +53,13 @@ class GarminAutoSyncTests(unittest.TestCase):
         self.original_db_path = config.DB_PATH
         self.original_timezone = config.APP_TIMEZONE
         self.original_service = garmin_auto_sync_service.garmin_service
+        self.original_to_thread = asyncio.to_thread
         config.DB_PATH = Path(self.temp_dir.name) / "training.db"
         config.APP_TIMEZONE = "UTC"
         init_db()
 
     def tearDown(self) -> None:
+        asyncio.to_thread = self.original_to_thread
         garmin_auto_sync_service.garmin_service = self.original_service
         config.APP_TIMEZONE = self.original_timezone
         config.DB_PATH = self.original_db_path
@@ -93,12 +95,48 @@ class GarminAutoSyncTests(unittest.TestCase):
                 {"sync_after_local_time": "24:00"}
             )
 
+        with self.assertRaises(ValueError):
+            garmin_auto_sync_service.update_settings({"sync_after_local_time": "7:00"})
+
+        with self.assertRaises(ValueError):
+            garmin_auto_sync_service.update_settings({"sync_days": 0})
+
+        with self.assertRaises(ValueError):
+            garmin_auto_sync_service.update_settings({"sync_days": 91})
+
+        for payload in (
+            GarminAutoSyncSettingsUpdateRequest(enabled=None),
+            GarminAutoSyncSettingsUpdateRequest(sync_after_local_time=None),
+            GarminAutoSyncSettingsUpdateRequest(sync_days=None),
+        ):
+            with self.assertRaises(HTTPException) as exc:
+                update_garmin_auto_sync_settings(payload)
+            self.assertEqual(exc.exception.status_code, 400)
+
         with self.assertRaises(HTTPException) as exc:
             update_garmin_auto_sync_settings(
                 GarminAutoSyncSettingsUpdateRequest()
             )
 
         self.assertEqual(exc.exception.status_code, 400)
+
+    def test_parse_int_env_value_defaults_and_clamps(self) -> None:
+        self.assertEqual(
+            config.parse_int_env_value(None, 3600, minimum=300),
+            3600,
+        )
+        self.assertEqual(
+            config.parse_int_env_value("abc", 3600, minimum=300),
+            3600,
+        )
+        self.assertEqual(
+            config.parse_int_env_value("60", 3600, minimum=300),
+            300,
+        )
+        self.assertEqual(
+            config.parse_int_env_value("600", 3600, minimum=300),
+            600,
+        )
 
     def test_due_logic_requires_enabled_connected_time_and_no_attempt_today(self) -> None:
         tz = ZoneInfo("UTC")
@@ -145,6 +183,13 @@ class GarminAutoSyncTests(unittest.TestCase):
             ),
             datetime(2026, 7, 2, 7, 0, tzinfo=tz),
         )
+        self.assertEqual(
+            garmin_auto_sync_service.next_eligible_auto_sync_at(
+                settings,
+                now_local=datetime(2026, 7, 2, 6, 0, tzinfo=tz),
+            ),
+            datetime(2026, 7, 2, 7, 0, tzinfo=tz),
+        )
         self.assertFalse(
             garmin_auto_sync_service.is_auto_sync_due(
                 {
@@ -155,10 +200,37 @@ class GarminAutoSyncTests(unittest.TestCase):
                 now_local=datetime(2026, 7, 2, 8, 0, tzinfo=tz),
             )
         )
+        self.assertEqual(
+            garmin_auto_sync_service.next_eligible_auto_sync_at(
+                {
+                    **settings,
+                    "last_success_at": "2026-07-02T07:05:00+00:00",
+                },
+                now_local=datetime(2026, 7, 2, 8, 0, tzinfo=tz),
+            ),
+            datetime(2026, 7, 3, 7, 0, tzinfo=tz),
+        )
+        self.assertEqual(
+            garmin_auto_sync_service.next_eligible_auto_sync_at(
+                {
+                    **settings,
+                    "last_attempt_at": "2026-07-02T07:05:00+00:00",
+                },
+                now_local=datetime(2026, 7, 2, 8, 0, tzinfo=tz),
+            ),
+            datetime(2026, 7, 3, 7, 0, tzinfo=tz),
+        )
 
     def test_run_once_records_success_and_skips_second_attempt_same_day(self) -> None:
         fake_service = FakeGarminService()
         garmin_auto_sync_service.garmin_service = fake_service
+        to_thread_calls = []
+
+        async def fake_to_thread(func: Any, *args: Any, **kwargs: Any) -> Any:
+            to_thread_calls.append((func, args, kwargs))
+            return func(*args, **kwargs)
+
+        asyncio.to_thread = fake_to_thread
         garmin_auto_sync_service.update_settings(
             {
                 "enabled": True,
@@ -175,6 +247,8 @@ class GarminAutoSyncTests(unittest.TestCase):
         self.assertTrue(first["success"])
         self.assertFalse(second["ran"])
         self.assertEqual(fake_service.synced_days, [14])
+        self.assertEqual(to_thread_calls[0][0], fake_service.sync)
+        self.assertEqual(to_thread_calls[0][1], (14,))
         self.assertIsNotNone(settings["last_attempt_at"])
         self.assertIsNotNone(settings["last_success_at"])
         self.assertEqual(

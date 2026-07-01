@@ -85,6 +85,9 @@ def get_garmin_auto_sync_settings(
 def update_garmin_auto_sync_settings(payload: dict[str, Any]) -> dict[str, Any]:
     if not payload:
         raise ValueError("At least one auto-sync setting must be provided.")
+    for key, value in payload.items():
+        if value is None:
+            raise ValueError(f"{key} cannot be null.")
 
     allowed_columns = {
         "enabled": "auto_sync_enabled",

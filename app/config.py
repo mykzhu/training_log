@@ -2,6 +2,29 @@ import os
 from pathlib import Path
 
 
+def parse_int_env_value(
+    raw: str | None,
+    default: int,
+    *,
+    minimum: int | None = None,
+) -> int:
+    if raw is None or not raw.strip():
+        value = default
+    else:
+        try:
+            value = int(raw)
+        except ValueError:
+            value = default
+
+    if minimum is not None:
+        value = max(value, minimum)
+    return value
+
+
+def int_env(name: str, default: int, *, minimum: int | None = None) -> int:
+    return parse_int_env_value(os.getenv(name), default, minimum=minimum)
+
+
 DB_PATH = Path(os.getenv("DB_PATH", "data/training.db"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "DEBUG").upper()
 GARMIN_TOKEN_DIR = Path(os.getenv("GARMIN_TOKEN_DIR", "/data/garmin_tokens"))
@@ -13,9 +36,10 @@ FRONTEND_DIST_DIR = Path(
         Path(__file__).resolve().parent / "static",
     )
 )
-GARMIN_AUTO_SYNC_CHECK_INTERVAL_SECONDS = max(
-    int(os.getenv("GARMIN_AUTO_SYNC_CHECK_INTERVAL_SECONDS", "3600")),
-    300,
+GARMIN_AUTO_SYNC_CHECK_INTERVAL_SECONDS = int_env(
+    "GARMIN_AUTO_SYNC_CHECK_INTERVAL_SECONDS",
+    3600,
+    minimum=300,
 )
 
 DEFAULT_EXERCISES = (

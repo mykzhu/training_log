@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 from datetime import date, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -11,6 +12,7 @@ from app.services.garmin_service import garmin_service
 
 
 logger = logging.getLogger("training_log")
+SYNC_AFTER_PATTERN = re.compile(r"^\d{2}:\d{2}$")
 _auto_sync_lock: asyncio.Lock | None = None
 _auto_sync_lock_loop: asyncio.AbstractEventLoop | None = None
 _stop_event: asyncio.Event | None = None
@@ -25,6 +27,8 @@ def now_in_app_timezone() -> datetime:
 
 
 def parse_sync_after(value: str) -> time:
+    if not SYNC_AFTER_PATTERN.fullmatch(value):
+        raise ValueError("Sync time must be a valid HH:MM local time.")
     try:
         parsed = datetime.strptime(value, "%H:%M").time()
     except ValueError as exc:
@@ -68,8 +72,9 @@ def next_eligible_auto_sync_at(
     sync_time = parse_sync_after(str(settings["sync_after_local_time"]))
     today_candidate = datetime.combine(now_local.date(), sync_time, tzinfo=now_local.tzinfo)
     last_success_date = local_date_from_iso(settings.get("last_success_at"))
+    last_attempt_date = local_date_from_iso(settings.get("last_attempt_at"))
 
-    if last_success_date == now_local.date():
+    if last_success_date == now_local.date() or last_attempt_date == now_local.date():
         return today_candidate + timedelta(days=1)
     return today_candidate
 
@@ -116,7 +121,29 @@ def settings_response() -> dict[str, Any]:
     }
 
 
+def validate_update_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    if not payload:
+        raise ValueError("At least one auto-sync setting must be provided.")
+
+    normalized = dict(payload)
+    for key, value in normalized.items():
+        if value is None:
+            raise ValueError(f"{key} cannot be null.")
+
+    if "sync_after_local_time" in normalized:
+        parse_sync_after(str(normalized["sync_after_local_time"]))
+
+    if "sync_days" in normalized:
+        days = int(normalized["sync_days"])
+        if days < 1 or days > 90:
+            raise ValueError("Sync days must be between 1 and 90.")
+        normalized["sync_days"] = days
+
+    return normalized
+
+
 def update_settings(payload: dict[str, Any]) -> dict[str, Any]:
+    payload = validate_update_payload(payload)
     if "sync_after_local_time" in payload:
         parse_sync_after(str(payload["sync_after_local_time"]))
     settings = garmin_sync_settings.update_garmin_auto_sync_settings(payload)
@@ -146,7 +173,7 @@ async def run_garmin_auto_sync_once() -> dict[str, Any]:
         logger.info("garmin.auto_sync.start days=%s", days)
 
         try:
-            sync_response = garmin_service.sync(days)
+            sync_response = await asyncio.to_thread(garmin_service.sync, days)
         except Exception as exc:
             error = sanitize_error(exc)
             garmin_sync_settings.record_garmin_auto_sync_error(
