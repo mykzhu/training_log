@@ -1,54 +1,25 @@
-from datetime import date, datetime, timedelta
 from statistics import median
 from typing import Any, Callable
 
-from app.repositories import garmin as garmin_repository
-from app.services import date_service
+from app.services.garmin_insights import (
+    BASELINE_DAYS,
+    MIN_BASELINE_SAMPLES,
+    build_garmin_insight_inputs,
+    metric_values,
+    parse_as_of_date,
+    parse_as_of_date_with_source,
+    rounded_value,
+)
 
 
-BASELINE_DAYS = 28
-MIN_BASELINE_SAMPLES = 7
 MIN_GARMIN_DELTA = -20
 MAX_GARMIN_DELTA = 10
 
 MetricDeltaFunction = Callable[[float, float], tuple[int, str]]
 
 
-def parse_as_of_date_with_source(as_of: str | None) -> tuple[date, str]:
-    return date_service.parse_local_date_from_as_of(as_of)
-
-
-def parse_as_of_date(as_of: str | None) -> date:
-    return parse_as_of_date_with_source(as_of)[0]
-
-
 def clamp_garmin_delta(value: int) -> int:
     return max(MIN_GARMIN_DELTA, min(MAX_GARMIN_DELTA, value))
-
-
-def metric_values(
-    metrics: list[dict[str, Any]],
-    metric_key: str,
-    *,
-    exclude_date: str | None = None,
-) -> list[float]:
-    values: list[float] = []
-    for metric in metrics:
-        if exclude_date is not None and metric.get("date") == exclude_date:
-            continue
-
-        value = metric.get(metric_key)
-        if isinstance(value, (int, float)):
-            values.append(float(value))
-
-    return values
-
-
-def rounded_value(value: float | None) -> float | None:
-    if value is None:
-        return None
-
-    return round(float(value), 2)
 
 
 def hrv_delta(current: float, baseline: float) -> tuple[int, str]:
@@ -230,55 +201,44 @@ def scored_metrics_summary(scored_rules: list[dict[str, Any]]) -> str:
 
 
 def build_garmin_readiness_adjustment(as_of: str | None = None) -> dict[str, Any]:
-    as_of_date, local_date_source = parse_as_of_date_with_source(as_of)
-    current_date = as_of_date.isoformat()
-    previous_date = (as_of_date - timedelta(days=1)).isoformat()
-    baseline_start = (as_of_date - timedelta(days=BASELINE_DAYS)).isoformat()
-    baseline_end = previous_date
-
-    current_metric = garmin_repository.get_daily_metric(current_date)
-    previous_metric = garmin_repository.get_daily_metric(previous_date)
-    baseline_metrics = garmin_repository.list_daily_metrics(
-        start_date=baseline_start,
-        end_date=baseline_end,
-    )
+    inputs = build_garmin_insight_inputs(as_of=as_of)
 
     rules = [
         build_metric_rule(
-            metric=current_metric,
+            metric=inputs.current_metric,
             metric_key="resting_heart_rate",
             label="Resting heart rate",
-            baseline_metrics=baseline_metrics,
-            source_date=current_date,
+            baseline_metrics=inputs.baseline_metrics,
+            source_date=inputs.current_date,
             delta_function=resting_heart_rate_delta,
         ),
         build_metric_rule(
-            metric=current_metric,
+            metric=inputs.current_metric,
             metric_key="hrv_ms",
             label="HRV",
-            baseline_metrics=baseline_metrics,
-            source_date=current_date,
+            baseline_metrics=inputs.baseline_metrics,
+            source_date=inputs.current_date,
             delta_function=hrv_delta,
         ),
         build_metric_rule(
-            metric=current_metric,
+            metric=inputs.current_metric,
             metric_key="body_battery_start",
             label="Body Battery start",
-            baseline_metrics=baseline_metrics,
-            source_date=current_date,
+            baseline_metrics=inputs.baseline_metrics,
+            source_date=inputs.current_date,
             delta_function=body_battery_delta,
         ),
         build_current_stress_display_rule(
-            current_metric=current_metric,
-            baseline_metrics=baseline_metrics,
-            current_date=current_date,
+            current_metric=inputs.current_metric,
+            baseline_metrics=inputs.baseline_metrics,
+            current_date=inputs.current_date,
         ),
         build_metric_rule(
-            metric=previous_metric,
+            metric=inputs.previous_metric,
             metric_key="stress_avg",
             label="Previous-day stress",
-            baseline_metrics=baseline_metrics,
-            source_date=previous_date,
+            baseline_metrics=inputs.baseline_metrics,
+            source_date=inputs.previous_date,
             delta_function=previous_day_stress_delta,
         ),
     ]
@@ -301,11 +261,11 @@ def build_garmin_readiness_adjustment(as_of: str | None = None) -> dict[str, Any
         "max_score_delta": MAX_GARMIN_DELTA,
         "baseline_days": BASELINE_DAYS,
         "minimum_baseline_samples": MIN_BASELINE_SAMPLES,
-        "current_date": current_date,
-        "previous_date": previous_date,
-        "baseline_start_date": baseline_start,
-        "baseline_end_date": baseline_end,
-        "local_date_source": local_date_source,
+        "current_date": inputs.current_date,
+        "previous_date": inputs.previous_date,
+        "baseline_start_date": inputs.baseline_start_date,
+        "baseline_end_date": inputs.baseline_end_date,
+        "local_date_source": inputs.local_date_source,
         "available_rule_count": sum(1 for rule in rules if has_rule_value(rule)),
         "scored_rule_count": len(scored_rules),
         "missing_rule_count": sum(1 for rule in rules if rule["status"] == "missing_current"),

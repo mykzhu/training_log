@@ -1144,7 +1144,7 @@ Mobile Settings page
 
 ---
 
-## [ ] Phase 18 — Garmin insights unification and correctness pass
+## [x] Phase 18 — Garmin insights unification and correctness pass
 
 Branch:
 
