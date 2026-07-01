@@ -202,13 +202,13 @@ export default function AnalysisProfilesPanel({
   }
 
   return (
-    <section className="panel analysis-profile-panel">
-      <div className="panel-header">
+    <details className="settings-fold-panel analysis-profile-panel" open>
+      <summary>
         <div>
-          <h2>Analysis types</h2>
+          <span>Analysis types</span>
           <div className="muted small">Changing factors recalculates displayed historical load analysis.</div>
         </div>
-      </div>
+      </summary>
 
       {error && <div className="error-banner">{error}</div>}
       {message && <div className="success-banner">{message}</div>}
@@ -407,6 +407,6 @@ export default function AnalysisProfilesPanel({
           );
         })}
       </div>
-    </section>
+    </details>
   );
 }

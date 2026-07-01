@@ -571,21 +571,24 @@ export default function SettingsPage() {
       {error && <div className="error-banner">{error}</div>}
       {message && <div className="success-banner">{message}</div>}
 
-      <section className="panel garmin-panel">
-        <div className="panel-header">
+      <details className="settings-fold-panel garmin-panel" open>
+        <summary>
           <div>
-            <h2>Garmin</h2>
+            <span>Garmin</span>
             <div className="muted small">Observational import</div>
           </div>
           <button
             className="ghost-button compact-action"
             disabled={garminBusy}
-            onClick={refreshGarminStatus}
+            onClick={(event) => {
+              event.stopPropagation();
+              refreshGarminStatus();
+            }}
             type="button"
           >
             Refresh
           </button>
-        </div>
+        </summary>
 
         {garminError && <div className="error-banner">{garminError}</div>}
         {garminMessage && (
@@ -792,7 +795,7 @@ export default function SettingsPage() {
             </button>
           </form>
         )}
-      </section>
+      </details>
 
       <AnalysisProfilesPanel profiles={profiles} onProfilesChange={setProfiles} />
       <form className="panel settings-add" onSubmit={addExercise}>
