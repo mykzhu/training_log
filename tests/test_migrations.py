@@ -59,7 +59,7 @@ class MigrationTests(unittest.TestCase):
                 for row in conn.execute("PRAGMA table_info(garmin_daily_metrics)")
             }
 
-        self.assertEqual([int(row["version"]) for row in rows], [1, 2, 3, 4, 5, 6, 7])
+        self.assertEqual([int(row["version"]) for row in rows], [1, 2, 3, 4, 5, 6, 7, 8])
         self.assertEqual(
             [row["name"] for row in rows],
             [
@@ -70,6 +70,7 @@ class MigrationTests(unittest.TestCase):
                 "performance_indexes",
                 "garmin_daily_metrics",
                 "analysis_profiles",
+                "garmin_auto_sync_settings",
             ],
         )
         self.assertGreater(exercise_count, 0)
@@ -116,7 +117,7 @@ class MigrationTests(unittest.TestCase):
                 ("Deadlift",),
             ).fetchone()[0]
 
-        self.assertEqual(versions, [1, 2, 3, 4, 5, 6, 7])
+        self.assertEqual(versions, [1, 2, 3, 4, 5, 6, 7, 8])
         self.assertEqual(exercise["name"], "Romanian Deadlift")
         self.assertEqual(exercise["profile_key"], "deadlift")
         self.assertEqual(exercise["is_active"], 1)

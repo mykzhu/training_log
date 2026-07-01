@@ -10,13 +10,20 @@ import {
 } from "../api/exercises";
 import {
   disconnectGarmin,
+  getGarminAutoSyncSettings,
   getGarminStatus,
   loginGarmin,
   submitGarminMfa,
   syncGarmin,
+  updateGarminAutoSyncSettings,
 } from "../api/garmin";
 import AnalysisProfilesPanel from "../components/settings/AnalysisProfilesPanel";
-import type { Exercise, ExerciseProfile, GarminStatus } from "../api/types";
+import type {
+  Exercise,
+  ExerciseProfile,
+  GarminAutoSyncSettings,
+  GarminStatus,
+} from "../api/types";
 import { formatSetOption, uniqueSortedNumbers } from "../utils/setOptions";
 
 function normalizeWeights(weights: number[]) {
@@ -76,6 +83,17 @@ function formatGarminDateTime(value: string | null | undefined) {
   });
 }
 
+function formatGarminAutoSyncResult(result: Record<string, unknown> | null) {
+  if (!result) {
+    return "-";
+  }
+
+  const saved = typeof result.saved === "number" ? result.saved : 0;
+  const skipped = typeof result.skipped === "number" ? result.skipped : 0;
+  const warnings = typeof result.warnings === "number" ? result.warnings : 0;
+  return `Saved ${saved}, skipped ${skipped}, warnings ${warnings}`;
+}
+
 export default function SettingsPage() {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [profiles, setProfiles] = useState<ExerciseProfile[]>([]);
@@ -98,6 +116,13 @@ export default function SettingsPage() {
   const [garminError, setGarminError] = useState<string | null>(null);
   const [garminMessage, setGarminMessage] = useState<string | null>(null);
   const [garminPendingAction, setGarminPendingAction] = useState<string | null>(null);
+  const [garminAutoSync, setGarminAutoSync] =
+    useState<GarminAutoSyncSettings | null>(null);
+  const [garminAutoSyncDraft, setGarminAutoSyncDraft] = useState({
+    enabled: false,
+    sync_after_local_time: "07:00",
+    sync_days: 35,
+  });
   const profileLabels = useMemo(
     () =>
       Object.fromEntries(
@@ -170,9 +195,21 @@ export default function SettingsPage() {
     return response;
   }
 
+  async function loadGarminAutoSyncSettings() {
+    setGarminError(null);
+    const response = await getGarminAutoSyncSettings();
+    setGarminAutoSync(response);
+    setGarminAutoSyncDraft({
+      enabled: response.enabled,
+      sync_after_local_time: response.sync_after_local_time,
+      sync_days: response.sync_days,
+    });
+    return response;
+  }
+
   useEffect(() => {
     load();
-    loadGarminStatus().catch((reason: unknown) => {
+    Promise.all([loadGarminStatus(), loadGarminAutoSyncSettings()]).catch((reason: unknown) => {
       setGarminError(
         reason instanceof Error ? reason.message : "Failed to load Garmin status.",
       );
@@ -204,6 +241,12 @@ export default function SettingsPage() {
   const hasDirtyDrafts = exercises.some(isExerciseDirty);
   const isBusy = pendingAction !== null;
   const garminBusy = garminPendingAction !== null;
+  const garminAutoSyncDirty =
+    garminAutoSync !== null &&
+    (garminAutoSyncDraft.enabled !== garminAutoSync.enabled ||
+      garminAutoSyncDraft.sync_after_local_time !==
+        garminAutoSync.sync_after_local_time ||
+      garminAutoSyncDraft.sync_days !== garminAutoSync.sync_days);
 
   async function runAction(
     actionKey: string,
@@ -393,8 +436,25 @@ export default function SettingsPage() {
 
   async function refreshGarminStatus() {
     await runGarminAction("status", async () => {
-      await loadGarminStatus();
+      await Promise.all([loadGarminStatus(), loadGarminAutoSyncSettings()]);
       setGarminMessage("Garmin status refreshed");
+    });
+  }
+
+  async function saveGarminAutoSyncSettings() {
+    await runGarminAction("auto-sync", async () => {
+      const response = await updateGarminAutoSyncSettings({
+        enabled: garminAutoSyncDraft.enabled,
+        sync_after_local_time: garminAutoSyncDraft.sync_after_local_time,
+        sync_days: garminAutoSyncDraft.sync_days,
+      });
+      setGarminAutoSync(response);
+      setGarminAutoSyncDraft({
+        enabled: response.enabled,
+        sync_after_local_time: response.sync_after_local_time,
+        sync_days: response.sync_days,
+      });
+      setGarminMessage("Garmin auto-sync settings saved");
     });
   }
 
@@ -463,6 +523,7 @@ export default function SettingsPage() {
       const response = await syncGarmin(35);
       const warningCount = Object.keys(response.errors).length;
       setGarminStatus(response.status);
+      await loadGarminAutoSyncSettings();
       setGarminMessage(
         `Saved ${response.saved_dates.length} date${
           response.saved_dates.length === 1 ? "" : "s"
@@ -530,6 +591,115 @@ export default function SettingsPage() {
             <span className="muted">latest date</span>
           </div>
         </div>
+
+        <section className="garmin-auto-sync-card">
+          <div className="settings-card-header">
+            <div>
+              <h3>Auto-sync</h3>
+              <p className="muted small">
+                Runs once per day after the selected local time. No Garmin
+                request is made while pages render.
+              </p>
+            </div>
+            <label className="garmin-auto-sync-toggle">
+              <input
+                checked={garminAutoSyncDraft.enabled}
+                disabled={garminPendingAction === "auto-sync"}
+                onChange={(event) =>
+                  setGarminAutoSyncDraft((current) => ({
+                    ...current,
+                    enabled: event.target.checked,
+                  }))
+                }
+                type="checkbox"
+              />
+              Auto-sync Garmin daily
+            </label>
+          </div>
+
+          {garminAutoSyncDraft.enabled && garminStatus?.connected === false && (
+            <div className="error-banner">
+              Auto-sync is enabled, but Garmin is not connected. Connect Garmin
+              for automatic sync to run.
+            </div>
+          )}
+
+          <div className="garmin-auto-sync-controls">
+            <label>
+              Sync after
+              <input
+                disabled={garminPendingAction === "auto-sync"}
+                onChange={(event) =>
+                  setGarminAutoSyncDraft((current) => ({
+                    ...current,
+                    sync_after_local_time: event.target.value,
+                  }))
+                }
+                type="time"
+                value={garminAutoSyncDraft.sync_after_local_time}
+              />
+            </label>
+            <label>
+              Sync range
+              <input
+                disabled={garminPendingAction === "auto-sync"}
+                max="90"
+                min="1"
+                onChange={(event) =>
+                  setGarminAutoSyncDraft((current) => ({
+                    ...current,
+                    sync_days: Number(event.target.value),
+                  }))
+                }
+                type="number"
+                value={garminAutoSyncDraft.sync_days}
+              />
+            </label>
+            <button
+              className="secondary-button"
+              disabled={
+                garminPendingAction === "auto-sync" ||
+                !garminAutoSyncDirty ||
+                garminAutoSyncDraft.sync_days < 1 ||
+                garminAutoSyncDraft.sync_days > 90 ||
+                !garminAutoSyncDraft.sync_after_local_time
+              }
+              onClick={saveGarminAutoSyncSettings}
+              type="button"
+            >
+              Save auto-sync settings
+            </button>
+          </div>
+
+          <div className="garmin-auto-sync-status">
+            <div>
+              <strong>
+                {garminAutoSyncDraft.enabled ? "Enabled" : "Disabled"}
+              </strong>
+              <span className="muted">auto-sync</span>
+            </div>
+            <div>
+              <strong>{formatGarminDateTime(garminAutoSync?.next_eligible_at)}</strong>
+              <span className="muted">next eligible run</span>
+            </div>
+            <div>
+              <strong>{formatGarminDateTime(garminAutoSync?.last_attempt_at)}</strong>
+              <span className="muted">last automatic attempt</span>
+            </div>
+            <div>
+              <strong>{formatGarminDateTime(garminAutoSync?.last_success_at)}</strong>
+              <span className="muted">last automatic success</span>
+            </div>
+            <div>
+              <strong>{formatGarminAutoSyncResult(garminAutoSync?.last_result ?? null)}</strong>
+              <span className="muted">last result</span>
+            </div>
+            <div>
+              <strong>{garminAutoSync?.last_error || "-"}</strong>
+              <span className="muted">last error</span>
+            </div>
+          </div>
+        </section>
 
         {garminMfaToken ? (
           <form className="garmin-form" onSubmit={submitGarminCode}>

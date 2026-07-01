@@ -748,6 +748,62 @@ a.compact-button {
   flex: 1 1 140px;
 }
 
+.garmin-auto-sync-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  background: var(--card2);
+}
+
+.garmin-auto-sync-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  font-weight: 700;
+}
+
+.garmin-auto-sync-toggle input {
+  width: 18px;
+  height: 18px;
+}
+
+.garmin-auto-sync-controls {
+  display: grid;
+  grid-template-columns: minmax(120px, 160px) minmax(100px, 140px) minmax(180px, auto);
+  gap: 8px;
+  align-items: end;
+}
+
+.garmin-auto-sync-status {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.garmin-auto-sync-status > div {
+  display: grid;
+  gap: 3px;
+  min-height: 58px;
+  align-content: center;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px;
+  background: var(--card);
+}
+
+.garmin-auto-sync-status strong {
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.garmin-auto-sync-status span {
+  font-size: 12px;
+}
+
 .garmin-recovery-card .recovery-item strong {
   overflow-wrap: anywhere;
   font-size: 15px;
@@ -1713,6 +1769,7 @@ button.load-calendar-cell:focus-visible {
   .settings-row,
   .garmin-login,
   .garmin-form,
+  .garmin-auto-sync-controls,
   .set-actions,
   .stats-chart-grid,
   .analysis-grid {
@@ -1721,6 +1778,7 @@ button.load-calendar-cell:focus-visible {
 
 
   .garmin-status-grid,
+  .garmin-auto-sync-status,
   .garmin-metric-row {
     grid-template-columns: 1fr;
   }

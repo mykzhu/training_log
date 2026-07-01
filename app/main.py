@@ -20,6 +20,10 @@ from app.routes.api_workouts import (
     router as workouts_api_router,
     workout_items_router as workout_items_api_router,
 )
+from app.services.garmin_auto_sync_service import (
+    start_garmin_auto_sync_scheduler,
+    stop_garmin_auto_sync_scheduler,
+)
 
 
 def configure_logging() -> None:
@@ -172,7 +176,7 @@ async def log_requests(request: Request, call_next):
 
 
 @app.on_event("startup")
-def on_startup() -> None:
+async def on_startup() -> None:
     logger.info(
         "app.startup db_path=%s log_level=%s frontend_dist=%s",
         config.DB_PATH,
@@ -180,7 +184,13 @@ def on_startup() -> None:
         get_frontend_dist_dir(),
     )
     init_db()
+    start_garmin_auto_sync_scheduler(app)
     logger.info("app.ready")
+
+
+@app.on_event("shutdown")
+async def on_shutdown() -> None:
+    await stop_garmin_auto_sync_scheduler(app)
 
 
 @app.get("/{path:path}", include_in_schema=False)

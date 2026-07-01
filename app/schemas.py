@@ -326,6 +326,27 @@ class GarminSyncRequest(AppBaseModel):
     days: int | None = Field(default=None, ge=1, le=90)
 
 
+class GarminAutoSyncSettingsUpdateRequest(AppBaseModel):
+    enabled: bool | None = None
+    sync_after_local_time: str | None = Field(
+        default=None,
+        pattern=r"^\d{2}:\d{2}$",
+    )
+    sync_days: int | None = Field(default=None, ge=1, le=90)
+
+
+class GarminAutoSyncSettingsResponse(AppBaseModel):
+    enabled: bool
+    sync_after_local_time: str
+    sync_days: int
+    last_attempt_at: str | None
+    last_success_at: str | None
+    last_error: str | None
+    last_result: dict[str, Any] | None
+    next_eligible_at: str | None
+    timezone: str
+
+
 class GarminLoginResponse(AppBaseModel):
     connected: bool
     mfa_required: bool

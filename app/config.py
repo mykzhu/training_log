@@ -13,6 +13,10 @@ FRONTEND_DIST_DIR = Path(
         Path(__file__).resolve().parent / "static",
     )
 )
+GARMIN_AUTO_SYNC_CHECK_INTERVAL_SECONDS = max(
+    int(os.getenv("GARMIN_AUTO_SYNC_CHECK_INTERVAL_SECONDS", "3600")),
+    300,
+)
 
 DEFAULT_EXERCISES = (
     "Deadlift",

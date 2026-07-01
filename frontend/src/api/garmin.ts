@@ -1,5 +1,7 @@
 import { jsonBody, requestJson } from "./client";
 import type {
+  GarminAutoSyncSettings,
+  GarminAutoSyncSettingsUpdate,
   GarminDailyMetricsResponse,
   GarminLoginResponse,
   GarminStatsRange,
@@ -36,6 +38,19 @@ export function syncGarmin(days?: number) {
   return requestJson<GarminSyncResponse>(`${base}/sync`, {
     method: "POST",
     body: days === undefined ? undefined : jsonBody({ days }),
+  });
+}
+
+export function getGarminAutoSyncSettings() {
+  return requestJson<GarminAutoSyncSettings>(`${base}/auto-sync`);
+}
+
+export function updateGarminAutoSyncSettings(
+  payload: GarminAutoSyncSettingsUpdate,
+) {
+  return requestJson<GarminAutoSyncSettings>(`${base}/auto-sync`, {
+    method: "PATCH",
+    body: jsonBody(payload),
   });
 }
 

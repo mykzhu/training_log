@@ -11,6 +11,7 @@ from app.migrations import (
     v005_performance_indexes,
     v006_garmin_daily_metrics,
     v007_analysis_profiles,
+    v008_garmin_auto_sync_settings,
 )
 
 
@@ -30,6 +31,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     v005_performance_indexes,
     v006_garmin_daily_metrics,
     v007_analysis_profiles,
+    v008_garmin_auto_sync_settings,
 )
 
 

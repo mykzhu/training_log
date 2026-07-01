@@ -13,13 +13,20 @@ import app.routes.api_garmin as api_garmin
 from app.routes.api_garmin import (
     disconnect_garmin,
     get_garmin_daily_metrics,
+    get_garmin_auto_sync_settings,
     get_garmin_stats,
     get_garmin_status,
     login_garmin,
     submit_garmin_mfa,
     sync_garmin,
+    update_garmin_auto_sync_settings,
 )
-from app.schemas import GarminLoginRequest, GarminMfaRequest, GarminSyncRequest
+from app.schemas import (
+    GarminAutoSyncSettingsUpdateRequest,
+    GarminLoginRequest,
+    GarminMfaRequest,
+    GarminSyncRequest,
+)
 
 
 class FakeGarminApiService:
@@ -110,6 +117,8 @@ class GarminApiTests(unittest.TestCase):
         self.assertIn(("/api/v1/garmin/mfa", ("POST",)), routes)
         self.assertIn(("/api/v1/garmin/disconnect", ("POST",)), routes)
         self.assertIn(("/api/v1/garmin/sync", ("POST",)), routes)
+        self.assertIn(("/api/v1/garmin/auto-sync", ("GET",)), routes)
+        self.assertIn(("/api/v1/garmin/auto-sync", ("PATCH",)), routes)
         self.assertIn(("/api/v1/garmin/daily", ("GET",)), routes)
         self.assertIn(("/api/v1/garmin/stats", ("GET",)), routes)
 
@@ -126,11 +135,16 @@ class GarminApiTests(unittest.TestCase):
             )["connected"]
         )
         self.assertTrue(disconnect_garmin()["connected"])
+        auto_sync_response = update_garmin_auto_sync_settings(
+            GarminAutoSyncSettingsUpdateRequest(enabled=True)
+        )
 
         sync_response = sync_garmin(GarminSyncRequest(days=7))
         daily_response = get_garmin_daily_metrics(days=14)
         stats_response = get_garmin_stats(range_value="180")
 
+        self.assertTrue(auto_sync_response["enabled"])
+        self.assertTrue(get_garmin_auto_sync_settings()["enabled"])
         self.assertEqual(sync_response["days"], 7)
         self.assertEqual(self.fake_service.synced_days, 7)
         self.assertEqual(daily_response["days"], 14)

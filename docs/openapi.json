@@ -712,6 +712,75 @@
         "title": "FinishCurrentWorkoutResponse",
         "type": "object"
       },
+      "GarminAutoSyncSettingsResponse": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "last_attempt_at": {
+            "title": "Last Attempt At",
+            "type": "string"
+          },
+          "last_error": {
+            "title": "Last Error",
+            "type": "string"
+          },
+          "last_result": {
+            "title": "Last Result",
+            "type": "object"
+          },
+          "last_success_at": {
+            "title": "Last Success At",
+            "type": "string"
+          },
+          "next_eligible_at": {
+            "title": "Next Eligible At",
+            "type": "string"
+          },
+          "sync_after_local_time": {
+            "title": "Sync After Local Time",
+            "type": "string"
+          },
+          "sync_days": {
+            "title": "Sync Days",
+            "type": "integer"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "sync_after_local_time",
+          "sync_days",
+          "timezone"
+        ],
+        "title": "GarminAutoSyncSettingsResponse",
+        "type": "object"
+      },
+      "GarminAutoSyncSettingsUpdateRequest": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "sync_after_local_time": {
+            "pattern": "^\\d{2}:\\d{2}$",
+            "title": "Sync After Local Time",
+            "type": "string"
+          },
+          "sync_days": {
+            "maximum": 90.0,
+            "minimum": 1.0,
+            "title": "Sync Days",
+            "type": "integer"
+          }
+        },
+        "title": "GarminAutoSyncSettingsUpdateRequest",
+        "type": "object"
+      },
       "GarminDailyMetricResponse": {
         "properties": {
           "body_battery_end": {
@@ -2966,6 +3035,66 @@
         "summary": "Replace Exercise Weights Endpoint",
         "tags": [
           "exercises"
+        ]
+      }
+    },
+    "/api/v1/garmin/auto-sync": {
+      "get": {
+        "operationId": "get_garmin_auto_sync_settings_api_v1_garmin_auto_sync_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarminAutoSyncSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Garmin Auto Sync Settings",
+        "tags": [
+          "garmin"
+        ]
+      },
+      "patch": {
+        "operationId": "update_garmin_auto_sync_settings_api_v1_garmin_auto_sync_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GarminAutoSyncSettingsUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GarminAutoSyncSettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Garmin Auto Sync Settings",
+        "tags": [
+          "garmin"
         ]
       }
     },

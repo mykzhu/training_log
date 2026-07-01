@@ -4,6 +4,8 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query
 
 from app.schemas import (
+    GarminAutoSyncSettingsResponse,
+    GarminAutoSyncSettingsUpdateRequest,
     GarminDailyMetricsResponse,
     GarminDisconnectResponse,
     GarminLoginRequest,
@@ -14,6 +16,7 @@ from app.schemas import (
     GarminSyncRequest,
     GarminSyncResponse,
 )
+from app.services import garmin_auto_sync_service
 from app.services.garmin_service import garmin_service
 
 
@@ -61,6 +64,28 @@ def disconnect_garmin() -> dict[str, Any]:
 def sync_garmin(payload: GarminSyncRequest | None = None) -> dict[str, Any]:
     try:
         return garmin_service.sync(payload.days if payload else None)
+    except Exception as exc:
+        raise garmin_error(exc) from exc
+
+
+@router.get("/auto-sync", response_model=GarminAutoSyncSettingsResponse)
+def get_garmin_auto_sync_settings() -> dict[str, Any]:
+    try:
+        return garmin_auto_sync_service.settings_response()
+    except Exception as exc:
+        raise garmin_error(exc) from exc
+
+
+@router.patch("/auto-sync", response_model=GarminAutoSyncSettingsResponse)
+def update_garmin_auto_sync_settings(
+    payload: GarminAutoSyncSettingsUpdateRequest,
+) -> dict[str, Any]:
+    update_payload = {
+        key: getattr(payload, key)
+        for key in payload.model_fields_set
+    }
+    try:
+        return garmin_auto_sync_service.update_settings(update_payload)
     except Exception as exc:
         raise garmin_error(exc) from exc
 

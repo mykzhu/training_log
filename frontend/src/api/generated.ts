@@ -166,6 +166,24 @@ export type FinishCurrentWorkoutResponse = {
   workout_id: number;
 };
 
+export type GarminAutoSyncSettingsResponse = {
+  enabled: boolean;
+  last_attempt_at?: string | null;
+  last_error?: string | null;
+  last_result?: Record<string, unknown> | null;
+  last_success_at?: string | null;
+  next_eligible_at?: string | null;
+  sync_after_local_time: string;
+  sync_days: number;
+  timezone: string;
+};
+
+export type GarminAutoSyncSettingsUpdateRequest = {
+  enabled?: boolean | null;
+  sync_after_local_time?: string | null;
+  sync_days?: number | null;
+};
+
 export type GarminDailyMetricResponse = {
   body_battery_end?: number | null;
   body_battery_start?: number | null;
@@ -519,6 +537,8 @@ export type ApiSchemas = {
   ExerciseWeightsUpdateRequest: ExerciseWeightsUpdateRequest;
   ExercisesResponse: ExercisesResponse;
   FinishCurrentWorkoutResponse: FinishCurrentWorkoutResponse;
+  GarminAutoSyncSettingsResponse: GarminAutoSyncSettingsResponse;
+  GarminAutoSyncSettingsUpdateRequest: GarminAutoSyncSettingsUpdateRequest;
   GarminDailyMetricResponse: GarminDailyMetricResponse;
   GarminDailyMetricsResponse: GarminDailyMetricsResponse;
   GarminDisconnectResponse: GarminDisconnectResponse;

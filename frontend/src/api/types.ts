@@ -191,6 +191,24 @@ export type GarminStatus = {
   pending_mfa: boolean;
 };
 
+export type GarminAutoSyncSettings = {
+  enabled: boolean;
+  sync_after_local_time: string;
+  sync_days: number;
+  last_attempt_at: string | null;
+  last_success_at: string | null;
+  last_error: string | null;
+  last_result: Record<string, unknown> | null;
+  next_eligible_at: string | null;
+  timezone: string;
+};
+
+export type GarminAutoSyncSettingsUpdate = {
+  enabled?: boolean;
+  sync_after_local_time?: string;
+  sync_days?: number;
+};
+
 export type GarminRecoverySnapshot = {
   connected: boolean;
   today: GarminDailyMetric | null;
