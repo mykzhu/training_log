@@ -114,22 +114,24 @@ class BackupServiceTests(unittest.TestCase):
                 ),
             )
 
-    def test_build_and_restore_backup_payload_round_trips_schema_v5(self) -> None:
+    def test_build_and_restore_backup_payload_round_trips_schema_v6(self) -> None:
         workout_id = self.insert_workout()
         self.insert_garmin_metric()
 
         payload = build_backup_payload()
-        self.assertEqual(payload["schema_version"], 5)
+        self.assertEqual(payload["schema_version"], 6)
         self.assertIn("exercise_weight_options", payload["tables"])
+        self.assertIn("analysis_profiles", payload["tables"])
         self.assertEqual(len(payload["tables"]["workouts"]), 1)
         self.assertEqual(len(payload["tables"]["workout_exercises"]), 1)
         self.assertEqual(len(payload["tables"]["set_entries"]), 1)
         self.assertEqual(payload["tables"]["exercises"][0]["is_active"], 1)
         self.assertEqual(len(payload["tables"]["garmin_daily_metrics"]), 1)
-        self.assertEqual(
-            payload["tables"]["garmin_daily_metrics"][0]["raw_diagnostics"],
-            {"summary": {"ok": True}},
+        self.assertNotIn(
+            "raw_diagnostics",
+            payload["tables"]["garmin_daily_metrics"][0],
         )
+        self.assertNotIn("garmin_sync_settings", payload["tables"])
 
         reset_database_data()
         restore_backup_payload(payload)
@@ -148,7 +150,11 @@ class BackupServiceTests(unittest.TestCase):
                 "SELECT COUNT(*) FROM exercise_weight_options"
             ).fetchone()[0]
             garmin_metric = conn.execute(
-                "SELECT resting_heart_rate, steps FROM garmin_daily_metrics WHERE date = ?",
+                """
+                SELECT resting_heart_rate, steps, raw_diagnostics
+                FROM garmin_daily_metrics
+                WHERE date = ?
+                """,
                 ("2026-06-26",),
             ).fetchone()
 
@@ -159,6 +165,74 @@ class BackupServiceTests(unittest.TestCase):
         self.assertGreater(weight_count, 0)
         self.assertEqual(garmin_metric["resting_heart_rate"], 52)
         self.assertEqual(garmin_metric["steps"], 12345)
+        self.assertEqual(garmin_metric["raw_diagnostics"], "{}")
+
+    def test_schema_v5_restore_accepts_raw_diagnostics(self) -> None:
+        self.insert_workout()
+        self.insert_garmin_metric()
+        payload = build_backup_payload()
+        payload["schema_version"] = 5
+        payload["tables"]["garmin_daily_metrics"][0]["raw_diagnostics"] = {
+            "summary": {"ok": True}
+        }
+
+        reset_database_data()
+        restore_backup_payload(payload)
+
+        with get_db() as conn:
+            garmin_metric = conn.execute(
+                """
+                SELECT raw_diagnostics
+                FROM garmin_daily_metrics
+                WHERE date = ?
+                """,
+                ("2026-06-26",),
+            ).fetchone()
+
+        self.assertEqual(
+            garmin_metric["raw_diagnostics"],
+            '{"summary":{"ok":true}}',
+        )
+
+    def test_schema_v4_restore_accepts_raw_diagnostics_without_profiles(self) -> None:
+        self.insert_workout()
+        self.insert_garmin_metric()
+        payload = build_backup_payload()
+        payload["schema_version"] = 4
+        payload["tables"].pop("analysis_profiles")
+        payload["tables"]["garmin_daily_metrics"][0]["raw_diagnostics"] = (
+            '{"summary":{"ok":true}}'
+        )
+
+        reset_database_data()
+        restore_backup_payload(payload)
+
+        with get_db() as conn:
+            garmin_metric = conn.execute(
+                """
+                SELECT raw_diagnostics
+                FROM garmin_daily_metrics
+                WHERE date = ?
+                """,
+                ("2026-06-26",),
+            ).fetchone()
+            profile_count = conn.execute(
+                "SELECT COUNT(*) FROM analysis_profiles"
+            ).fetchone()[0]
+
+        self.assertEqual(
+            garmin_metric["raw_diagnostics"],
+            '{"summary":{"ok":true}}',
+        )
+        self.assertGreater(profile_count, 0)
+
+    def test_schema_v6_restore_rejects_missing_required_garmin_fields(self) -> None:
+        self.insert_garmin_metric()
+        payload = build_backup_payload()
+        payload["tables"]["garmin_daily_metrics"][0].pop("synced_at")
+
+        with self.assertRaises(ValueError):
+            restore_backup_payload(payload)
 
     def test_schema_v3_restore_preserves_exact_inactive_empty_weights(self) -> None:
         self.insert_workout()

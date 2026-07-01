@@ -26,7 +26,7 @@ from app.services.default_analysis_profiles import (
 
 logger = logging.getLogger("training_log")
 
-BACKUP_SCHEMA_VERSION = 5
+BACKUP_SCHEMA_VERSION = 6
 ANALYSIS_PROFILE_BACKUP_COLUMNS: tuple[str, ...] = (
     "key",
     "label",
@@ -60,7 +60,7 @@ BASE_BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
         "created_at",
     ),
 }
-GARMIN_BACKUP_TABLE_COLUMNS: tuple[str, ...] = (
+GARMIN_BACKUP_TABLE_COLUMNS_V4_V5: tuple[str, ...] = (
     "date",
     "resting_heart_rate",
     "hrv_ms",
@@ -71,14 +71,33 @@ GARMIN_BACKUP_TABLE_COLUMNS: tuple[str, ...] = (
     "synced_at",
     "raw_diagnostics",
 )
+GARMIN_BACKUP_TABLE_COLUMNS: tuple[str, ...] = (
+    "date",
+    "resting_heart_rate",
+    "hrv_ms",
+    "stress_avg",
+    "body_battery_start",
+    "body_battery_end",
+    "steps",
+    "synced_at",
+)
+GARMIN_DB_TABLE_COLUMNS: tuple[str, ...] = (
+    *GARMIN_BACKUP_TABLE_COLUMNS,
+    "raw_diagnostics",
+)
 BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
     "analysis_profiles": ANALYSIS_PROFILE_BACKUP_COLUMNS,
     **BASE_BACKUP_TABLE_COLUMNS,
     "garmin_daily_metrics": GARMIN_BACKUP_TABLE_COLUMNS,
 }
+SCHEMA_V5_BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
+    "analysis_profiles": ANALYSIS_PROFILE_BACKUP_COLUMNS,
+    **BASE_BACKUP_TABLE_COLUMNS,
+    "garmin_daily_metrics": GARMIN_BACKUP_TABLE_COLUMNS_V4_V5,
+}
 SCHEMA_V4_BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
     **BASE_BACKUP_TABLE_COLUMNS,
-    "garmin_daily_metrics": GARMIN_BACKUP_TABLE_COLUMNS,
+    "garmin_daily_metrics": GARMIN_BACKUP_TABLE_COLUMNS_V4_V5,
 }
 BACKUP_TABLES = tuple(BACKUP_TABLE_COLUMNS)
 BACKUP_SEQUENCE_TABLES = tuple(BASE_BACKUP_TABLE_COLUMNS)
@@ -125,15 +144,7 @@ def build_backup_payload() -> dict[str, Any]:
             ).fetchall()
             table_rows = []
             for row in rows:
-                row_data = dict(row)
-                if table_name == "garmin_daily_metrics":
-                    try:
-                        row_data["raw_diagnostics"] = json.loads(
-                            str(row_data["raw_diagnostics"] or "{}")
-                        )
-                    except json.JSONDecodeError:
-                        row_data["raw_diagnostics"] = {"invalid": True}
-                table_rows.append(row_data)
+                table_rows.append(dict(row))
             tables[table_name] = table_rows
 
     payload = {
@@ -174,9 +185,9 @@ def validate_backup_payload(payload: Any) -> dict[str, list[dict[str, Any]]]:
         raise ValueError("Backup file must contain a JSON object.")
 
     schema_version = payload.get("schema_version")
-    if schema_version not in (1, 2, 3, 4, BACKUP_SCHEMA_VERSION):
+    if schema_version not in (1, 2, 3, 4, 5, BACKUP_SCHEMA_VERSION):
         raise ValueError(
-            "Unsupported backup schema version. Expected 1, 2, 3, 4 or "
+            "Unsupported backup schema version. Expected 1, 2, 3, 4, 5 or "
             f"{BACKUP_SCHEMA_VERSION}."
         )
 
@@ -188,6 +199,8 @@ def validate_backup_payload(payload: Any) -> dict[str, list[dict[str, Any]]]:
 
     if schema_version == BACKUP_SCHEMA_VERSION:
         table_columns = BACKUP_TABLE_COLUMNS
+    elif schema_version == 5:
+        table_columns = SCHEMA_V5_BACKUP_TABLE_COLUMNS
     elif schema_version == 4:
         table_columns = SCHEMA_V4_BACKUP_TABLE_COLUMNS
     elif schema_version == 3:
@@ -232,11 +245,12 @@ def validate_backup_payload(payload: Any) -> dict[str, list[dict[str, Any]]]:
 
         validated["exercise_weight_options"] = []
 
-    if schema_version != BACKUP_SCHEMA_VERSION:
+    if schema_version < 5:
         validated["analysis_profiles"] = default_backup_profile_rows()
 
     if schema_version < 4:
         validated["garmin_daily_metrics"] = []
+    normalize_garmin_metric_rows_for_restore(validated["garmin_daily_metrics"])
 
     validate_table_ids(validated)
     validate_analysis_profiles(validated["analysis_profiles"])
@@ -245,7 +259,7 @@ def validate_backup_payload(payload: Any) -> dict[str, list[dict[str, Any]]]:
     validate_exercise_weight_options(
         validated["exercise_weight_options"],
         validated,
-        enforce_active_weights=schema_version in (3, 4, BACKUP_SCHEMA_VERSION),
+        enforce_active_weights=schema_version in (3, 4, 5, BACKUP_SCHEMA_VERSION),
     )
     validate_workout_graph(validated)
     validate_garmin_daily_metrics(validated["garmin_daily_metrics"])
@@ -490,6 +504,20 @@ def coerce_optional_float(
     return result
 
 
+def normalize_garmin_metric_rows_for_restore(rows: list[dict[str, Any]]) -> None:
+    for row in rows:
+        if "raw_diagnostics" not in row:
+            row["raw_diagnostics"] = {}
+            continue
+
+        raw_diagnostics = row["raw_diagnostics"]
+        if isinstance(raw_diagnostics, str):
+            try:
+                row["raw_diagnostics"] = json.loads(raw_diagnostics)
+            except json.JSONDecodeError:
+                row["raw_diagnostics"] = {"invalid": True}
+
+
 def validate_garmin_daily_metrics(rows: list[dict[str, Any]]) -> None:
     seen_dates: set[str] = set()
     for index, row in enumerate(rows, start=1):
@@ -552,13 +580,6 @@ def validate_garmin_daily_metrics(rows: list[dict[str, Any]]) -> None:
         row["synced_at"] = synced_at
 
         raw_diagnostics = row["raw_diagnostics"]
-        if isinstance(raw_diagnostics, str):
-            try:
-                raw_diagnostics = json.loads(raw_diagnostics)
-            except json.JSONDecodeError as exc:
-                raise ValueError(
-                    f"Row {index} in garmin_daily_metrics has invalid diagnostics."
-                ) from exc
         if not isinstance(raw_diagnostics, dict):
             raise ValueError(
                 f"Row {index} in garmin_daily_metrics diagnostics must be an object."
@@ -680,6 +701,8 @@ def restore_backup_payload(payload: Any) -> None:
                 insert_analysis_profile_rows(conn, tables[table_name])
                 continue
 
+            if table_name == "garmin_daily_metrics":
+                columns = GARMIN_DB_TABLE_COLUMNS
             column_sql = ", ".join(columns)
             placeholders = ", ".join("?" for _ in columns)
             insert_sql = (
@@ -691,7 +714,7 @@ def restore_backup_payload(payload: Any) -> None:
                 conn.execute(insert_sql, tuple(row[column] for column in columns))
 
         reset_sqlite_sequences(conn)
-        if schema_version in (3, 4, BACKUP_SCHEMA_VERSION):
+        if schema_version in (3, 4, 5, BACKUP_SCHEMA_VERSION):
             set_metadata(conn, EXERCISE_SETTINGS_WEIGHT_MIGRATION_KEY, "1")
         else:
             initialize_exercise_settings(conn, force_weight_migration=True)
