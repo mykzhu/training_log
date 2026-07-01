@@ -130,7 +130,7 @@ class QueryCountTests(unittest.TestCase):
         response = get_workouts(limit=10)
 
         self.assertEqual(len(response["workouts"]), 10)
-        self.assertLessEqual(CountingConnection.select_count, 6)
+        self.assertLessEqual(CountingConnection.select_count, 7)
 
     def test_stats_use_batched_queries(self) -> None:
         self.seed_workouts()
@@ -139,7 +139,7 @@ class QueryCountTests(unittest.TestCase):
         response = get_stats(limit="10")
 
         self.assertEqual(response["stats"]["summary"]["workout_count"], 10)
-        self.assertLessEqual(CountingConnection.select_count, 7)
+        self.assertLessEqual(CountingConnection.select_count, 8)
 
     def test_recovery_context_uses_one_history_window_query(self) -> None:
         self.seed_workouts()

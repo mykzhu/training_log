@@ -15,6 +15,7 @@ import {
   submitGarminMfa,
   syncGarmin,
 } from "../api/garmin";
+import AnalysisProfilesPanel from "../components/settings/AnalysisProfilesPanel";
 import type { Exercise, ExerciseProfile, GarminStatus } from "../api/types";
 import { formatSetOption, uniqueSortedNumbers } from "../utils/setOptions";
 
@@ -104,6 +105,27 @@ export default function SettingsPage() {
       ),
     [profiles],
   );
+  const activeProfiles = useMemo(
+    () => profiles.filter((profile) => profile.is_active),
+    [profiles],
+  );
+
+  function profileOptionsForExercise(currentKey?: string) {
+    const options = new Map(activeProfiles.map((profile) => [profile.key, profile]));
+    const currentProfile = profiles.find((profile) => profile.key === currentKey);
+    if (currentProfile && !options.has(currentProfile.key)) {
+      options.set(currentProfile.key, currentProfile);
+    }
+    return Array.from(options.values()).sort((left, right) => {
+      if (left.is_active !== right.is_active) {
+        return left.is_active ? -1 : 1;
+      }
+      if (left.sort_order !== right.sort_order) {
+        return left.sort_order - right.sort_order;
+      }
+      return left.label.localeCompare(right.label);
+    });
+  }
 
   function hydrate(responseExercises: Exercise[]) {
     setExercises(responseExercises);
@@ -582,6 +604,8 @@ export default function SettingsPage() {
           </form>
         )}
       </section>
+
+      <AnalysisProfilesPanel profiles={profiles} onProfilesChange={setProfiles} />
       <form className="panel settings-add" onSubmit={addExercise}>
         <label>
           Exercise
@@ -600,7 +624,7 @@ export default function SettingsPage() {
             value={newExerciseProfile}
           >
             <option value="">Infer from name</option>
-            {profiles.map((profile) => (
+            {activeProfiles.map((profile) => (
               <option key={profile.key} value={profile.key}>
                 {profile.label}
               </option>
@@ -714,9 +738,9 @@ export default function SettingsPage() {
                     }
                     value={profileDrafts[exercise.id] ?? exercise.profile_key}
                   >
-                    {profiles.map((profile) => (
+                    {profileOptionsForExercise(profileDrafts[exercise.id] ?? exercise.profile_key).map((profile) => (
                       <option key={profile.key} value={profile.key}>
-                        {profile.label}
+                        {profile.label}{profile.is_active ? "" : " (inactive)"}
                       </option>
                     ))}
                   </select>

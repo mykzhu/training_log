@@ -3,13 +3,15 @@ import sqlite3
 from typing import Any
 
 from app.db import get_db
-from app.services.analysis_service import (
-    is_supported_profile_key,
-    profile_key_for_exercise_name,
-)
+from app.repositories.analysis_profiles import active_profile_exists
+from app.services.default_analysis_profiles import profile_key_for_exercise_name
 
 
 class ActiveExerciseWeightError(ValueError):
+    pass
+
+
+class InactiveExerciseProfileError(ValueError):
     pass
 
 
@@ -17,16 +19,21 @@ def normalize_exercise_name(name: str) -> str:
     return " ".join(name.strip().split())
 
 
-def normalize_profile_key(profile_key: str | None, exercise_name: str) -> str:
-    resolved = (
-        profile_key.strip()
-        if profile_key is not None and profile_key.strip()
-        else profile_key_for_exercise_name(exercise_name)
-    )
-    if not is_supported_profile_key(resolved):
-        raise ValueError("Unsupported exercise profile.")
+def resolve_profile_key(
+    conn: sqlite3.Connection,
+    profile_key: str | None,
+    exercise_name: str,
+) -> str:
+    if profile_key is not None and profile_key.strip():
+        resolved = profile_key.strip()
+        if not active_profile_exists(conn, resolved):
+            raise InactiveExerciseProfileError("Exercise profile is not active.")
+        return resolved
 
-    return resolved
+    inferred = profile_key_for_exercise_name(exercise_name)
+    if active_profile_exists(conn, inferred):
+        return inferred
+    return "accessory"
 
 
 def normalize_weights(weights: list[float]) -> list[float]:
@@ -173,12 +180,12 @@ def create_exercise(
 ) -> tuple[dict[str, Any], bool]:
     normalized_name = normalize_exercise_name(name)
     normalized_weights = normalize_weights(weights or [])
-    resolved_profile_key = normalize_profile_key(profile_key, normalized_name)
 
     if is_active and not normalized_weights:
         raise ActiveExerciseWeightError("Active exercise must have at least one weight.")
 
     with get_db() as conn:
+        resolved_profile_key = resolve_profile_key(conn, profile_key, normalized_name)
         existing = conn.execute(
             """
             SELECT id
@@ -245,13 +252,12 @@ def update_exercise(
 
     updated_name = current["name"] if name is None else normalize_exercise_name(name)
     updated_active = current["is_active"] if is_active is None else is_active
-    updated_profile_key = (
-        current["profile_key"]
-        if profile_key is None
-        else normalize_profile_key(profile_key, updated_name)
-    )
+    updated_profile_key = current["profile_key"]
 
     with get_db() as conn:
+        if profile_key is not None:
+            updated_profile_key = resolve_profile_key(conn, profile_key, updated_name)
+
         existing = conn.execute(
             """
             SELECT id

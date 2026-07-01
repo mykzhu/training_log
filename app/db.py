@@ -3,10 +3,11 @@ import sqlite3
 
 from app import config
 from app.migrations.runner import run_migrations
-from app.services.analysis_service import (
-    is_supported_profile_key,
-    profile_key_for_exercise_name,
+from app.repositories.analysis_profiles import (
+    ensure_default_analysis_profiles,
+    profile_exists,
 )
+from app.services.default_analysis_profiles import profile_key_for_exercise_name
 
 
 logger = logging.getLogger("training_log")
@@ -344,14 +345,17 @@ def initialize_exercise_settings(
             )
 
         profile_key = str(row["profile_key"] or "")
-        if not profile_key or not is_supported_profile_key(profile_key):
+        if not profile_key or not profile_exists(conn, profile_key):
+            inferred_profile_key = profile_key_for_exercise_name(str(row["name"]))
+            if not profile_exists(conn, inferred_profile_key):
+                inferred_profile_key = "accessory"
             conn.execute(
                 """
                 UPDATE exercises
                 SET profile_key = ?
                 WHERE id = ?
                 """,
-                (profile_key_for_exercise_name(str(row["name"])), exercise_id),
+                (inferred_profile_key, exercise_id),
             )
 
     if force_weight_migration or not get_metadata(
@@ -367,6 +371,7 @@ def init_db() -> None:
 
     with get_db() as conn:
         run_migrations(conn)
+        ensure_default_analysis_profiles(conn)
         seed_default_exercises(conn)
         initialize_exercise_settings(conn)
         normalize_ordering_columns(conn)

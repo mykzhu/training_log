@@ -1,190 +1,104 @@
 from collections.abc import Mapping
+import sqlite3
 from typing import Any
 
-
-LOAD_PROFILES_BY_KEY: dict[str, dict[str, float | str]] = {
-    "deadlift": {
-        "category": "heavy compound",
-        "exercise_factor": 1.8,
-        "compound_factor": 1.8,
-        "back_factor": 1.8,
-    },
-    "db_bench_press": {
-        "category": "upper compound",
-        "exercise_factor": 1.2,
-        "compound_factor": 1.2,
-        "back_factor": 0.2,
-    },
-    "db_row": {
-        "category": "upper pull",
-        "exercise_factor": 1.2,
-        "compound_factor": 1.2,
-        "back_factor": 0.7,
-    },
-    "ez_curl": {
-        "category": "arms",
-        "exercise_factor": 0.75,
-        "compound_factor": 0.25,
-        "back_factor": 0.1,
-    },
-    "triceps_extension": {
-        "category": "arms",
-        "exercise_factor": 0.75,
-        "compound_factor": 0.25,
-        "back_factor": 0.1,
-    },
-    "lateral_raise": {
-        "category": "shoulders",
-        "exercise_factor": 1.0,
-        "compound_factor": 0.4,
-        "back_factor": 0.15,
-    },
-    "crunches": {
-        "category": "core",
-        "exercise_factor": 0.5,
-        "compound_factor": 0.2,
-        "back_factor": 0.25,
-    },
-    "squats": {
-        "category": "legs compound",
-        "exercise_factor": 1.7,
-        "compound_factor": 1.7,
-        "back_factor": 1.2,
-    },
-    "db_squats": {
-        "category": "legs compound",
-        "exercise_factor": 1.4,
-        "compound_factor": 1.4,
-        "back_factor": 0.8,
-    },
-    "bench_press": {
-        "category": "upper compound",
-        "exercise_factor": 1.4,
-        "compound_factor": 1.4,
-        "back_factor": 0.2,
-    },
-    "incline_bench_press": {
-        "category": "upper compound",
-        "exercise_factor": 1.3,
-        "compound_factor": 1.3,
-        "back_factor": 0.2,
-    },
-    "shoulder_press": {
-        "category": "shoulders compound",
-        "exercise_factor": 1.3,
-        "compound_factor": 1.2,
-        "back_factor": 0.35,
-    },
-    "db_shoulder_press": {
-        "category": "shoulders compound",
-        "exercise_factor": 1.15,
-        "compound_factor": 1.0,
-        "back_factor": 0.25,
-    },
-    "triceps_pushdown": {
-        "category": "arms",
-        "exercise_factor": 0.7,
-        "compound_factor": 0.2,
-        "back_factor": 0.05,
-    },
-}
-
-DEFAULT_LOAD_PROFILE = {
-    "category": "accessory",
-    "exercise_factor": 1.0,
-    "compound_factor": 0.5,
-    "back_factor": 0.3,
-}
-LOAD_PROFILES_BY_KEY["accessory"] = DEFAULT_LOAD_PROFILE
-
-PROFILE_LABELS_BY_KEY = {
-    "deadlift": "Deadlift",
-    "squats": "Squats",
-    "db_squats": "DB squats",
-    "bench_press": "Bench press",
-    "incline_bench_press": "Incline bench press",
-    "db_bench_press": "DB bench press",
-    "shoulder_press": "Shoulder press",
-    "db_shoulder_press": "DB shoulder press",
-    "ez_curl": "EZ curl",
-    "triceps_pushdown": "Triceps pushdown",
-    "crunches": "Crunches",
-
-    # Keep old profiles for compatibility.
-    "db_row": "DB row",
-    "triceps_extension": "Triceps extension",
-    "lateral_raise": "Lateral raise",
-    "accessory": "Accessory",
-}
-SUPPORTED_PROFILE_KEYS = tuple(PROFILE_LABELS_BY_KEY)
-
-EXERCISE_PROFILE_KEYS_BY_NAME = {
-    # Specific squat variants
-    "db squats": "db_squats",
-    "dumbbell squats": "db_squats",
-
-    # Other exercises
-    "45-degree bench press": "incline_bench_press",
-    "incline bench press": "incline_bench_press",
-    "db shoulder press": "db_shoulder_press",
-    "dumbbell shoulder press": "db_shoulder_press",
-    "db bench press": "db_bench_press",
-    "dumbbell bench press": "db_bench_press",
-    "triceps pushdown": "triceps_pushdown",
-    "shoulder press": "shoulder_press",
-    "bench press": "bench_press",
-    "ez biceps": "ez_curl",
-    "ez curl": "ez_curl",
-    "deadlift": "deadlift",
-    "crunches": "crunches",
-    "squats": "squats",
-}
-
-EXERCISE_LOAD_PROFILES = {
-    name: LOAD_PROFILES_BY_KEY[profile_key]
-    for name, profile_key in EXERCISE_PROFILE_KEYS_BY_NAME.items()
-}
+from app import config
+from app.db import get_db
+from app.repositories.analysis_profiles import load_profiles_by_key
+from app.services.default_analysis_profiles import (
+    DEFAULT_EXERCISE_PROFILE_KEYS_BY_NAME,
+    DEFAULT_LOAD_PROFILE,
+    DEFAULT_LOAD_PROFILES_BY_KEY,
+    DEFAULT_PROFILE_KEY,
+    DEFAULT_PROFILE_LABELS_BY_KEY,
+    DEFAULT_SUPPORTED_PROFILE_KEYS,
+    default_profile_rows,
+    profile_key_for_exercise_name,
+)
 
 
-def profile_key_for_exercise_name(exercise_name: str) -> str:
-    normalized = exercise_name.strip().lower()
+LOAD_PROFILES_BY_KEY = DEFAULT_LOAD_PROFILES_BY_KEY
+PROFILE_LABELS_BY_KEY = DEFAULT_PROFILE_LABELS_BY_KEY
+SUPPORTED_PROFILE_KEYS = DEFAULT_SUPPORTED_PROFILE_KEYS
+EXERCISE_PROFILE_KEYS_BY_NAME = DEFAULT_EXERCISE_PROFILE_KEYS_BY_NAME
 
-    for name_fragment, profile_key in EXERCISE_PROFILE_KEYS_BY_NAME.items():
-        if name_fragment in normalized:
-            return profile_key
 
-    return "accessory"
+def default_profiles_by_key() -> dict[str, dict[str, float | str]]:
+    return {key: dict(profile) for key, profile in DEFAULT_LOAD_PROFILES_BY_KEY.items()}
+
+
+def runtime_profiles_by_key() -> dict[str, dict[str, float | str]]:
+    if not config.DB_PATH.exists():
+        return default_profiles_by_key()
+
+    try:
+        with get_db() as conn:
+            profiles = load_profiles_by_key(conn)
+    except (sqlite3.Error, RuntimeError):
+        return default_profiles_by_key()
+
+    if DEFAULT_PROFILE_KEY not in profiles:
+        profiles[DEFAULT_PROFILE_KEY] = dict(DEFAULT_LOAD_PROFILE)
+    return profiles
 
 
 def is_supported_profile_key(profile_key: str) -> bool:
-    return profile_key in SUPPORTED_PROFILE_KEYS
+    if profile_key in DEFAULT_SUPPORTED_PROFILE_KEYS:
+        return True
+    if not config.DB_PATH.exists():
+        return False
+
+    try:
+        with get_db() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM analysis_profiles WHERE key = ?",
+                (profile_key,),
+            ).fetchone()
+    except (sqlite3.Error, RuntimeError):
+        return False
+
+    return row is not None
 
 
-def list_exercise_profiles() -> list[dict[str, str]]:
-    return [
-        {
-            "key": key,
-            "label": PROFILE_LABELS_BY_KEY[key],
-            "category": str(LOAD_PROFILES_BY_KEY[key]["category"]),
-        }
-        for key in SUPPORTED_PROFILE_KEYS
-    ]
+def list_exercise_profiles() -> list[dict[str, Any]]:
+    if not config.DB_PATH.exists():
+        return default_profile_rows()
+
+    try:
+        from app.repositories.analysis_profiles import list_analysis_profiles
+
+        with get_db() as conn:
+            return list_analysis_profiles(conn)
+    except (sqlite3.Error, RuntimeError):
+        return default_profile_rows()
+
+
+def profile_from_map(
+    profiles_by_key: Mapping[str, Mapping[str, float | str]],
+    exercise_name: str,
+    profile_key: str | None = None,
+) -> dict[str, float | str]:
+    if profile_key and profile_key in profiles_by_key:
+        return dict(profiles_by_key[profile_key])
+
+    if profile_key and profile_key in DEFAULT_LOAD_PROFILES_BY_KEY:
+        return dict(DEFAULT_LOAD_PROFILES_BY_KEY[profile_key])
+
+    if profile_key:
+        return dict(profiles_by_key.get(DEFAULT_PROFILE_KEY, DEFAULT_LOAD_PROFILE))
+
+    inferred_key = profile_key_for_exercise_name(exercise_name)
+    if inferred_key in profiles_by_key:
+        return dict(profiles_by_key[inferred_key])
+
+    return dict(profiles_by_key.get(DEFAULT_PROFILE_KEY, DEFAULT_LOAD_PROFILE))
 
 
 def get_exercise_load_profile(
     exercise_name: str,
     profile_key: str | None = None,
 ) -> dict[str, float | str]:
-    if profile_key:
-        return LOAD_PROFILES_BY_KEY.get(profile_key, DEFAULT_LOAD_PROFILE)
-
-    normalized = exercise_name.strip().lower()
-
-    for key, profile in EXERCISE_LOAD_PROFILES.items():
-        if key in normalized:
-            return profile
-
-    return DEFAULT_LOAD_PROFILE
+    return profile_from_map(runtime_profiles_by_key(), exercise_name, profile_key)
 
 
 def estimated_1rm(weight: float, reps: int) -> float | None:
@@ -246,8 +160,10 @@ def calculate_workout_load_metrics(
     workout_exercises: list[dict[str, Any]],
     session_rpe: int | float | None = None,
     best_e1rm_by_exercise: Mapping[int, float] | None = None,
+    profiles_by_key: Mapping[str, Mapping[str, float | str]] | None = None,
 ) -> dict[str, Any]:
     best_e1rm_by_exercise = best_e1rm_by_exercise or {}
+    profiles_by_key = profiles_by_key or runtime_profiles_by_key()
 
     raw_load_score = 0.0
     compound_score = 0.0
@@ -261,7 +177,8 @@ def calculate_workout_load_metrics(
     for item in workout_exercises:
         exercise_id = int(item["exercise_id"])
         exercise_name = str(item["exercise_name"])
-        profile = get_exercise_load_profile(
+        profile = profile_from_map(
+            profiles_by_key,
             exercise_name,
             profile_key=item.get("profile_key"),
         )

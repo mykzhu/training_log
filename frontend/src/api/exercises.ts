@@ -3,6 +3,8 @@ import type {
   Exercise,
   ExerciseCreatePayload,
   ExerciseProfile,
+  ExerciseProfileCreatePayload,
+  ExerciseProfileUpdatePayload,
   ExerciseUpdatePayload,
 } from "./types";
 
@@ -61,4 +63,27 @@ export function reorderExercises(exerciseIds: number[]) {
 
 export function getExerciseProfiles() {
   return requestJson<{ profiles: ExerciseProfile[] }>("/api/v1/exercise-profiles");
+}
+
+export function createExerciseProfile(payload: ExerciseProfileCreatePayload) {
+  return requestJson<{ profile: ExerciseProfile; created: boolean }>(
+    "/api/v1/exercise-profiles",
+    {
+      method: "POST",
+      body: jsonBody(payload),
+    },
+  );
+}
+
+export function updateExerciseProfile(
+  profileKey: string,
+  payload: ExerciseProfileUpdatePayload,
+) {
+  return requestJson<{ profile: ExerciseProfile }>(
+    `/api/v1/exercise-profiles/${profileKey}`,
+    {
+      method: "PATCH",
+      body: jsonBody(payload),
+    },
+  );
 }

@@ -50,6 +50,24 @@ class ExerciseOrderUpdateRequest(AppBaseModel):
     exercise_ids: list[int]
 
 
+class ExerciseProfileCreateRequest(AppBaseModel):
+    key: str | None = Field(default=None, min_length=1, max_length=80)
+    label: str = Field(min_length=1, max_length=120)
+    category: str = Field(min_length=1, max_length=120)
+    exercise_factor: float = Field(ge=0, le=5)
+    compound_factor: float = Field(ge=0, le=5)
+    back_factor: float = Field(ge=0, le=5)
+
+
+class ExerciseProfileUpdateRequest(AppBaseModel):
+    label: str | None = Field(default=None, min_length=1, max_length=120)
+    category: str | None = Field(default=None, min_length=1, max_length=120)
+    exercise_factor: float | None = Field(default=None, ge=0, le=5)
+    compound_factor: float | None = Field(default=None, ge=0, le=5)
+    back_factor: float | None = Field(default=None, ge=0, le=5)
+    is_active: bool | None = None
+
+
 class AddSetRequest(AppBaseModel):
     weight: float = Field(ge=0)
     reps: int = Field(ge=1, le=100)
@@ -199,10 +217,22 @@ class ExerciseProfileResponse(AppBaseModel):
     key: str
     label: str
     category: str
+    exercise_factor: float
+    compound_factor: float
+    back_factor: float
+    is_builtin: bool
+    is_active: bool
+    sort_order: int
+    exercise_count: int
 
 
 class ExerciseProfilesResponse(AppBaseModel):
     profiles: list[ExerciseProfileResponse]
+
+
+class ExerciseProfileMutationResponse(AppBaseModel):
+    profile: ExerciseProfileResponse
+    created: bool | None = None
 
 
 class RecoveryContextResponse(FlexibleResponse):

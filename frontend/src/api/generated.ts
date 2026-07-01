@@ -80,10 +80,40 @@ export type ExerciseOrderUpdateRequest = {
   exercise_ids: Array<number>;
 };
 
-export type ExerciseProfileResponse = {
+export type ExerciseProfileCreateRequest = {
+  back_factor: number;
   category: string;
+  compound_factor: number;
+  exercise_factor: number;
+  key?: string | null;
+  label: string;
+};
+
+export type ExerciseProfileMutationResponse = {
+  created?: boolean | null;
+  profile: ExerciseProfileResponse;
+};
+
+export type ExerciseProfileResponse = {
+  back_factor: number;
+  category: string;
+  compound_factor: number;
+  exercise_count: number;
+  exercise_factor: number;
+  is_active: boolean;
+  is_builtin: boolean;
   key: string;
   label: string;
+  sort_order: number;
+};
+
+export type ExerciseProfileUpdateRequest = {
+  back_factor?: number | null;
+  category?: string | null;
+  compound_factor?: number | null;
+  exercise_factor?: number | null;
+  is_active?: boolean | null;
+  label?: string | null;
 };
 
 export type ExerciseProfilesResponse = {
@@ -477,7 +507,10 @@ export type ApiSchemas = {
   ExerciseCreateRequest: ExerciseCreateRequest;
   ExerciseMutationResponse: ExerciseMutationResponse;
   ExerciseOrderUpdateRequest: ExerciseOrderUpdateRequest;
+  ExerciseProfileCreateRequest: ExerciseProfileCreateRequest;
+  ExerciseProfileMutationResponse: ExerciseProfileMutationResponse;
   ExerciseProfileResponse: ExerciseProfileResponse;
+  ExerciseProfileUpdateRequest: ExerciseProfileUpdateRequest;
   ExerciseProfilesResponse: ExerciseProfilesResponse;
   ExerciseResponse: ExerciseResponse;
   ExerciseStatsResponseModel: ExerciseStatsResponseModel;

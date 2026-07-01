@@ -3164,3 +3164,86 @@ button.load-calendar-cell:focus-visible {
     grid-template-columns: 1fr;
   }
 }
+
+.analysis-profile-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.analysis-profile-form {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(130px, 0.7fr) minmax(140px, 0.8fr) minmax(210px, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.analysis-profile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.analysis-profile-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 14px;
+  background: var(--card);
+}
+
+.analysis-profile-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.analysis-profile-card h3 {
+  margin: 0 0 5px;
+  color: var(--blue);
+  font-size: 18px;
+  line-height: 1.15;
+}
+
+.profile-factor-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.profile-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.profile-active-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+}
+
+.profile-active-toggle input {
+  width: 18px;
+  min-height: 18px;
+}
+
+@media (max-width: 760px) {
+  .analysis-profile-form,
+  .analysis-profile-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 420px) {
+  .profile-factor-grid,
+  .analysis-profile-card-header {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+}

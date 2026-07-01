@@ -399,6 +399,31 @@ export type ExerciseProfile = {
   key: string;
   label: string;
   category: string;
+  exercise_factor: number;
+  compound_factor: number;
+  back_factor: number;
+  is_builtin: boolean;
+  is_active: boolean;
+  sort_order: number;
+  exercise_count: number;
+};
+
+export type ExerciseProfileCreatePayload = {
+  key?: string;
+  label: string;
+  category: string;
+  exercise_factor: number;
+  compound_factor: number;
+  back_factor: number;
+};
+
+export type ExerciseProfileUpdatePayload = {
+  label?: string;
+  category?: string;
+  exercise_factor?: number;
+  compound_factor?: number;
+  back_factor?: number;
+  is_active?: boolean;
 };
 
 export type StatsWorkout = {

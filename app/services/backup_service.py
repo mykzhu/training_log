@@ -12,15 +12,32 @@ from app.db import (
     seed_default_exercises,
     set_metadata,
 )
-from app.services.analysis_service import (
-    is_supported_profile_key,
+from app.repositories.analysis_profiles import (
+    backup_profile_rows,
+    ensure_default_analysis_profiles,
+    normalize_profile_key,
+)
+from app.services.default_analysis_profiles import (
+    DEFAULT_PROFILE_KEY,
+    default_profile_rows,
     profile_key_for_exercise_name,
 )
 
 
 logger = logging.getLogger("training_log")
 
-BACKUP_SCHEMA_VERSION = 4
+BACKUP_SCHEMA_VERSION = 5
+ANALYSIS_PROFILE_BACKUP_COLUMNS: tuple[str, ...] = (
+    "key",
+    "label",
+    "category",
+    "exercise_factor",
+    "compound_factor",
+    "back_factor",
+    "is_builtin",
+    "is_active",
+    "sort_order",
+)
 BASE_BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
     "exercises": ("id", "name", "is_active", "sort_order", "profile_key"),
     "exercise_weight_options": ("id", "exercise_id", "weight", "sort_order"),
@@ -55,6 +72,11 @@ GARMIN_BACKUP_TABLE_COLUMNS: tuple[str, ...] = (
     "raw_diagnostics",
 )
 BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
+    "analysis_profiles": ANALYSIS_PROFILE_BACKUP_COLUMNS,
+    **BASE_BACKUP_TABLE_COLUMNS,
+    "garmin_daily_metrics": GARMIN_BACKUP_TABLE_COLUMNS,
+}
+SCHEMA_V4_BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
     **BASE_BACKUP_TABLE_COLUMNS,
     "garmin_daily_metrics": GARMIN_BACKUP_TABLE_COLUMNS,
 }
@@ -92,6 +114,10 @@ def build_backup_payload() -> dict[str, Any]:
         tables = {}
 
         for table_name, columns in BACKUP_TABLE_COLUMNS.items():
+            if table_name == "analysis_profiles":
+                tables[table_name] = backup_profile_rows(conn)
+                continue
+
             column_sql = ", ".join(columns)
             order_sql = "date ASC" if table_name == "garmin_daily_metrics" else "id ASC"
             rows = conn.execute(
@@ -124,14 +150,34 @@ def build_backup_payload() -> dict[str, Any]:
     return payload
 
 
+def default_backup_profile_rows() -> list[dict[str, Any]]:
+    rows = []
+    for row in default_profile_rows():
+        rows.append(
+            {
+                "key": row["key"],
+                "label": row["label"],
+                "category": row["category"],
+                "exercise_factor": row["exercise_factor"],
+                "compound_factor": row["compound_factor"],
+                "back_factor": row["back_factor"],
+                "is_builtin": 1 if row["is_builtin"] else 0,
+                "is_active": 1 if row["is_active"] else 0,
+                "sort_order": row["sort_order"],
+            }
+        )
+    return rows
+
+
 def validate_backup_payload(payload: Any) -> dict[str, list[dict[str, Any]]]:
     if not isinstance(payload, dict):
         raise ValueError("Backup file must contain a JSON object.")
 
     schema_version = payload.get("schema_version")
-    if schema_version not in (1, 2, 3, BACKUP_SCHEMA_VERSION):
+    if schema_version not in (1, 2, 3, 4, BACKUP_SCHEMA_VERSION):
         raise ValueError(
-            f"Unsupported backup schema version. Expected 1, 2, 3 or {BACKUP_SCHEMA_VERSION}."
+            "Unsupported backup schema version. Expected 1, 2, 3, 4 or "
+            f"{BACKUP_SCHEMA_VERSION}."
         )
 
     tables = payload.get("tables")
@@ -142,6 +188,8 @@ def validate_backup_payload(payload: Any) -> dict[str, list[dict[str, Any]]]:
 
     if schema_version == BACKUP_SCHEMA_VERSION:
         table_columns = BACKUP_TABLE_COLUMNS
+    elif schema_version == 4:
+        table_columns = SCHEMA_V4_BACKUP_TABLE_COLUMNS
     elif schema_version == 3:
         table_columns = BASE_BACKUP_TABLE_COLUMNS
     else:
@@ -185,14 +233,19 @@ def validate_backup_payload(payload: Any) -> dict[str, list[dict[str, Any]]]:
         validated["exercise_weight_options"] = []
 
     if schema_version != BACKUP_SCHEMA_VERSION:
+        validated["analysis_profiles"] = default_backup_profile_rows()
+
+    if schema_version < 4:
         validated["garmin_daily_metrics"] = []
 
     validate_table_ids(validated)
-    validate_exercises(validated["exercises"])
+    validate_analysis_profiles(validated["analysis_profiles"])
+    profile_keys = {str(row["key"]) for row in validated["analysis_profiles"]}
+    validate_exercises(validated["exercises"], profile_keys)
     validate_exercise_weight_options(
         validated["exercise_weight_options"],
         validated,
-        enforce_active_weights=schema_version in (3, BACKUP_SCHEMA_VERSION),
+        enforce_active_weights=schema_version in (3, 4, BACKUP_SCHEMA_VERSION),
     )
     validate_workout_graph(validated)
     validate_garmin_daily_metrics(validated["garmin_daily_metrics"])
@@ -229,7 +282,7 @@ def coerce_float(value: Any, context: str) -> float:
 
 def validate_table_ids(tables: dict[str, list[dict[str, Any]]]) -> None:
     for table_name, rows in tables.items():
-        if table_name == "garmin_daily_metrics":
+        if table_name in ("analysis_profiles", "garmin_daily_metrics"):
             continue
 
         seen_ids: set[int] = set()
@@ -242,7 +295,69 @@ def validate_table_ids(tables: dict[str, list[dict[str, Any]]]) -> None:
             seen_ids.add(row_id)
 
 
-def validate_exercises(rows: list[dict[str, Any]]) -> None:
+def validate_analysis_profiles(rows: list[dict[str, Any]]) -> None:
+    seen_keys: set[str] = set()
+    seen_labels: set[str] = set()
+
+    for index, row in enumerate(rows, start=1):
+        try:
+            key = normalize_profile_key(str(row["key"]))
+        except ValueError as exc:
+            raise ValueError(f"Row {index} in analysis_profiles has an invalid key.") from exc
+        if key in seen_keys:
+            raise ValueError(f"Row {index} in analysis_profiles duplicates a key.")
+        seen_keys.add(key)
+        row["key"] = key
+
+        label = " ".join(str(row["label"]).strip().split())
+        if not label:
+            raise ValueError(f"Row {index} in analysis_profiles has a blank label.")
+        normalized_label = label.lower()
+        if normalized_label in seen_labels:
+            raise ValueError(
+                f"Row {index} in analysis_profiles duplicates a label ignoring case."
+            )
+        seen_labels.add(normalized_label)
+        row["label"] = label
+
+        category = " ".join(str(row["category"]).strip().split())
+        if not category:
+            raise ValueError(f"Row {index} in analysis_profiles has a blank category.")
+        row["category"] = category
+
+        for field_name in ("exercise_factor", "compound_factor", "back_factor"):
+            value = coerce_float(row[field_name], f"Row {index} in analysis_profiles {field_name}")
+            if value < 0 or value > 5:
+                raise ValueError(
+                    f"Row {index} in analysis_profiles has an invalid {field_name}."
+                )
+            row[field_name] = value
+
+        for field_name in ("is_builtin", "is_active"):
+            value = coerce_int(row[field_name], f"Row {index} in analysis_profiles {field_name}")
+            if value not in (0, 1):
+                raise ValueError(
+                    f"Row {index} in analysis_profiles has invalid {field_name}."
+                )
+            row[field_name] = value
+
+        row["sort_order"] = coerce_int(
+            row["sort_order"],
+            f"Row {index} in analysis_profiles sort_order",
+        )
+
+    if DEFAULT_PROFILE_KEY not in seen_keys:
+        raise ValueError("Backup analysis profiles must include accessory.")
+
+    accessory = next(row for row in rows if row["key"] == DEFAULT_PROFILE_KEY)
+    if int(accessory["is_active"]) != 1:
+        raise ValueError("Accessory analysis profile must be active.")
+
+
+def validate_exercises(
+    rows: list[dict[str, Any]],
+    profile_keys: set[str],
+) -> None:
     seen_names: set[str] = set()
     seen_orders: set[int] = set()
 
@@ -278,7 +393,7 @@ def validate_exercises(rows: list[dict[str, Any]]) -> None:
         row["sort_order"] = sort_order
 
         profile_key = str(row["profile_key"] or "").strip()
-        if not is_supported_profile_key(profile_key):
+        if profile_key not in profile_keys:
             raise ValueError(f"Row {index} in exercises has an invalid profile.")
         row["profile_key"] = profile_key
 
@@ -531,6 +646,21 @@ def reset_sqlite_sequences(conn: sqlite3.Connection) -> None:
     logger.debug("db.sqlite_sequence.reset.done")
 
 
+def insert_analysis_profile_rows(
+    conn: sqlite3.Connection,
+    rows: list[dict[str, Any]],
+) -> None:
+    now = datetime.now().isoformat(timespec="seconds")
+    columns = (*ANALYSIS_PROFILE_BACKUP_COLUMNS, "created_at", "updated_at")
+    column_sql = ", ".join(columns)
+    placeholders = ", ".join("?" for _ in columns)
+    insert_sql = f"INSERT INTO analysis_profiles ({column_sql}) VALUES ({placeholders})"
+
+    for row in rows:
+        values = [row[column] for column in ANALYSIS_PROFILE_BACKUP_COLUMNS]
+        conn.execute(insert_sql, (*values, now, now))
+
+
 def restore_backup_payload(payload: Any) -> None:
     schema_version = payload.get("schema_version") if isinstance(payload, dict) else None
     tables = validate_backup_payload(payload)
@@ -546,6 +676,10 @@ def restore_backup_payload(payload: Any) -> None:
             conn.execute(f"DELETE FROM {table_name}")
 
         for table_name, columns in BACKUP_TABLE_COLUMNS.items():
+            if table_name == "analysis_profiles":
+                insert_analysis_profile_rows(conn, tables[table_name])
+                continue
+
             column_sql = ", ".join(columns)
             placeholders = ", ".join("?" for _ in columns)
             insert_sql = (
@@ -557,7 +691,7 @@ def restore_backup_payload(payload: Any) -> None:
                 conn.execute(insert_sql, tuple(row[column] for column in columns))
 
         reset_sqlite_sequences(conn)
-        if schema_version in (3, BACKUP_SCHEMA_VERSION):
+        if schema_version in (3, 4, BACKUP_SCHEMA_VERSION):
             set_metadata(conn, EXERCISE_SETTINGS_WEIGHT_MIGRATION_KEY, "1")
         else:
             initialize_exercise_settings(conn, force_weight_migration=True)
@@ -583,6 +717,7 @@ def reset_database_data() -> None:
             BACKUP_SEQUENCE_TABLES,
         )
 
+        ensure_default_analysis_profiles(conn)
         seed_default_exercises(conn)
         initialize_exercise_settings(conn, force_weight_migration=True)
 

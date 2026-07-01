@@ -328,11 +328,100 @@
         "title": "ExerciseOrderUpdateRequest",
         "type": "object"
       },
+      "ExerciseProfileCreateRequest": {
+        "properties": {
+          "back_factor": {
+            "maximum": 5.0,
+            "minimum": 0.0,
+            "title": "Back Factor",
+            "type": "number"
+          },
+          "category": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Category",
+            "type": "string"
+          },
+          "compound_factor": {
+            "maximum": 5.0,
+            "minimum": 0.0,
+            "title": "Compound Factor",
+            "type": "number"
+          },
+          "exercise_factor": {
+            "maximum": 5.0,
+            "minimum": 0.0,
+            "title": "Exercise Factor",
+            "type": "number"
+          },
+          "key": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "category",
+          "exercise_factor",
+          "compound_factor",
+          "back_factor"
+        ],
+        "title": "ExerciseProfileCreateRequest",
+        "type": "object"
+      },
+      "ExerciseProfileMutationResponse": {
+        "properties": {
+          "created": {
+            "title": "Created",
+            "type": "boolean"
+          },
+          "profile": {
+            "$ref": "#/components/schemas/ExerciseProfileResponse"
+          }
+        },
+        "required": [
+          "profile"
+        ],
+        "title": "ExerciseProfileMutationResponse",
+        "type": "object"
+      },
       "ExerciseProfileResponse": {
         "properties": {
+          "back_factor": {
+            "title": "Back Factor",
+            "type": "number"
+          },
           "category": {
             "title": "Category",
             "type": "string"
+          },
+          "compound_factor": {
+            "title": "Compound Factor",
+            "type": "number"
+          },
+          "exercise_count": {
+            "title": "Exercise Count",
+            "type": "integer"
+          },
+          "exercise_factor": {
+            "title": "Exercise Factor",
+            "type": "number"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "is_builtin": {
+            "title": "Is Builtin",
+            "type": "boolean"
           },
           "key": {
             "title": "Key",
@@ -341,14 +430,65 @@
           "label": {
             "title": "Label",
             "type": "string"
+          },
+          "sort_order": {
+            "title": "Sort Order",
+            "type": "integer"
           }
         },
         "required": [
           "key",
           "label",
-          "category"
+          "category",
+          "exercise_factor",
+          "compound_factor",
+          "back_factor",
+          "is_builtin",
+          "is_active",
+          "sort_order",
+          "exercise_count"
         ],
         "title": "ExerciseProfileResponse",
+        "type": "object"
+      },
+      "ExerciseProfileUpdateRequest": {
+        "properties": {
+          "back_factor": {
+            "maximum": 5.0,
+            "minimum": 0.0,
+            "title": "Back Factor",
+            "type": "number"
+          },
+          "category": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Category",
+            "type": "string"
+          },
+          "compound_factor": {
+            "maximum": 5.0,
+            "minimum": 0.0,
+            "title": "Compound Factor",
+            "type": "number"
+          },
+          "exercise_factor": {
+            "maximum": 5.0,
+            "minimum": 0.0,
+            "title": "Exercise Factor",
+            "type": "number"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "label": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "title": "ExerciseProfileUpdateRequest",
         "type": "object"
       },
       "ExerciseProfilesResponse": {
@@ -2454,6 +2594,97 @@
           }
         },
         "summary": "Get Exercise Profiles",
+        "tags": [
+          "exercises"
+        ]
+      },
+      "post": {
+        "operationId": "create_exercise_profile_endpoint_api_v1_exercise_profiles_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExerciseProfileCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExerciseProfileMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Exercise Profile Endpoint",
+        "tags": [
+          "exercises"
+        ]
+      }
+    },
+    "/api/v1/exercise-profiles/{profile_key}": {
+      "patch": {
+        "operationId": "update_exercise_profile_endpoint_api_v1_exercise_profiles__profile_key__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "profile_key",
+            "required": true,
+            "schema": {
+              "title": "Profile Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExerciseProfileUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExerciseProfileMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Exercise Profile Endpoint",
         "tags": [
           "exercises"
         ]

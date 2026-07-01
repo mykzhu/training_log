@@ -1,4 +1,5 @@
 from datetime import date, timedelta
+from collections.abc import Mapping
 from typing import Any
 
 from app.db import get_db
@@ -7,6 +8,7 @@ from app.services.analysis_service import (
     calculate_workout_load_metrics as calculate_load_metrics,
     estimated_1rm,
     list_exercise_profiles,
+    runtime_profiles_by_key,
 )
 
 
@@ -103,12 +105,14 @@ def calculate_workout_load_metrics(
     as_of_created_at: str | None = None,
     as_of_workout_id: int | None = None,
     best_e1rm_by_exercise: dict[int, float] | None = None,
+    profiles_by_key: Mapping[str, Mapping[str, float | str]] | None = None,
 ) -> dict[str, Any]:
     if best_e1rm_by_exercise is not None:
         return calculate_load_metrics(
             workout_exercises=workout_exercises,
             session_rpe=session_rpe,
             best_e1rm_by_exercise=best_e1rm_by_exercise,
+            profiles_by_key=profiles_by_key,
         )
 
     best_e1rm_by_exercise = get_best_e1rm_by_exercise(
@@ -122,6 +126,7 @@ def calculate_workout_load_metrics(
         workout_exercises=workout_exercises,
         session_rpe=session_rpe,
         best_e1rm_by_exercise=best_e1rm_by_exercise,
+        profiles_by_key=profiles_by_key,
     )
 
 
@@ -940,6 +945,7 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
         workouts=list(workouts),
         details_by_workout=details_by_workout,
     )
+    profiles_by_key = runtime_profiles_by_key()
 
     selected_week_starts = build_selected_week_starts(
         list(workouts)
@@ -972,6 +978,7 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
                 current_workout_id,
                 {},
             ),
+            profiles_by_key=profiles_by_key,
         )
 
         workout_items.append(

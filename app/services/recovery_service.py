@@ -1,9 +1,11 @@
+from collections.abc import Mapping
 from datetime import datetime, timedelta
 from statistics import median
 from typing import Any
 
 from app.db import get_db
 from app.repositories.workouts import get_workout_details_batch
+from app.services.analysis_service import runtime_profiles_by_key
 from app.services.stats_service import (
     build_e1rm_baselines_by_workout,
     calculate_workout_load_metrics,
@@ -140,6 +142,7 @@ def summarize_workouts(
     *,
     details_by_workout: dict[int, list[dict[str, Any]]] | None = None,
     e1rm_baselines_by_workout: dict[int, dict[int, float]] | None = None,
+    profiles_by_key: Mapping[str, Mapping[str, float | str]] | None = None,
 ) -> dict[str, Any]:
     workout_ids = [int(workout["id"]) for workout in workouts]
     if details_by_workout is None:
@@ -149,6 +152,7 @@ def summarize_workouts(
             workouts=workouts,
             details_by_workout=details_by_workout,
         )
+    profiles_by_key = profiles_by_key or runtime_profiles_by_key()
 
     total_load_score = 0.0
     total_compound_score = 0.0
@@ -173,6 +177,7 @@ def summarize_workouts(
                 workout_id,
                 {},
             ),
+            profiles_by_key=profiles_by_key,
         )
 
         total_load_score += float(load_metrics["load_score"])
@@ -454,24 +459,28 @@ def build_recovery_context(
         workouts=last_42d_workouts,
         details_by_workout=details_by_workout,
     )
+    profiles_by_key = runtime_profiles_by_key()
 
     last_7d = summarize_workouts(
         last_7d_workouts,
         7,
         details_by_workout=details_by_workout,
         e1rm_baselines_by_workout=e1rm_baselines_by_workout,
+        profiles_by_key=profiles_by_key,
     )
     previous_21d = summarize_workouts(
         previous_21d_workouts,
         21,
         details_by_workout=details_by_workout,
         e1rm_baselines_by_workout=e1rm_baselines_by_workout,
+        profiles_by_key=profiles_by_key,
     )
     last_42d = summarize_workouts(
         last_42d_workouts,
         42,
         details_by_workout=details_by_workout,
         e1rm_baselines_by_workout=e1rm_baselines_by_workout,
+        profiles_by_key=profiles_by_key,
     )
 
     acute_to_baseline = safe_ratio(

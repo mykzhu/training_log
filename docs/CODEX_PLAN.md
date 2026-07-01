@@ -445,7 +445,7 @@ Backup export still downloads
 
 ---
 
-## [ ] Phase 17 — Configurable Analysis Types
+## [x] Phase 17 — Configurable Analysis Types
 
 Branch:
 

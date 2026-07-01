@@ -29,6 +29,7 @@ from app.schemas import (
     WorkoutsResponse,
     WorkoutUpdateRequest,
 )
+from app.services.analysis_service import runtime_profiles_by_key
 from app.services.stats_service import (
     build_e1rm_baselines_by_workout,
     build_workout_analysis,
@@ -75,6 +76,7 @@ def build_workout_summary(
     *,
     details: list[dict[str, Any]] | None = None,
     best_e1rm_by_exercise: dict[int, float] | None = None,
+    profiles_by_key: dict[str, dict[str, float | str]] | None = None,
 ) -> dict[str, Any]:
     workout_id = int(workout["id"])
     details = details if details is not None else get_workout_details(workout_id)
@@ -87,6 +89,7 @@ def build_workout_summary(
         as_of_created_at=workout["created_at"],
         as_of_workout_id=workout_id,
         best_e1rm_by_exercise=best_e1rm_by_exercise,
+        profiles_by_key=profiles_by_key,
     )
 
     return {
@@ -112,6 +115,7 @@ def build_workout_summaries(workouts: list[dict[str, Any]]) -> list[dict[str, An
         workouts=workouts,
         details_by_workout=details_by_workout,
     )
+    profiles_by_key = runtime_profiles_by_key()
 
     return [
         build_workout_summary(
@@ -121,6 +125,7 @@ def build_workout_summaries(workouts: list[dict[str, Any]]) -> list[dict[str, An
                 int(workout["id"]),
                 {},
             ),
+            profiles_by_key=profiles_by_key,
         )
         for workout in workouts
     ]
