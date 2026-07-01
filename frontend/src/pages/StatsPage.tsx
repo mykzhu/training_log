@@ -20,6 +20,16 @@ import {
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { getStats } from "../api/stats";
+import {
+  ChartCard,
+  ChartInsight,
+} from "../components/stats/StatsChartScaffold";
+import StatsBestStrengthTable from "../components/stats/StatsBestStrengthTable";
+import StatsLoadCalendar from "../components/stats/StatsLoadCalendar";
+import type { LoadCalendar } from "../components/stats/StatsLoadCalendar";
+import StatsOverview, {
+  StatsRangeToolbar,
+} from "../components/stats/StatsOverview";
 
 import type {
   ExerciseRepProgress,
@@ -164,71 +174,6 @@ function formatWeeklyMetric(
   return formatNumber(value, 0);
 }
 
-type LoadCalendarDay = {
-  date: string;
-  day: number;
-  has_workout: boolean;
-  count: number;
-  value: number | null;
-  workout_id: number | null;
-};
-
-type LoadCalendarWeek = {
-  month_label: string;
-  days: LoadCalendarDay[];
-};
-
-type LoadCalendar = {
-  weeks: LoadCalendarWeek[];
-};
-
-type LoadCalendarLevel =
-  | "rest"
-  | "light"
-  | "medium"
-  | "hard"
-  | "very-hard";
-
-function loadCalendarLevel(
-  day: LoadCalendarDay,
-): LoadCalendarLevel {
-  if (!day.has_workout || day.value === null) {
-    return "rest";
-  }
-
-  if (day.value < 4) {
-    return "light";
-  }
-
-  if (day.value < 8) {
-    return "medium";
-  }
-
-  if (day.value < 14) {
-    return "hard";
-  }
-
-  return "very-hard";
-}
-
-function loadCalendarDescription(day: LoadCalendarDay) {
-  if (!day.has_workout) {
-    return `${day.date} · rest day`;
-  }
-
-  const score =
-    day.value === null
-      ? "unknown load"
-      : `load ${formatNumber(day.value, 1)}`;
-
-  const workoutText =
-    day.count === 1
-      ? "1 workout"
-      : `${day.count} workouts`;
-
-  return `${day.date} · ${score} · ${workoutText}`;
-}
-
 type StrengthChartPoint = ExerciseStrengthPoint & {
   id: number;
   chartKey: string;
@@ -354,97 +299,6 @@ function chartTooltipFormatter(value: unknown, name: unknown): [ReactNode, strin
 
 function EmptyStats() {
   return <div className="empty">No workout data yet.</div>;
-}
-
-type DashboardCardProps = {
-  label: string;
-  value: string;
-  subvalue: string;
-  spark?: string;
-  color?: "blue" | "green" | "orange" | "red" | "purple";
-  tone?: "green" | "yellow" | "orange" | "red";
-};
-
-function DashboardCard({
-  color = "blue",
-  label,
-  spark,
-  subvalue,
-  tone,
-  value,
-}: DashboardCardProps) {
-  return (
-    <div className={tone ? `dashboard-card metric-${tone}` : "dashboard-card"}>
-      <div className="dashboard-label">{label}</div>
-      <div className="dashboard-value">{value}</div>
-      <div className="dashboard-subvalue">{subvalue}</div>
-      {spark && <div className={`dashboard-sparkbar ${color}`}>{spark}</div>}
-    </div>
-  );
-}
-
-type ChartInsightProps = {
-  question: string;
-  explanation: string;
-  children?: ReactNode;
-};
-
-function ChartInsight({
-  children,
-  explanation,
-  question,
-}: ChartInsightProps) {
-  return (
-    <div className="chart-insight">
-      <div className="chart-insight-heading">
-        <strong>{question}</strong>
-        <span>{explanation}</span>
-      </div>
-
-      {children}
-    </div>
-  );
-}
-
-type ChartCardProps = {
-  title: string;
-  subtitle?: string;
-  children: ReactNode;
-  actions?: ReactNode;
-  wide?: boolean;
-};
-
-function ChartCard({
-  actions,
-  children,
-  subtitle,
-  title,
-  wide = false,
-}: ChartCardProps) {
-  return (
-    <section className={wide ? "chart-card chart-card-wide" : "chart-card"}>
-      <div
-        className={
-          actions
-            ? "chart-heading chart-heading-with-actions"
-            : "chart-heading"
-        }
-      >
-        <div>
-          <h2>{title}</h2>
-          {subtitle && <p className="muted">{subtitle}</p>}
-        </div>
-
-        {actions && (
-          <div className="chart-heading-actions">
-            {actions}
-          </div>
-        )}
-      </div>
-
-      <div className="chart-frame">{children}</div>
-    </section>
-  );
 }
 
 type BenchmarkProgressTooltipProps = {
@@ -779,70 +633,6 @@ function commonTooltipProps() {
     },
     formatter: chartTooltipFormatter,
   };
-}
-
-type MetricTone = "green" | "yellow" | "orange" | "red";
-
-type SummaryMetricProps = {
-  label: string;
-  value: ReactNode;
-  detail?: string;
-  tone?: MetricTone;
-};
-
-function SummaryMetric({
-  detail,
-  label,
-  tone,
-  value,
-}: SummaryMetricProps) {
-  return (
-    <div
-      className={
-        tone
-          ? `stats-summary-metric metric-${tone}`
-          : "stats-summary-metric"
-      }
-    >
-      <strong>{value}</strong>
-      <span>{label}</span>
-      {detail && <small>{detail}</small>}
-    </div>
-  );
-}
-
-function rpeTone(value: number | null | undefined): MetricTone | undefined {
-  if (value === null || value === undefined) {
-    return undefined;
-  }
-  if (value <= 4) {
-    return "green";
-  }
-  if (value <= 6) {
-    return "yellow";
-  }
-  if (value <= 8) {
-    return "orange";
-  }
-  return "red";
-}
-
-function backPainTone(
-  value: number | null | undefined,
-): MetricTone | undefined {
-  if (value === null || value === undefined) {
-    return undefined;
-  }
-  if (value <= 2) {
-    return "green";
-  }
-  if (value <= 4) {
-    return "yellow";
-  }
-  if (value <= 6) {
-    return "orange";
-  }
-  return "red";
 }
 
 export default function StatsPage() {
@@ -1891,26 +1681,11 @@ const strengthWorkloadData =
 
   return (
     <section className="page-stack">
-      <section className="stats-toolbar" aria-label="Stats range">
-        <span className="stats-range-label">Last</span>
-        <div className="stats-range-control">
-          {statsLimitOptions.map((option) => (
-            <button
-              aria-pressed={statsLimit === option.value}
-              className={
-                statsLimit === option.value
-                  ? "stats-range-button stats-range-button-active"
-                  : "stats-range-button"
-              }
-              key={option.value}
-              onClick={() => selectStatsLimit(option.value)}
-              type="button"
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-      </section>
+      <StatsRangeToolbar
+        onSelectLimit={selectStatsLimit}
+        options={statsLimitOptions}
+        selectedLimit={statsLimit}
+      />
 
       {error && <div className="error-banner">{error}</div>}
       {isLoading && <section className="panel">Loading</section>}
@@ -1918,100 +1693,18 @@ const strengthWorkloadData =
 
       {stats && summary && workoutData.length > 0 && (
         <>
-          <section className="dashboard-grid">
-            <DashboardCard
-              color="blue"
-              label="Workouts"
-              spark={sparkbars?.load}
-              subvalue={`${formatNumber(summary.total_sets)} sets · ${formatNumber(
-                summary.total_reps,
-              )} reps`}
-              value={formatNumber(summary.workout_count)}
-            />
-            <DashboardCard
-              color="green"
-              label="Volume"
-              spark={sparkbars?.volume}
-              subvalue={`${formatNumber(summary.avg_intensity, 1)} kg volume / rep`}
-              value={formatKg(summary.total_volume)}
-            />
-            <DashboardCard
-              color="orange"
-              label="Load"
-              spark={sparkbars?.load}
-              subvalue={`${formatNumber(summary.avg_load_score, 1)} avg load`}
-              value={formatNumber(summary.total_load_score, 1)}
-            />
-            <DashboardCard
-              color="red"
-              label="Back stress"
-              spark={sparkbars?.back_stress}
-              subvalue={`${formatNumber(summary.avg_back_pain, 1)} avg pain`}
-              tone={
-                summary.avg_back_pain && summary.avg_back_pain >= 7
-                  ? "red"
-                  : summary.avg_back_pain && summary.avg_back_pain >= 5
-                    ? "orange"
-                    : undefined
-              }
-              value={formatNumber(summary.total_back_stress_score, 1)}
-            />
-          </section>
-
-          <section className="stats-summary-panel">
-            <h2>Summary</h2>
-
-            <div className="stats-summary-grid">
-              <SummaryMetric
-                label="unique exercises"
-                value={formatNumber(uniqueExerciseCount)}
-              />
-
-              <SummaryMetric
-                detail={`${formatNumber(setsPerWorkout, 1)} per workout`}
-                label="sets"
-                value={formatNumber(summary.total_sets)}
-              />
-
-              <SummaryMetric
-                detail={`${formatNumber(repsPerWorkout, 1)} per workout`}
-                label="reps"
-                value={formatNumber(summary.total_reps)}
-              />
-
-              <SummaryMetric
-                label="kg volume / rep"
-                value={formatNumber(summary.avg_intensity, 1)}
-              />
-
-              <SummaryMetric
-                label="avg compound"
-                value={formatNumber(summary.avg_compound_score, 1)}
-              />
-
-              <SummaryMetric
-                detail={`${rpeLoggedCount}/${workoutCount} workouts logged`}
-                label="avg RPE"
-                tone={rpeTone(summary.avg_rpe)}
-                value={
-                  summary.avg_rpe === null
-                    ? "—"
-                    : `${formatNumber(summary.avg_rpe, 1)}/10`
-                }
-              />
-
-              <SummaryMetric
-                detail={`${backPainLoggedCount}/${workoutCount} workouts logged`}
-                label="avg back pain"
-                tone={backPainTone(summary.avg_back_pain)}
-                value={
-                  summary.avg_back_pain === null
-                    ? "—"
-                    : `${formatNumber(summary.avg_back_pain, 1)}/10`
-                }
-              />
-            </div>
-          </section>
+          <StatsOverview
+            backPainLoggedCount={backPainLoggedCount}
+            formatKg={formatKg}
+            formatNumber={formatNumber}
+            repsPerWorkout={repsPerWorkout}
+            rpeLoggedCount={rpeLoggedCount}
+            setsPerWorkout={setsPerWorkout}
+            sparkbars={sparkbars}
+            summary={summary}
+            uniqueExerciseCount={uniqueExerciseCount}
+            workoutCount={workoutCount}
+          />
 
           <div className="stats-chart-grid">
             <ChartCard
@@ -2488,167 +2181,10 @@ const strengthWorkloadData =
               </ChartInsight>
             </ChartCard>
 
-            <ChartCard
-              wide
-              subtitle="Daily distribution of calculated session load"
-              title="Load calendar"
-            >
-              {loadCalendar?.weeks.length ? (
-                <>
-                  <div className="load-calendar-scroll">
-                    <div className="load-calendar-shell">
-                      <div />
-
-                      <div
-                        className="load-calendar-months"
-                        style={{
-                          gridTemplateColumns: `repeat(${loadCalendar.weeks.length}, 16px)`,
-                        }}
-                      >
-                        {loadCalendar.weeks.map((week, weekIndex) => (
-                          <span
-                            className="load-calendar-month"
-                            key={`month-${weekIndex}`}
-                          >
-                            {week.month_label}
-                          </span>
-                        ))}
-                      </div>
-
-                      <div
-                        aria-hidden="true"
-                        className="load-calendar-weekdays"
-                      >
-                        <span>Mon</span>
-                        <span />
-                        <span>Wed</span>
-                        <span />
-                        <span>Fri</span>
-                        <span />
-                        <span>Sun</span>
-                      </div>
-
-                      <div className="load-calendar-weeks">
-                        {loadCalendar.weeks.map((week, weekIndex) => (
-                          <div
-                            className="load-calendar-week"
-                            key={`week-${weekIndex}`}
-                          >
-                            {week.days.map((day) => {
-                              const level = loadCalendarLevel(day);
-                              const description =
-                                loadCalendarDescription(day);
-
-                              if (
-                                day.has_workout &&
-                                day.workout_id !== null
-                              ) {
-                                return (
-                                  <button
-                                    aria-label={`${description}. Open workout.`}
-                                    className={
-                                      `load-calendar-cell ` +
-                                      `load-calendar-cell-${level}`
-                                    }
-                                    key={day.date}
-                                    onClick={() =>
-                                      navigateToWorkout(day.workout_id!)
-                                    }
-                                    title={description}
-                                    type="button"
-                                  />
-                                );
-                              }
-
-                              return (
-                                <span
-                                  aria-label={description}
-                                  className={
-                                    `load-calendar-cell ` +
-                                    `load-calendar-cell-${level}`
-                                  }
-                                  key={day.date}
-                                  role="img"
-                                  title={description}
-                                />
-                              );
-                            })}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div
-                    aria-label="Load calendar legend"
-                    className="load-calendar-legend"
-                  >
-                    <div>
-                      <span className="load-calendar-legend-cell load-calendar-cell-rest" />
-                      <span>Rest</span>
-                    </div>
-
-                    <div>
-                      <span className="load-calendar-legend-cell load-calendar-cell-light" />
-                      <span>Light · &lt;4</span>
-                    </div>
-
-                    <div>
-                      <span className="load-calendar-legend-cell load-calendar-cell-medium" />
-                      <span>Medium · 4–&lt;8</span>
-                    </div>
-
-                    <div>
-                      <span className="load-calendar-legend-cell load-calendar-cell-hard" />
-                      <span>Hard · 8–&lt;14</span>
-                    </div>
-
-                    <div>
-                      <span className="load-calendar-legend-cell load-calendar-cell-very-hard" />
-                      <span>Very hard · 14+</span>
-                    </div>
-                  </div>
-
-                  <ChartInsight
-                    question="How are demanding workouts distributed over time?"
-                    explanation="Each square represents one calendar day. Warmer colors indicate a higher calculated session load."
-                  >
-                    <div className="chart-insight-details">
-                      <span>
-                        Isolated hard days followed by rest or lighter sessions usually
-                        show better load spacing.
-                      </span>
-
-                      <span>
-                        Several orange or red squares close together indicate a cluster of
-                        demanding sessions that may require more recovery.
-                      </span>
-
-                      <span>
-                        Dark squares are days without a workout. They do not indicate
-                        missing data.
-                      </span>
-
-                      <span>
-                        Select a colored square to open that workout and inspect which
-                        exercises, set intensities, and RPE contributed to its score.
-                      </span>
-                    </div>
-
-                    <p className="chart-insight-footnote">
-                      Load is a personalized app score based on exercise type, repetition
-                      range, relative intensity, and session RPE. The calendar helps reveal
-                      scheduling patterns; it does not directly measure whether you have
-                      recovered.
-                    </p>
-                  </ChartInsight>
-                </>
-              ) : (
-                <div className="empty">
-                  No load calendar data.
-                </div>
-              )}
-            </ChartCard>
+            <StatsLoadCalendar
+              loadCalendar={loadCalendar}
+              onOpenWorkout={navigateToWorkout}
+            />
 
             <ChartCard
               subtitle="Session RPE and lower-back pain scores"
@@ -2714,102 +2250,12 @@ const strengthWorkloadData =
               </ResponsiveContainer>
             </ChartCard>
 
-            <ChartCard
-              wide
-              subtitle="e1RM is shown only for weighted sets with 3–12 reps"
-              title="Best strength estimates"
-            >
-              {bestStrength.length > 0 ? (
-                <div className="strength-table-scroll">
-                  <table className="strength-table">
-                    <thead>
-                      <tr>
-                        <th>Exercise</th>
-                        <th>Best e1RM</th>
-                        <th>From set</th>
-                        <th>Date</th>
-                      </tr>
-                    </thead>
-
-                    <tbody>
-                      {bestStrength.map((exercise) => (
-                        <tr key={exercise.exercise_id}>
-                          <td>
-                            <button
-                              className="strength-table-link"
-                              onClick={() =>
-                                navigateToExerciseStats(exercise.exercise_id)
-                              }
-                              type="button"
-                            >
-                              {exercise.name}
-                            </button>
-                          </td>
-
-                          <td className="strength-table-value">
-                            {formatNumber(exercise.best_e1rm, 1)} kg
-                          </td>
-
-                          <td className="strength-table-set">
-                            {formatNumber(exercise.best_set.weight, 1)}
-                            {" × "}
-                            {exercise.best_set.reps}
-                          </td>
-
-                          <td>
-                            <button
-                              className="strength-table-link strength-table-date"
-                              onClick={() =>
-                                navigateToWorkout(exercise.best_set.workout_id)
-                              }
-                              type="button"
-                            >
-                              {exercise.best_set.date}
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="empty">
-                  No eligible strength estimates yet.
-                </div>
-              )}
-
-              <ChartInsight
-                question="What does the estimated 1RM represent?"
-                explanation="e1RM estimates the maximum weight you could lift once, based on a recorded working set."
-              >
-                <div className="chart-insight-details">
-                  <span>
-                    The estimate is calculated only from weighted sets containing 3–12
-                    repetitions.
-                  </span>
-
-                  <span>
-                    The From set column shows the exact weight and repetitions that produced
-                    the highest estimate for each exercise.
-                  </span>
-
-                  <span>
-                    Compare e1RM changes within the same exercise. Values from different
-                    exercises are not directly comparable.
-                  </span>
-
-                  <span>
-                    Select an exercise to open its statistics, or select the date to open
-                    the source workout.
-                  </span>
-                </div>
-
-                <p className="chart-insight-footnote">
-                  Sets such as 50 × 2, 20 × 15, and bodyweight sets such as 0 × 50 are
-                  intentionally excluded from the e1RM calculation.
-                </p>
-              </ChartInsight>
-            </ChartCard>
+            <StatsBestStrengthTable
+              exercises={bestStrength}
+              formatNumber={formatNumber}
+              onOpenExercise={navigateToExerciseStats}
+              onOpenWorkout={navigateToWorkout}
+            />
 
             <ChartCard
               wide

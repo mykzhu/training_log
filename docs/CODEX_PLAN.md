@@ -1165,7 +1165,7 @@ Do not change Garmin scoring thresholds in this phase.
 
 ---
 
-## [ ] Phase 19 — Global Stats page componentization
+## [x] Phase 19 — Global Stats page componentization
 
 Branch:
 
