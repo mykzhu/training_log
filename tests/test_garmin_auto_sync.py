@@ -230,17 +230,21 @@ class GarminAutoSyncTests(unittest.TestCase):
             to_thread_calls.append((func, args, kwargs))
             return func(*args, **kwargs)
 
+        original_to_thread = asyncio.to_thread
         asyncio.to_thread = fake_to_thread
-        garmin_auto_sync_service.update_settings(
-            {
-                "enabled": True,
-                "sync_after_local_time": "00:00",
-                "sync_days": 14,
-            }
-        )
+        try:
+            garmin_auto_sync_service.update_settings(
+                {
+                    "enabled": True,
+                    "sync_after_local_time": "00:00",
+                    "sync_days": 14,
+                }
+            )
+            first = asyncio.run(garmin_auto_sync_service.run_garmin_auto_sync_once())
+            second = asyncio.run(garmin_auto_sync_service.run_garmin_auto_sync_once())
+        finally:
+            asyncio.to_thread = original_to_thread
 
-        first = asyncio.run(garmin_auto_sync_service.run_garmin_auto_sync_once())
-        second = asyncio.run(garmin_auto_sync_service.run_garmin_auto_sync_once())
         settings = garmin_sync_settings.get_garmin_auto_sync_settings()
 
         self.assertTrue(first["ran"])

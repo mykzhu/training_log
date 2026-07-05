@@ -2,6 +2,18 @@
 
 All notable changes to this project.
 
+## Unreleased
+
+### Changed
+
+* Settings sections now start collapsed with summary text for Garmin, Analysis Types, and Exercises and Weights.
+* Top navigation now keeps the same visible items on every page and highlights the current page.
+* Garmin Stats range controls no longer include a redundant inline Settings link.
+
+### Fixed
+
+* Scoped the Garmin auto-sync test monkeypatch for `asyncio.to_thread` so it is restored within the test.
+
 ## 1.2.0 - 2026-07-02
 
 Training Log 1.2.0 is a Garmin recovery, Home Assistant ingress, and configuration release. It adds local Garmin metrics and readiness insights, automatic Garmin syncing, runtime-safe Home Assistant prefix handling, configurable Analysis Types, and a componentized Stats page. Backup schema support is extended for Analysis Types and normal backups no longer include Garmin raw diagnostics.

@@ -201,12 +201,18 @@ export default function AnalysisProfilesPanel({
     );
   }
 
+  const customProfileCount = profiles.filter(
+    (profile) => !profile.is_builtin,
+  ).length;
+
   return (
-    <details className="settings-fold-panel analysis-profile-panel" open>
+    <details className="settings-fold-panel analysis-profile-panel">
       <summary>
         <div>
           <span>Analysis types</span>
-          <div className="muted small">Changing factors recalculates displayed historical load analysis.</div>
+          <div className="muted small">
+            {profiles.length} types, {customProfileCount} custom
+          </div>
         </div>
       </summary>
 

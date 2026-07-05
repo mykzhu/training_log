@@ -571,11 +571,18 @@ export default function SettingsPage() {
       {error && <div className="error-banner">{error}</div>}
       {message && <div className="success-banner">{message}</div>}
 
-      <details className="settings-fold-panel garmin-panel" open>
+      <details className="settings-fold-panel garmin-panel">
         <summary>
           <div>
             <span>Garmin</span>
-            <div className="muted small">Observational import</div>
+            <div className="muted small">
+              {garminStatus === null
+                ? "Loading status"
+                : garminStatus.connected
+                  ? "Connected"
+                  : "Disconnected"}
+              {`, auto-sync ${garminAutoSyncDraft.enabled ? "enabled" : "disabled"}, ${garminAutoSyncDraft.sync_days} days`}
+            </div>
           </div>
           <button
             className="ghost-button compact-action"
@@ -798,207 +805,125 @@ export default function SettingsPage() {
       </details>
 
       <AnalysisProfilesPanel profiles={profiles} onProfilesChange={setProfiles} />
-      <form className="panel settings-add" onSubmit={addExercise}>
-        <label>
-          Exercise
-          <input
-            disabled={pendingAction === "create"}
-            onChange={(event) => setNewExerciseName(event.target.value)}
-            placeholder="Exercise name"
-            value={newExerciseName}
-          />
-        </label>
-        <label>
-          Analysis type
-          <select
-            disabled={pendingAction === "create"}
-            onChange={(event) => setNewExerciseProfile(event.target.value)}
-            value={newExerciseProfile}
+      <details className="settings-fold-panel settings-exercises-panel">
+        <summary>
+          <div>
+            <span>Exercises and weights</span>
+            <div className="muted small">
+              {loading
+                ? "Loading exercises"
+                : `${exercises.length} exercises configured`}
+            </div>
+          </div>
+        </summary>
+
+        <form className="panel settings-add" onSubmit={addExercise}>
+          <label>
+            Exercise
+            <input
+              disabled={pendingAction === "create"}
+              onChange={(event) => setNewExerciseName(event.target.value)}
+              placeholder="Exercise name"
+              value={newExerciseName}
+            />
+          </label>
+          <label>
+            Analysis type
+            <select
+              disabled={pendingAction === "create"}
+              onChange={(event) => setNewExerciseProfile(event.target.value)}
+              value={newExerciseProfile}
+            >
+              <option value="">Infer from name</option>
+              {activeProfiles.map((profile) => (
+                <option key={profile.key} value={profile.key}>
+                  {profile.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Initial weight
+            <input
+              disabled={pendingAction === "create"}
+              inputMode="decimal"
+              min="0"
+              onChange={(event) => setNewExerciseWeight(event.target.value)}
+              placeholder="0"
+              step="0.25"
+              type="number"
+              value={newExerciseWeight}
+            />
+          </label>
+          <button
+            className="primary-button"
+            disabled={
+              pendingAction === "create" ||
+              !newExerciseName.trim() ||
+              parseWeight(newExerciseWeight) === null
+            }
+            type="submit"
           >
-            <option value="">Infer from name</option>
-            {activeProfiles.map((profile) => (
-              <option key={profile.key} value={profile.key}>
-                {profile.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Initial weight
-          <input
-            disabled={pendingAction === "create"}
-            inputMode="decimal"
-            min="0"
-            onChange={(event) => setNewExerciseWeight(event.target.value)}
-            placeholder="0"
-            step="0.25"
-            type="number"
-            value={newExerciseWeight}
-          />
-        </label>
-        <button
-          className="primary-button"
-          disabled={
-            pendingAction === "create" ||
-            !newExerciseName.trim() ||
-            parseWeight(newExerciseWeight) === null
-          }
-          type="submit"
-        >
-          Add
-        </button>
-      </form>
-
-      {loading && <section className="panel muted">Loading settings...</section>}
-      {!loading && exercises.length === 0 && (
-        <section className="panel">
-          <p>No exercises configured.</p>
-          <button className="ghost-button" onClick={load} type="button">
-            Retry
+            Add
           </button>
-        </section>
-      )}
-      {hasDirtyDrafts && (
-        <div className="success-banner">
-          Save exercise changes before reordering.
-        </div>
-      )}
+        </form>
 
-      <div className="settings-list">
-        {exercises.map((exercise, index) => {
-          const weights = weightDrafts[exercise.id] ?? [];
-          const detailsChanged =
-            isNameDirty(exercise) || isProfileDirty(exercise);
-          const weightChanged = isWeightDirty(exercise);
-          const detailsPending = pendingAction === `details:${exercise.id}`;
-          const activePending = pendingAction === `active:${exercise.id}`;
-          const weightsPending = pendingAction === `weights:${exercise.id}`;
-          const profileLabel =
-            profileLabels[profileDrafts[exercise.id] ?? exercise.profile_key] ??
-            "Accessory";
+        {loading && <section className="panel muted">Loading settings...</section>}
+        {!loading && exercises.length === 0 && (
+          <section className="panel">
+            <p>No exercises configured.</p>
+            <button className="ghost-button" onClick={load} type="button">
+              Retry
+            </button>
+          </section>
+        )}
+        {hasDirtyDrafts && (
+          <div className="success-banner">
+            Save exercise changes before reordering.
+          </div>
+        )}
 
-          return (
-            <article className="settings-card" key={exercise.id}>
-              <div className="settings-card-header">
-                <div>
-                  <h2>{exercise.name}</h2>
-                  <p className="muted">{profileLabel}</p>
-                </div>
-                <button
-                  className={
-                    exercise.is_active
-                      ? "secondary-button compact-action"
-                      : "ghost-button compact-action"
-                  }
-                  disabled={activePending || isBusy || (weights.length === 0 && !exercise.is_active)}
-                  onClick={() => toggleActive(exercise)}
-                  type="button"
-                >
-                  {exercise.is_active ? "Active" : "Inactive"}
-                </button>
-              </div>
+        <div className="settings-list">
+          {exercises.map((exercise, index) => {
+            const weights = weightDrafts[exercise.id] ?? [];
+            const detailsChanged =
+              isNameDirty(exercise) || isProfileDirty(exercise);
+            const weightChanged = isWeightDirty(exercise);
+            const detailsPending = pendingAction === `details:${exercise.id}`;
+            const activePending = pendingAction === `active:${exercise.id}`;
+            const weightsPending = pendingAction === `weights:${exercise.id}`;
+            const profileLabel =
+              profileLabels[profileDrafts[exercise.id] ?? exercise.profile_key] ??
+              "Accessory";
 
-              <div className="settings-row">
-                <label>
-                  Name
-                  <input
-                    disabled={detailsPending}
-                    onChange={(event) =>
-                      setNameDrafts((current) => ({
-                        ...current,
-                        [exercise.id]: event.target.value,
-                      }))
+            return (
+              <article className="settings-card" key={exercise.id}>
+                <div className="settings-card-header">
+                  <div>
+                    <h2>{exercise.name}</h2>
+                    <p className="muted">{profileLabel}</p>
+                  </div>
+                  <button
+                    className={
+                      exercise.is_active
+                        ? "secondary-button compact-action"
+                        : "ghost-button compact-action"
                     }
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        saveDetails(exercise);
-                      }
-                    }}
-                    value={nameDrafts[exercise.id] ?? ""}
-                  />
-                </label>
-                <label>
-                  Analysis type
-                  <select
-                    disabled={detailsPending}
-                    onChange={(event) =>
-                      setProfileDrafts((current) => ({
-                        ...current,
-                        [exercise.id]: event.target.value,
-                      }))
-                    }
-                    value={profileDrafts[exercise.id] ?? exercise.profile_key}
+                    disabled={activePending || isBusy || (weights.length === 0 && !exercise.is_active)}
+                    onClick={() => toggleActive(exercise)}
+                    type="button"
                   >
-                    {profileOptionsForExercise(profileDrafts[exercise.id] ?? exercise.profile_key).map((profile) => (
-                      <option key={profile.key} value={profile.key}>
-                        {profile.label}{profile.is_active ? "" : " (inactive)"}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button
-                  className="secondary-button"
-                  disabled={
-                    detailsPending ||
-                    !detailsChanged ||
-                    !nameDrafts[exercise.id]?.trim()
-                  }
-                  onClick={() => saveDetails(exercise)}
-                  type="button"
-                >
-                  Save
-                </button>
-              </div>
-
-              <div className="settings-order">
-                <button
-                  className="ghost-button compact-button"
-                  disabled={isBusy || hasDirtyDrafts || index === 0}
-                  onClick={() => moveExercise(index, -1)}
-                  type="button"
-                >
-                  Up
-                </button>
-                <button
-                  className="ghost-button compact-button"
-                  disabled={isBusy || hasDirtyDrafts || index === exercises.length - 1}
-                  onClick={() => moveExercise(index, 1)}
-                  type="button"
-                >
-                  Down
-                </button>
-              </div>
-
-              <section className="settings-weights">
-                <h3>Weights</h3>
-                <div className="weight-chip-list">
-                  {weights.length === 0 && (
-                    <span className="muted small">No presets configured.</span>
-                  )}
-                  {weights.map((weight) => (
-                    <button
-                      aria-label={`Remove ${formatSetOption(weight)} kg`}
-                      className="weight-chip"
-                      disabled={weightsPending}
-                      key={weight}
-                      onClick={() => removeWeightDraft(exercise.id, weight)}
-                      type="button"
-                    >
-                      {formatSetOption(weight)} kg
-                    </button>
-                  ))}
+                    {exercise.is_active ? "Active" : "Inactive"}
+                  </button>
                 </div>
 
                 <div className="settings-row">
                   <label>
-                    New weight
+                    Name
                     <input
-                      disabled={weightsPending}
-                      inputMode="decimal"
-                      min="0"
+                      disabled={detailsPending}
                       onChange={(event) =>
-                        setNewWeightDrafts((current) => ({
+                        setNameDrafts((current) => ({
                           ...current,
                           [exercise.id]: event.target.value,
                         }))
@@ -1006,44 +931,143 @@ export default function SettingsPage() {
                       onKeyDown={(event) => {
                         if (event.key === "Enter") {
                           event.preventDefault();
-                          addWeightDraft(exercise.id);
+                          saveDetails(exercise);
                         }
                       }}
-                      placeholder="0"
-                      step="0.25"
-                      type="number"
-                      value={newWeightDrafts[exercise.id] ?? ""}
+                      value={nameDrafts[exercise.id] ?? ""}
                     />
                   </label>
-                  <button
-                    className="ghost-button"
-                    disabled={
-                      weightsPending ||
-                      parseWeight(newWeightDrafts[exercise.id] ?? "") === null
-                    }
-                    onClick={() => addWeightDraft(exercise.id)}
-                    type="button"
-                  >
-                    Add
-                  </button>
+                  <label>
+                    Analysis type
+                    <select
+                      disabled={detailsPending}
+                      onChange={(event) =>
+                        setProfileDrafts((current) => ({
+                          ...current,
+                          [exercise.id]: event.target.value,
+                        }))
+                      }
+                      value={profileDrafts[exercise.id] ?? exercise.profile_key}
+                    >
+                      {profileOptionsForExercise(
+                        profileDrafts[exercise.id] ?? exercise.profile_key,
+                      ).map((profile) => (
+                        <option key={profile.key} value={profile.key}>
+                          {profile.label}{profile.is_active ? "" : " (inactive)"}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                   <button
                     className="secondary-button"
                     disabled={
-                      weightsPending ||
-                      !weightChanged ||
-                      (exercise.is_active && normalizeWeights(weights).length === 0)
+                      detailsPending ||
+                      !detailsChanged ||
+                      !nameDrafts[exercise.id]?.trim()
                     }
-                    onClick={() => saveWeights(exercise)}
+                    onClick={() => saveDetails(exercise)}
                     type="button"
                   >
-                    Save weights
+                    Save
                   </button>
                 </div>
-              </section>
-            </article>
-          );
-        })}
-      </div>
+
+                <div className="settings-order">
+                  <button
+                    className="ghost-button compact-button"
+                    disabled={isBusy || hasDirtyDrafts || index === 0}
+                    onClick={() => moveExercise(index, -1)}
+                    type="button"
+                  >
+                    Up
+                  </button>
+                  <button
+                    className="ghost-button compact-button"
+                    disabled={
+                      isBusy || hasDirtyDrafts || index === exercises.length - 1
+                    }
+                    onClick={() => moveExercise(index, 1)}
+                    type="button"
+                  >
+                    Down
+                  </button>
+                </div>
+
+                <section className="settings-weights">
+                  <h3>Weights</h3>
+                  <div className="weight-chip-list">
+                    {weights.length === 0 && (
+                      <span className="muted small">No presets configured.</span>
+                    )}
+                    {weights.map((weight) => (
+                      <button
+                        aria-label={`Remove ${formatSetOption(weight)} kg`}
+                        className="weight-chip"
+                        disabled={weightsPending}
+                        key={weight}
+                        onClick={() => removeWeightDraft(exercise.id, weight)}
+                        type="button"
+                      >
+                        {formatSetOption(weight)} kg
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="settings-row">
+                    <label>
+                      New weight
+                      <input
+                        disabled={weightsPending}
+                        inputMode="decimal"
+                        min="0"
+                        onChange={(event) =>
+                          setNewWeightDrafts((current) => ({
+                            ...current,
+                            [exercise.id]: event.target.value,
+                          }))
+                        }
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            addWeightDraft(exercise.id);
+                          }
+                        }}
+                        placeholder="0"
+                        step="0.25"
+                        type="number"
+                        value={newWeightDrafts[exercise.id] ?? ""}
+                      />
+                    </label>
+                    <button
+                      className="ghost-button"
+                      disabled={
+                        weightsPending ||
+                        parseWeight(newWeightDrafts[exercise.id] ?? "") === null
+                      }
+                      onClick={() => addWeightDraft(exercise.id)}
+                      type="button"
+                    >
+                      Add
+                    </button>
+                    <button
+                      className="secondary-button"
+                      disabled={
+                        weightsPending ||
+                        !weightChanged ||
+                        (exercise.is_active && normalizeWeights(weights).length === 0)
+                      }
+                      onClick={() => saveWeights(exercise)}
+                      type="button"
+                    >
+                      Save weights
+                    </button>
+                  </div>
+                </section>
+              </article>
+            );
+          })}
+        </div>
+      </details>
     </section>
   );
 }

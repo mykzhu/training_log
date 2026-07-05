@@ -55,19 +55,6 @@ const pages: Array<{ key: PageKey; label: string }> = [
   { key: "settings", label: "Settings" },
 ];
 
-const historyNavItems: Array<{
-  key: string;
-  label: string;
-  page: PageKey;
-  path: string;
-}> = [
-  { key: "current", label: "Current", page: "current", path: "/" },
-  { key: "stats", label: "Stats", page: "stats", path: "/stats" },
-  { key: "garmin", label: "Garmin", page: "garmin", path: "/garmin" },
-  { key: "backup", label: "Backup", page: "backup", path: "/backup" },
-  { key: "settings", label: "Settings", page: "settings", path: "/settings" },
-];
-
 function pathForPage(page: PageKey): string {
   if (page === "current") {
     return "/";
@@ -200,14 +187,12 @@ function AppLayout() {
         : isExerciseStats
           ? "Stats"
           : pages.find((page) => page.key === activePage)?.label;
-  const navItems = isHistoryList
-    ? historyNavItems
-    : pages.map((page) => ({
-        key: page.key,
-        label: page.label,
-        page: page.key,
-        path: pathForPage(page.key),
-      }));
+  const navItems = pages.map((page) => ({
+    key: page.key,
+    label: page.label,
+    page: page.key,
+    path: pathForPage(page.key),
+  }));
 
   const navActivePage = activePage === "exercise-stats" ? "stats" : activePage;
 

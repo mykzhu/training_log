@@ -16,7 +16,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import {
   getGarminStats,
@@ -941,8 +941,6 @@ export default function GarminStatsPage() {
           >
             {isSyncing ? "Syncing" : "Sync 35 days"}
           </button>
-
-          <Link className="card-link" to="/settings">Settings</Link>
         </div>
       </div>
 
