@@ -14,6 +14,7 @@ All notable changes to this project.
 * Edit Workout now uses one page-level Save workout action with an Unsaved changes state.
 * Current and Edit Workout delete controls now use the same compact `×` style.
 * Stats charts now use consistent readable date labels and responsive mobile X-axis labels.
+* Stats overview cards now include progress bars, range bars, sparklines, and a compact calculations panel.
 
 ### Fixed
 

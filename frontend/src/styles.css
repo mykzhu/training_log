@@ -1063,6 +1063,262 @@ a.compact-button {
   color: #af52de;
 }
 
+.metric-card-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 0 14px;
+}
+
+.metric-card {
+  display: grid;
+  gap: 10px;
+  min-height: 180px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px;
+  background: var(--card);
+}
+
+.metric-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.metric-card-title {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.metric-card-heading small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.metric-card > strong {
+  font-size: 24px;
+  line-height: 1.1;
+}
+
+.metric-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.metric-status-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.metric-status-good {
+  border-color: rgba(48, 209, 88, 0.55);
+  background: rgba(48, 209, 88, 0.13);
+  color: var(--green);
+}
+
+.metric-status-watch {
+  border-color: rgba(255, 214, 10, 0.55);
+  background: rgba(255, 214, 10, 0.12);
+  color: var(--yellow);
+}
+
+.metric-status-bad {
+  border-color: rgba(255, 69, 58, 0.6);
+  background: rgba(255, 69, 58, 0.14);
+  color: var(--red);
+}
+
+.metric-status-info {
+  border-color: rgba(10, 132, 255, 0.55);
+  background: rgba(10, 132, 255, 0.12);
+  color: var(--blue);
+}
+
+.metric-status-neutral {
+  background: var(--card2);
+  color: var(--muted);
+}
+
+.metric-progress,
+.metric-range {
+  display: grid;
+  gap: 6px;
+}
+
+.metric-progress-track,
+.metric-range-track {
+  position: relative;
+  height: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--card2);
+}
+
+.metric-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.metric-zone-good {
+  background: rgba(48, 209, 88, 0.55);
+}
+
+.metric-zone-watch {
+  background: rgba(255, 214, 10, 0.55);
+}
+
+.metric-zone-bad {
+  background: rgba(255, 69, 58, 0.55);
+}
+
+.metric-zone-info {
+  left: 0;
+  width: 100%;
+  background: rgba(10, 132, 255, 0.45);
+}
+
+.metric-zone-neutral {
+  background: rgba(153, 153, 153, 0.35);
+}
+
+.metric-progress-marker,
+.metric-range-marker {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--text);
+  transform: translateX(-50%);
+}
+
+.metric-visual-label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.metric-sparkline {
+  height: 44px;
+}
+
+.metric-sparkline svg {
+  width: 100%;
+  height: 44px;
+}
+
+.metric-sparkline polyline {
+  fill: none;
+  stroke: var(--blue);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3;
+}
+
+.training-load-status-card,
+.metric-calculations-panel {
+  margin-bottom: 14px;
+}
+
+.training-load-placeholder {
+  display: grid;
+  gap: 8px;
+}
+
+.metric-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.1fr) minmax(160px, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+  background: var(--card2);
+}
+
+.metric-row strong {
+  display: block;
+}
+
+.metric-row span {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.metric-row b {
+  white-space: nowrap;
+}
+
+.metric-calculations-panel summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+  color: var(--blue);
+  font-size: 21px;
+  font-weight: 800;
+}
+
+.metric-calculation-legend {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.metric-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+}
+
+.metric-dot-good {
+  background: var(--green);
+}
+
+.metric-dot-watch {
+  background: var(--yellow);
+}
+
+.metric-dot-bad {
+  background: var(--red);
+}
+
+.metric-info {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .stats-chart-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1758,9 +2014,14 @@ button.load-calendar-cell:focus-visible {
   .recovery-grid,
   .history-stat-grid,
   .dashboard-grid,
+  .metric-card-grid,
   .stats-chart-grid,
   .analysis-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .metric-row {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .controls-grid {
@@ -1851,8 +2112,14 @@ button.load-calendar-cell:focus-visible {
     flex-basis: 100%;
   }
   .recovery-grid,
-  .dashboard-grid {
+  .dashboard-grid,
+  .metric-card-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .metric-calculations-panel summary {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .chart-card:first-child {

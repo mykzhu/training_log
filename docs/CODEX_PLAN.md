@@ -1372,6 +1372,15 @@ No unsupported cardio-only metrics appear.
 Mobile layout remains readable.
 ```
 
+Status: completed on 2026-07-05.
+
+Implementation notes:
+
+- Added shared metric card, row, status badge, progress bar, range bar, sparkline, and info components.
+- Reworked the top Stats overview into visual metric cards for Recovery, Weekly Load, Strength Progress, Back Pain Risk, and Consistency.
+- Added grouped Training load status and collapsible Calculations panels as visual scaffolding for Phase 28 training-load values.
+- Did not add unsupported cardio-only metrics.
+
 Suggested commit:
 
 ```text

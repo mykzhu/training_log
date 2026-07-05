@@ -1,6 +1,14 @@
 import type { ReactNode } from "react";
 
 import type { StatsSparkbars, StatsSummary } from "../../api/types";
+import MetricCard from "./MetricCard";
+import MetricInfo from "./MetricInfo";
+import MetricProgressBar from "./MetricProgressBar";
+import MetricRangeBar from "./MetricRangeBar";
+import MetricRow from "./MetricRow";
+import MetricSparkline from "./MetricSparkline";
+import type { MetricSparklinePoint } from "./MetricSparkline";
+import type { MetricStatus } from "./MetricStatusBadge";
 
 type StatsLimit = 10 | 30 | 90 | "all";
 
@@ -9,15 +17,6 @@ type MetricTone = "green" | "yellow" | "orange" | "red";
 type StatsLimitOption = {
   value: StatsLimit;
   label: string;
-};
-
-type DashboardCardProps = {
-  label: string;
-  value: string;
-  subvalue: string;
-  spark?: string;
-  color?: "blue" | "green" | "orange" | "red" | "purple";
-  tone?: MetricTone;
 };
 
 type SummaryMetricProps = {
@@ -46,23 +45,32 @@ type StatsOverviewProps = {
   formatKg: (value: number | null | undefined) => string;
 };
 
-function DashboardCard({
-  color = "blue",
-  label,
-  spark,
-  subvalue,
-  tone,
-  value,
-}: DashboardCardProps) {
-  return (
-    <div className={tone ? `dashboard-card metric-${tone}` : "dashboard-card"}>
-      <div className="dashboard-label">{label}</div>
-      <div className="dashboard-value">{value}</div>
-      <div className="dashboard-subvalue">{subvalue}</div>
-      {spark && <div className={`dashboard-sparkbar ${color}`}>{spark}</div>}
-    </div>
-  );
-}
+const recoveryZones = [
+  { from: 0, to: 40, status: "bad" as const, label: "High stress" },
+  { from: 40, to: 70, status: "watch" as const, label: "Moderate" },
+  { from: 70, to: 100, status: "good" as const, label: "Good" },
+];
+
+const backPainZones = [
+  { from: 0, to: 2, status: "good" as const, label: "Low" },
+  { from: 2, to: 4, status: "watch" as const, label: "Moderate" },
+  { from: 4, to: 7, status: "bad" as const, label: "High" },
+  { from: 7, to: 10, status: "bad" as const, label: "Risky" },
+];
+
+const tsbZones = [
+  { from: -40, to: -25, status: "bad" as const, label: "Very fatigued" },
+  { from: -25, to: -10, status: "watch" as const, label: "Fatigued" },
+  { from: -10, to: 10, status: "good" as const, label: "Balanced" },
+  { from: 10, to: 40, status: "info" as const, label: "Fresh" },
+];
+
+const ratioZones = [
+  { from: 0, to: 0.8, status: "watch" as const, label: "Low" },
+  { from: 0.8, to: 1.3, status: "good" as const, label: "Good" },
+  { from: 1.3, to: 1.5, status: "watch" as const, label: "High" },
+  { from: 1.5, to: 2, status: "bad" as const, label: "Risky" },
+];
 
 function SummaryMetric({
   detail,
@@ -119,6 +127,40 @@ function backPainTone(
   return "red";
 }
 
+function backPainStatus(value: number | null | undefined): {
+  label: string;
+  status: MetricStatus;
+} {
+  if (value === null || value === undefined) {
+    return { label: "No data", status: "neutral" };
+  }
+  if (value <= 2) {
+    return { label: "Low", status: "good" };
+  }
+  if (value <= 4) {
+    return { label: "Watch", status: "watch" };
+  }
+  return { label: "High", status: "bad" };
+}
+
+function recoveryScore(summary: StatsSummary) {
+  const rpePenalty = summary.avg_rpe === null ? 20 : summary.avg_rpe * 5;
+  const backPenalty =
+    summary.avg_back_pain === null ? 20 : summary.avg_back_pain * 7;
+  return Math.max(0, Math.min(100, 100 - rpePenalty - backPenalty));
+}
+
+function sparkbarToPoints(value: string | undefined): MetricSparklinePoint[] {
+  if (!value) {
+    return [];
+  }
+
+  return Array.from(value).map((char, index) => ({
+    date: String(index),
+    value: "▁▂▃▄▅▆▇█".indexOf(char) + 1 || 1,
+  }));
+}
+
 export function StatsRangeToolbar({
   onSelectLimit,
   options,
@@ -160,47 +202,181 @@ export default function StatsOverview({
   uniqueExerciseCount,
   workoutCount,
 }: StatsOverviewProps) {
+  const recovery = recoveryScore(summary);
+  const consistency =
+    workoutCount === 0
+      ? null
+      : ((rpeLoggedCount + backPainLoggedCount) / (workoutCount * 2)) * 100;
+  const backPain = summary.avg_back_pain;
+  const recoveryStatus =
+    recovery >= 70
+      ? { label: "Good", status: "good" as const }
+      : recovery >= 40
+        ? { label: "Watch", status: "watch" as const }
+        : { label: "High stress", status: "bad" as const };
+
   return (
     <>
-      <section className="dashboard-grid">
-        <DashboardCard
-          color="blue"
-          label="Workouts"
-          spark={sparkbars?.load}
-          subvalue={`${formatNumber(summary.total_sets)} sets · ${formatNumber(
-            summary.total_reps,
-          )} reps`}
-          value={formatNumber(summary.workout_count)}
-        />
-        <DashboardCard
-          color="green"
-          label="Volume"
-          spark={sparkbars?.volume}
-          subvalue={`${formatNumber(summary.avg_intensity, 1)} kg volume / rep`}
-          value={formatKg(summary.total_volume)}
-        />
-        <DashboardCard
-          color="orange"
-          label="Load"
-          spark={sparkbars?.load}
-          subvalue={`${formatNumber(summary.avg_load_score, 1)} avg load`}
-          value={formatNumber(summary.total_load_score, 1)}
-        />
-        <DashboardCard
-          color="red"
-          label="Back stress"
-          spark={sparkbars?.back_stress}
-          subvalue={`${formatNumber(summary.avg_back_pain, 1)} avg pain`}
-          tone={
-            summary.avg_back_pain && summary.avg_back_pain >= 7
-              ? "red"
-              : summary.avg_back_pain && summary.avg_back_pain >= 5
-                ? "orange"
-                : undefined
+      <section className="metric-card-grid">
+        <MetricCard
+          description="Blends average RPE and back pain into a simple recovery view."
+          status={recoveryStatus}
+          subtitle="RPE and back pain"
+          title="Recovery"
+          value={`${formatNumber(recovery, 0)}%`}
+          visual={
+            <MetricProgressBar
+              markerLabel={`${formatNumber(recovery, 0)}%`}
+              value={recovery}
+              zones={recoveryZones}
+            />
           }
-          value={formatNumber(summary.total_back_stress_score, 1)}
+        />
+        <MetricCard
+          description="Total app load points in the selected range."
+          status={{ label: "Load", status: "info" }}
+          subtitle={`${formatNumber(summary.avg_load_score, 1)} average`}
+          title="Weekly Load"
+          value={formatNumber(summary.total_load_score, 1)}
+          visual={<MetricSparkline data={sparkbarToPoints(sparkbars?.load)} />}
+        />
+        <MetricCard
+          description="Average relative strength intensity across eligible sets."
+          status={{ label: "Trend", status: "info" }}
+          subtitle="Relative intensity"
+          title="Strength Progress"
+          value={
+            summary.avg_relative_intensity === null
+              ? "No data"
+              : `${formatNumber(summary.avg_relative_intensity, 0)}%`
+          }
+          visual={<MetricSparkline data={sparkbarToPoints(sparkbars?.intensity)} />}
+        />
+        <MetricCard
+          description={`${backPainLoggedCount}/${workoutCount} workouts include back pain feedback.`}
+          status={backPainStatus(backPain)}
+          subtitle="Average back pain"
+          title="Back Pain Risk"
+          value={backPain === null ? "No data" : `${formatNumber(backPain, 1)}/10`}
+          visual={
+            <MetricRangeBar
+              max={10}
+              min={0}
+              value={backPain}
+              valueLabel={backPain === null ? "No data" : `${formatNumber(backPain, 1)}/10`}
+              zones={backPainZones}
+            />
+          }
+        />
+        <MetricCard
+          description="Share of workouts with both RPE and back-pain context available."
+          status={{
+            label: consistency !== null && consistency >= 80 ? "On Track" : "Watch",
+            status: consistency !== null && consistency >= 80 ? "good" : "watch",
+          }}
+          subtitle="Feedback coverage"
+          title="Consistency"
+          value={consistency === null ? "No data" : `${formatNumber(consistency, 0)}%`}
+          visual={
+            <MetricProgressBar
+              markerLabel={
+                consistency === null ? "No data" : `${formatNumber(consistency, 0)}%`
+              }
+              value={consistency}
+              zones={recoveryZones}
+            />
+          }
         />
       </section>
+
+      <section className="panel training-load-status-card">
+        <div className="panel-header">
+          <div>
+            <h2>Training load status</h2>
+            <p className="muted">
+              ATL builds fatigue. CTL reflects fitness. TSB shows how fresh (+)
+              or fatigued (-) you are.
+            </p>
+          </div>
+          <MetricInfo>Real ATL, CTL, and TSB values are added in the training load phase.</MetricInfo>
+        </div>
+        <div className="training-load-placeholder">
+          <MetricRow
+            description="Short-term fatigue"
+            label="ATL"
+            status="neutral"
+            value="No data"
+            visual={<MetricProgressBar value={null} zones={recoveryZones} />}
+          />
+          <MetricRow
+            description="Longer-term base"
+            label="CTL"
+            status="neutral"
+            value="No data"
+            visual={<MetricProgressBar value={null} zones={recoveryZones} />}
+          />
+          <MetricRow
+            description="Freshness balance"
+            label="TSB"
+            status="neutral"
+            value="No data"
+            visual={<MetricRangeBar max={40} min={-40} value={null} zones={tsbZones} />}
+          />
+        </div>
+      </section>
+
+      <details className="panel metric-calculations-panel">
+        <summary>
+          <span>Calculations</span>
+          <span className="metric-calculation-legend">
+            <b className="metric-dot metric-dot-good" /> Good
+            <b className="metric-dot metric-dot-watch" /> Moderate
+            <b className="metric-dot metric-dot-bad" /> Risk
+          </span>
+        </summary>
+        <MetricRow
+          description="Fatigue from recent load"
+          label="Fatigue (ATL)"
+          status="neutral"
+          value="No data"
+          visual={<MetricProgressBar value={null} zones={recoveryZones} />}
+        />
+        <MetricRow
+          description="Fitness/base from longer load"
+          label="Fitness (CTL)"
+          status="neutral"
+          value="No data"
+          visual={<MetricProgressBar value={null} zones={recoveryZones} />}
+        />
+        <MetricRow
+          description="Freshness minus fatigue"
+          label="Stress Balance (TSB)"
+          status="neutral"
+          value="No data"
+          visual={<MetricRangeBar max={40} min={-40} value={null} zones={tsbZones} />}
+        />
+        <MetricRow
+          description="Acute load divided by chronic load"
+          label="Workload Ratio (AC)"
+          status="neutral"
+          value="No data"
+          visual={<MetricRangeBar max={2} min={0} value={null} zones={ratioZones} />}
+        />
+        <MetricRow
+          description="How repetitive the last week was"
+          label="Monotony"
+          status="neutral"
+          value="No data"
+          visual={<MetricRangeBar max={3} min={0} value={null} zones={ratioZones} />}
+        />
+        <MetricRow
+          description="Weekly load multiplied by monotony"
+          label="Training strain"
+          status="neutral"
+          value="No data"
+          visual={<MetricProgressBar value={null} zones={recoveryZones} />}
+        />
+      </details>
 
       <section className="stats-summary-panel">
         <h2>Summary</h2>
