@@ -25,5 +25,6 @@ def get_stats(
     return {
         "limit": "all" if parsed_limit is None else parsed_limit,
         "stats": stats,
+        "training_load": stats["training_load"],
         "charts": charts,
     }

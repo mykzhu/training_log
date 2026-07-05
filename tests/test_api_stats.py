@@ -162,6 +162,12 @@ class StatsApiTests(unittest.TestCase):
         self.assertIn("volume", response["charts"])
         self.assertIn("load", response["charts"])
         self.assertIn("sparkbars", response["charts"])
+        self.assertIn("training_load", response)
+        self.assertEqual(
+            response["training_load"],
+            response["stats"]["training_load"],
+        )
+        self.assertIn("series", response["training_load"])
 
     def test_get_stats_orders_by_created_at_ascending_then_id_ascending(self) -> None:
         newer_id = self.insert_workout(

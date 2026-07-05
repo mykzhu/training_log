@@ -483,6 +483,7 @@ class FinishCurrentWorkoutResponse(AppBaseModel):
 class StatsResponseModel(FlexibleResponse):
     limit: int | str
     stats: dict[str, Any]
+    training_load: dict[str, Any]
     charts: dict[str, Any]
 
 

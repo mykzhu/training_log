@@ -10,6 +10,8 @@ from app.services.analysis_service import (
     list_exercise_profiles,
     runtime_profiles_by_key,
 )
+from app.services.date_service import app_today
+from app.services.training_load_service import build_training_load_summary
 
 
 def get_best_e1rm_by_exercise(
@@ -1318,6 +1320,10 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
                 else None
             ),
         },
+        "training_load": build_training_load_summary(
+            workout_items,
+            today=app_today(),
+        ),
     }
 
 def exercise_set_payload(set_row: Any) -> dict[str, Any]:

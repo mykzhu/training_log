@@ -415,6 +415,7 @@ export type StatsResponseModel = {
   charts: Record<string, unknown>;
   limit: number | string;
   stats: Record<string, unknown>;
+  training_load: Record<string, unknown>;
 };
 
 export type UpdateSetRequest = {

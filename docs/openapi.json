@@ -1741,11 +1741,16 @@
           "stats": {
             "title": "Stats",
             "type": "object"
+          },
+          "training_load": {
+            "title": "Training Load",
+            "type": "object"
           }
         },
         "required": [
           "limit",
           "stats",
+          "training_load",
           "charts"
         ],
         "title": "StatsResponseModel",

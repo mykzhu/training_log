@@ -542,6 +542,53 @@ export type StatsCharts = {
   sparkbars: StatsSparkbars;
 };
 
+export type MetricStatus = "good" | "watch" | "bad" | "neutral" | "info";
+
+export type MetricZone = {
+  from_value: number;
+  to_value: number;
+  status: MetricStatus;
+  label: string;
+};
+
+export type TrainingLoadPoint = {
+  date: string;
+  load: number;
+  atl: number;
+  ctl: number;
+  tsb: number;
+  ac_ratio: number | null;
+  atl_percent: number | null;
+  ctl_percent: number | null;
+};
+
+export type TrainingLoadMetric = {
+  key: string;
+  label: string;
+  description: string;
+  value: number | null;
+  formatted: string;
+  status: MetricStatus;
+  percent: number | null;
+  min: number;
+  max: number;
+  zones: MetricZone[];
+};
+
+export type TrainingLoadSummary = {
+  latest_date: string | null;
+  daily_load: Array<{ date: string; load: number }>;
+  series: TrainingLoadPoint[];
+  weekly_load: number | null;
+  weekly_mean: number | null;
+  weekly_std: number | null;
+  monotony: number | null;
+  strain: number | null;
+  atl_reference: number | null;
+  ctl_reference: number | null;
+  metrics: TrainingLoadMetric[];
+};
+
 export type ExerciseWeeklyWorkloadPoint = {
   week_start: string;
   sets: number;
@@ -565,7 +612,9 @@ export type StatsResponse = {
     exercise_progress: ExerciseStrengthProgress[];
     exercise_rep_progress: ExerciseRepProgress[];
     exercise_weekly_workload: ExerciseWeeklyWorkload[];
+    training_load: TrainingLoadSummary;
   };
+  training_load: TrainingLoadSummary;
   charts: StatsCharts;
 };
 

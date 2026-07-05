@@ -1242,6 +1242,23 @@ a.compact-button {
   gap: 8px;
 }
 
+.training-load-chart {
+  min-height: 220px;
+  margin-bottom: 12px;
+}
+
+.training-load-empty {
+  display: grid;
+  min-height: 120px;
+  place-items: center;
+  margin-bottom: 12px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .metric-row {
   display: grid;
   grid-template-columns: minmax(150px, 1.1fr) minmax(160px, 1fr) auto auto;

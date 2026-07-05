@@ -1732,6 +1732,7 @@ const strengthWorkloadData =
             setsPerWorkout={setsPerWorkout}
             sparkbars={sparkbars}
             summary={summary}
+            trainingLoad={stats.training_load}
             uniqueExerciseCount={uniqueExerciseCount}
             workoutCount={workoutCount}
           />

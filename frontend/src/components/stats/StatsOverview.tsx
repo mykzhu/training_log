@@ -1,6 +1,25 @@
 import type { ReactNode } from "react";
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
-import type { StatsSparkbars, StatsSummary } from "../../api/types";
+import type {
+  MetricZone,
+  StatsSparkbars,
+  StatsSummary,
+  TrainingLoadMetric,
+  TrainingLoadSummary,
+} from "../../api/types";
+import {
+  formatChartDateTick,
+  formatChartDateTooltip,
+} from "../../utils/chartDateFormat";
 import MetricCard from "./MetricCard";
 import MetricInfo from "./MetricInfo";
 import MetricProgressBar from "./MetricProgressBar";
@@ -40,6 +59,7 @@ type StatsOverviewProps = {
   repsPerWorkout: number | null;
   rpeLoggedCount: number;
   backPainLoggedCount: number;
+  trainingLoad?: TrainingLoadSummary;
   workoutCount: number;
   formatNumber: (value: number | null | undefined, digits?: number) => string;
   formatKg: (value: number | null | undefined) => string;
@@ -161,6 +181,88 @@ function sparkbarToPoints(value: string | undefined): MetricSparklinePoint[] {
   }));
 }
 
+function statusLabel(status: MetricStatus) {
+  if (status === "neutral") {
+    return "No data";
+  }
+
+  if (status === "good") {
+    return "Good";
+  }
+
+  if (status === "watch") {
+    return "Watch";
+  }
+
+  if (status === "bad") {
+    return "Risk";
+  }
+
+  return "Info";
+}
+
+function toMetricZones(zones: MetricZone[]) {
+  return zones.map((zone) => ({
+    from: zone.from_value,
+    to: zone.to_value,
+    status: zone.status,
+    label: zone.label,
+  }));
+}
+
+function metricVisual(metric: TrainingLoadMetric | undefined) {
+  if (!metric) {
+    return <MetricProgressBar value={null} zones={recoveryZones} />;
+  }
+
+  const zones = toMetricZones(metric.zones);
+  const value = metric.percent ?? metric.value;
+
+  if (
+    metric.key === "tsb" ||
+    metric.key === "ac_ratio" ||
+    metric.key === "monotony"
+  ) {
+    return (
+      <MetricRangeBar
+        max={metric.max}
+        min={metric.min}
+        value={metric.value}
+        valueLabel={metric.formatted}
+        zones={zones.length > 0 ? zones : ratioZones}
+      />
+    );
+  }
+
+  return (
+    <MetricProgressBar
+      markerLabel={metric.formatted}
+      value={value}
+      zones={zones.length > 0 ? zones : recoveryZones}
+    />
+  );
+}
+
+function TrainingLoadMetricRow({
+  fallbackDescription,
+  fallbackLabel,
+  metric,
+}: {
+  fallbackDescription: string;
+  fallbackLabel: string;
+  metric?: TrainingLoadMetric;
+}) {
+  return (
+    <MetricRow
+      description={metric?.description ?? fallbackDescription}
+      label={metric?.label ?? fallbackLabel}
+      status={metric?.status ?? "neutral"}
+      value={metric?.formatted ?? "No data"}
+      visual={metricVisual(metric)}
+    />
+  );
+}
+
 export function StatsRangeToolbar({
   onSelectLimit,
   options,
@@ -199,9 +301,19 @@ export default function StatsOverview({
   setsPerWorkout,
   sparkbars,
   summary,
+  trainingLoad,
   uniqueExerciseCount,
   workoutCount,
 }: StatsOverviewProps) {
+  const metricByKey = new Map(
+    (trainingLoad?.metrics ?? []).map((metric) => [metric.key, metric]),
+  );
+  const atlMetric = metricByKey.get("atl");
+  const ctlMetric = metricByKey.get("ctl");
+  const tsbMetric = metricByKey.get("tsb");
+  const acMetric = metricByKey.get("ac_ratio");
+  const monotonyMetric = metricByKey.get("monotony");
+  const strainMetric = metricByKey.get("training_strain");
   const recovery = recoveryScore(summary);
   const consistency =
     workoutCount === 0
@@ -233,11 +345,14 @@ export default function StatsOverview({
           }
         />
         <MetricCard
-          description="Total app load points in the selected range."
-          status={{ label: "Load", status: "info" }}
-          subtitle={`${formatNumber(summary.avg_load_score, 1)} average`}
+          description="App load from the last 7 local days, including rest days."
+          status={{
+            label: statusLabel(atlMetric?.status ?? "neutral"),
+            status: atlMetric?.status ?? "neutral",
+          }}
+          subtitle={`${formatNumber(summary.avg_load_score, 1)} average per workout`}
           title="Weekly Load"
-          value={formatNumber(summary.total_load_score, 1)}
+          value={formatNumber(trainingLoad?.weekly_load, 1)}
           visual={<MetricSparkline data={sparkbarToPoints(sparkbars?.load)} />}
         />
         <MetricCard
@@ -298,29 +413,78 @@ export default function StatsOverview({
               or fatigued (-) you are.
             </p>
           </div>
-          <MetricInfo>Real ATL, CTL, and TSB values are added in the training load phase.</MetricInfo>
+          <MetricInfo>Daily load includes rest days from the first workout through today.</MetricInfo>
         </div>
+        {trainingLoad && trainingLoad.series.length > 0 ? (
+          <div className="training-load-chart">
+            <ResponsiveContainer height={220} width="100%">
+              <LineChart
+                data={trainingLoad.series}
+                margin={{ top: 12, right: 12, bottom: 0, left: 0 }}
+              >
+                <CartesianGrid stroke="#2e2e2e" strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="date"
+                  minTickGap={24}
+                  tickFormatter={(value) => formatChartDateTick(String(value))}
+                />
+                <YAxis width={42} />
+                <Tooltip
+                  formatter={(value, name) => [
+                    typeof value === "number"
+                      ? formatNumber(value, 1)
+                      : String(value),
+                    String(name).toUpperCase(),
+                  ]}
+                  labelFormatter={(value) =>
+                    formatChartDateTooltip(String(value))
+                  }
+                />
+                <Line
+                  dataKey="atl"
+                  dot={false}
+                  name="ATL"
+                  stroke="#ff9f0a"
+                  strokeWidth={2}
+                  type="monotone"
+                />
+                <Line
+                  dataKey="ctl"
+                  dot={false}
+                  name="CTL"
+                  stroke="#30d158"
+                  strokeWidth={2}
+                  type="monotone"
+                />
+                <Line
+                  dataKey="tsb"
+                  dot={false}
+                  name="TSB"
+                  stroke="#0a84ff"
+                  strokeWidth={2}
+                  type="monotone"
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <div className="training-load-empty">No load data yet</div>
+        )}
         <div className="training-load-placeholder">
-          <MetricRow
-            description="Short-term fatigue"
-            label="ATL"
-            status="neutral"
-            value="No data"
-            visual={<MetricProgressBar value={null} zones={recoveryZones} />}
+          <TrainingLoadMetricRow
+            fallbackDescription="Short-term fatigue"
+            fallbackLabel="ATL"
+            metric={atlMetric}
           />
-          <MetricRow
-            description="Longer-term base"
-            label="CTL"
-            status="neutral"
-            value="No data"
-            visual={<MetricProgressBar value={null} zones={recoveryZones} />}
+          <TrainingLoadMetricRow
+            fallbackDescription="Longer-term base"
+            fallbackLabel="CTL"
+            metric={ctlMetric}
           />
-          <MetricRow
-            description="Freshness balance"
-            label="TSB"
-            status="neutral"
-            value="No data"
-            visual={<MetricRangeBar max={40} min={-40} value={null} zones={tsbZones} />}
+          <TrainingLoadMetricRow
+            fallbackDescription="Freshness balance"
+            fallbackLabel="TSB"
+            metric={tsbMetric}
           />
         </div>
       </section>
@@ -334,47 +498,35 @@ export default function StatsOverview({
             <b className="metric-dot metric-dot-bad" /> Risk
           </span>
         </summary>
-        <MetricRow
-          description="Fatigue from recent load"
-          label="Fatigue (ATL)"
-          status="neutral"
-          value="No data"
-          visual={<MetricProgressBar value={null} zones={recoveryZones} />}
+        <TrainingLoadMetricRow
+          fallbackDescription="Fatigue from recent load"
+          fallbackLabel="Fatigue (ATL)"
+          metric={atlMetric}
         />
-        <MetricRow
-          description="Fitness/base from longer load"
-          label="Fitness (CTL)"
-          status="neutral"
-          value="No data"
-          visual={<MetricProgressBar value={null} zones={recoveryZones} />}
+        <TrainingLoadMetricRow
+          fallbackDescription="Fitness/base from longer load"
+          fallbackLabel="Fitness (CTL)"
+          metric={ctlMetric}
         />
-        <MetricRow
-          description="Freshness minus fatigue"
-          label="Stress Balance (TSB)"
-          status="neutral"
-          value="No data"
-          visual={<MetricRangeBar max={40} min={-40} value={null} zones={tsbZones} />}
+        <TrainingLoadMetricRow
+          fallbackDescription="Freshness minus fatigue"
+          fallbackLabel="Stress Balance (TSB)"
+          metric={tsbMetric}
         />
-        <MetricRow
-          description="Acute load divided by chronic load"
-          label="Workload Ratio (AC)"
-          status="neutral"
-          value="No data"
-          visual={<MetricRangeBar max={2} min={0} value={null} zones={ratioZones} />}
+        <TrainingLoadMetricRow
+          fallbackDescription="Acute load divided by chronic load"
+          fallbackLabel="Workload Ratio (AC)"
+          metric={acMetric}
         />
-        <MetricRow
-          description="How repetitive the last week was"
-          label="Monotony"
-          status="neutral"
-          value="No data"
-          visual={<MetricRangeBar max={3} min={0} value={null} zones={ratioZones} />}
+        <TrainingLoadMetricRow
+          fallbackDescription="How repetitive the last week was"
+          fallbackLabel="Monotony"
+          metric={monotonyMetric}
         />
-        <MetricRow
-          description="Weekly load multiplied by monotony"
-          label="Training strain"
-          status="neutral"
-          value="No data"
-          visual={<MetricProgressBar value={null} zones={recoveryZones} />}
+        <TrainingLoadMetricRow
+          fallbackDescription="Weekly load multiplied by monotony"
+          fallbackLabel="Training strain"
+          metric={strainMetric}
         />
       </details>
 

@@ -15,6 +15,7 @@ All notable changes to this project.
 * Current and Edit Workout delete controls now use the same compact `×` style.
 * Stats charts now use consistent readable date labels and responsive mobile X-axis labels.
 * Stats overview cards now include progress bars, range bars, sparklines, and a compact calculations panel.
+* Stats now includes app-native training load with daily rest-day decay, ATL, CTL, TSB, AC ratio, monotony, and strain.
 
 ### Fixed
 

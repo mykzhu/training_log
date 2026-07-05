@@ -1807,6 +1807,16 @@ TypeScript builds.
 Backend tests pass.
 ```
 
+Status: completed on 2026-07-05.
+
+Implementation notes:
+
+- Added `app/services/training_load_service.py` for daily app-load aggregation, rest-day series filling, EWMA ATL/CTL, TSB, AC ratio, ATL/CTL reference percentages, monotony, strain, statuses, and metric zones.
+- Added top-level `training_load` to the Stats API response while also retaining it inside `stats` for local consumers.
+- Regenerated OpenAPI/generated frontend contracts and added frontend API types for training-load metrics and series.
+- Replaced Phase 27 training-load placeholders with real backend metrics, ATL/CTL/TSB charting, and populated calculation rows.
+- Added focused backend tests for rest days, empty history, percentile fallback, and route-level `training_load` exposure.
+
 Suggested commit:
 
 ```text
