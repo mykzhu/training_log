@@ -4,24 +4,37 @@ All notable changes to this project.
 
 ## Unreleased
 
+## 1.3.0 - 2026-07-05
+
+Training Log 1.3.0 focuses on cleaner Settings and navigation, simplified workout logging on mobile, unified edit-workout saving, improved Stats chart formatting, visual metric cards, and app-native training-load metrics.
+
+### Added
+
+* Added training-load calculations: ATL, CTL, TSB, AC ratio, monotony, and training strain.
+* Added visual metric cards with progress bars, range bars, and sparklines on the Stats page.
+* Added grouped Training load status chart for ATL, CTL, and TSB.
+* Added advanced Calculations panel for training-load metrics.
+
 ### Changed
 
 * Settings sections now start collapsed with summary text for Garmin, Analysis Types, and Exercises and Weights.
 * Top navigation now keeps the same visible items on every page and highlights the current page.
-* Garmin Stats range controls no longer include a redundant inline Settings link.
-* Active Workout session RPE and Back pain now auto-save when changed and show lightweight save status.
 * Active Workout now adds existing exercises only and links users to Settings for exercise creation.
+* Active Workout session RPE and Back pain now auto-save when changed and show lightweight save status.
 * Edit Workout now uses one page-level Save workout action with an Unsaved changes state.
 * Current and Edit Workout delete controls now use the same compact `×` style.
 * Stats charts now use consistent readable date labels and responsive mobile X-axis labels.
-* Stats overview cards now include progress bars, range bars, sparklines, and a compact calculations panel.
-* Stats now includes app-native training load with daily rest-day decay, ATL, CTL, TSB, AC ratio, monotony, and strain.
+
+### Removed
+
+* Removed redundant inline Settings link from Garmin stats controls.
+* Removed inline exercise creation from active workout page.
+* Removed separate Save workout info button from edit workout page.
 
 ### Fixed
 
-* Scoped the Garmin auto-sync test monkeypatch for `asyncio.to_thread` so it is restored within the test.
 * Preserved mobile scroll position when adding an exercise to an active workout.
-* Removed scattered edit-workout set and workout-info save buttons.
+* Fixed test monkeypatch cleanup for `asyncio.to_thread`.
 
 ## 1.2.0 - 2026-07-02
 

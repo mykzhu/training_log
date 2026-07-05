@@ -2054,6 +2054,15 @@ Training load cards show No data / insufficient data.
 Charts show empty states gracefully.
 ```
 
+Status: completed on 2026-07-05.
+
+Implementation notes:
+
+- Added the `1.3.0` changelog section covering Phases 23-28.
+- Bumped `config.yaml` to `1.3.0`.
+- Confirmed Phases 23-28 are marked completed and added release summary context.
+- Release verification includes automated backend/frontend checks and Docker build; manual smoke checks remain a human release step.
+
 Suggested commit:
 
 ```text
