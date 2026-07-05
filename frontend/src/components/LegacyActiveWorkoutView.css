@@ -100,19 +100,39 @@
   margin-bottom: 0;
 }
 
+.active-session-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.active-save-status {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.active-save-status-saving {
+  color: var(--blue);
+}
+
+.active-save-status-saved {
+  color: var(--green);
+}
+
+.active-save-status-error {
+  color: var(--red);
+}
+
 .active-session-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   align-items: end;
   gap: 8px;
 }
 
-.active-session-save {
-  min-width: 84px;
-}
-
-.active-exercise-add-row,
-.active-new-exercise-row {
+.active-exercise-add-row {
   display: grid;
   gap: 8px;
 }
@@ -121,8 +141,16 @@
   grid-template-columns: minmax(0, 1fr) auto;
 }
 
-.active-new-exercise-row {
-  grid-template-columns: minmax(0, 1fr) minmax(80px, 120px) auto;
+.active-settings-link {
+  justify-self: start;
+  color: var(--blue);
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.active-settings-link:hover {
+  text-decoration: underline;
 }
 
 .active-exercise-list {
@@ -269,16 +297,7 @@
     grid-template-columns: 1fr 1fr;
   }
 
-  .active-session-save {
-    grid-column: 1 / -1;
-    width: 100%;
-  }
-
   .active-exercise-add-row {
     grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .active-new-exercise-row {
-    grid-template-columns: minmax(0, 1fr) minmax(76px, 96px) auto;
   }
 }

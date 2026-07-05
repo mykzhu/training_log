@@ -533,6 +533,15 @@ Backend exercise creation endpoint remains available.
 cd frontend && npm run typecheck && npm run build
 ```
 
+Status: completed on 2026-07-05.
+
+Implementation notes:
+
+- Active Workout preserves mobile scroll position around add-exercise actions.
+- RPE and Back pain save immediately on select changes with Saving/Saved/Failed status.
+- Removed inline active-workout exercise creation fields and API usage.
+- Added a Settings link for missing exercises while keeping backend exercise creation endpoints unchanged.
+
 Manual mobile checks:
 
 ```text

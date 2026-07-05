@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
 import type { CurrentWorkout, CurrentWorkoutExercise } from "../api/types";
 import { rpeOptionLabel } from "../utils/rpeLabels";
@@ -20,11 +21,11 @@ type LegacyActiveWorkoutViewProps = {
   elapsedSeconds: number;
   error: string | null;
   exerciseOptions: ExerciseOption[];
+  metadataSaveStatus: "idle" | "saving" | "saved" | "error";
   selectedExerciseId: string;
   onAddExercise: () => Promise<void> | void;
   onAddSet: (exerciseId: number, weight: number, reps: number) => Promise<void> | void;
   onCancel: () => Promise<void> | void;
-  onCreateExercise: (name: string, initialWeight: number) => Promise<void> | void;
   onDeleteExercise: (exerciseId: number) => Promise<void> | void;
   onDeleteSet: (setId: number) => Promise<void> | void;
   onFinish: () => Promise<void> | void;
@@ -272,17 +273,33 @@ function buildActiveRecommendation(
   };
 }
 
+function metadataSaveStatusLabel(
+  status: LegacyActiveWorkoutViewProps["metadataSaveStatus"],
+) {
+  if (status === "saving") {
+    return "Saving...";
+  }
+  if (status === "saved") {
+    return "Saved";
+  }
+  if (status === "error") {
+    return "Could not save";
+  }
+
+  return "Auto-saves";
+}
+
 export default function LegacyActiveWorkoutView({
   currentWorkout,
   disabled,
   elapsedSeconds,
   error,
   exerciseOptions,
+  metadataSaveStatus,
   selectedExerciseId,
   onAddExercise,
   onAddSet,
   onCancel,
-  onCreateExercise,
   onDeleteExercise,
   onDeleteSet,
   onFinish,
@@ -295,34 +312,17 @@ export default function LegacyActiveWorkoutView({
   const [backPain, setBackPain] = useState(
     String(currentWorkout.lower_back_pain ?? ""),
   );
-  const [newExerciseName, setNewExerciseName] = useState("");
-  const [newExerciseWeight, setNewExerciseWeight] = useState("0");
 
   useEffect(() => {
     setSessionRpe(String(currentWorkout.session_rpe ?? ""));
     setBackPain(String(currentWorkout.lower_back_pain ?? ""));
   }, [currentWorkout.session_rpe, currentWorkout.lower_back_pain]);
 
-  async function saveSessionStatus() {
+  async function saveSessionStatus(nextSessionRpe: string, nextBackPain: string) {
     await onSaveMetadata(
-      sessionRpe ? Number(sessionRpe) : null,
-      backPain !== "" ? Number(backPain) : null,
+      nextSessionRpe ? Number(nextSessionRpe) : null,
+      nextBackPain !== "" ? Number(nextBackPain) : null,
     );
-  }
-
-  async function createNewExercise() {
-    const cleanName = newExerciseName.trim();
-    if (!cleanName) {
-      return;
-    }
-
-    const initialWeight = Number(newExerciseWeight);
-    if (!Number.isFinite(initialWeight) || initialWeight < 0) {
-      return;
-    }
-
-    await onCreateExercise(cleanName, initialWeight);
-    setNewExerciseName("");
   }
 
   return (
@@ -371,7 +371,14 @@ export default function LegacyActiveWorkoutView({
       )}
 
       <section className="panel active-session-card">
-        <h2>Session status</h2>
+        <div className="active-session-heading">
+          <h2>Session status</h2>
+          <span
+            className={`active-save-status active-save-status-${metadataSaveStatus}`}
+          >
+            {metadataSaveStatusLabel(metadataSaveStatus)}
+          </span>
+        </div>
         <div className="active-session-row">
           <label>
             RPE
@@ -380,7 +387,11 @@ export default function LegacyActiveWorkoutView({
                 sessionRpe ? Number(sessionRpe) : null,
               )}`}
               disabled={disabled}
-              onChange={(event) => setSessionRpe(event.target.value)}
+              onChange={(event) => {
+                const value = event.target.value;
+                setSessionRpe(value);
+                void saveSessionStatus(value, backPain);
+              }}
               value={sessionRpe}
             >
               <option value="">RPE</option>
@@ -400,7 +411,11 @@ export default function LegacyActiveWorkoutView({
                 backPain !== "" ? Number(backPain) : null,
               )}`}
               disabled={disabled}
-              onChange={(event) => setBackPain(event.target.value)}
+              onChange={(event) => {
+                const value = event.target.value;
+                setBackPain(value);
+                void saveSessionStatus(sessionRpe, value);
+              }}
               value={backPain}
             >
               <option value="">Back Pain</option>
@@ -411,14 +426,6 @@ export default function LegacyActiveWorkoutView({
               ))}
             </select>
           </label>
-          <button
-            className="primary-button active-session-save"
-            disabled={disabled}
-            onClick={() => void saveSessionStatus()}
-            type="button"
-          >
-            Save
-          </button>
         </div>
       </section>
 
@@ -446,38 +453,9 @@ export default function LegacyActiveWorkoutView({
             Add
           </button>
         </div>
-
-        <div className="active-new-exercise-row">
-          <input
-            disabled={disabled}
-            onChange={(event) => setNewExerciseName(event.target.value)}
-            placeholder="New exercise name"
-            type="text"
-            value={newExerciseName}
-          />
-          <input
-            aria-label="Initial weight"
-            disabled={disabled}
-            min="0"
-            onChange={(event) => setNewExerciseWeight(event.target.value)}
-            step="0.25"
-            type="number"
-            value={newExerciseWeight}
-          />
-          <button
-            className="ghost-button"
-            disabled={
-              disabled ||
-              !newExerciseName.trim() ||
-              !Number.isFinite(Number(newExerciseWeight)) ||
-              Number(newExerciseWeight) < 0
-            }
-            onClick={() => void createNewExercise()}
-            type="button"
-          >
-            Create
-          </button>
-        </div>
+        <Link className="active-settings-link" to="/settings">
+          Missing an exercise? Add it in Settings.
+        </Link>
       </section>
 
       {currentWorkout.exercises.length > 0 ? (

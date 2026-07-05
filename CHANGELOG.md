@@ -9,10 +9,13 @@ All notable changes to this project.
 * Settings sections now start collapsed with summary text for Garmin, Analysis Types, and Exercises and Weights.
 * Top navigation now keeps the same visible items on every page and highlights the current page.
 * Garmin Stats range controls no longer include a redundant inline Settings link.
+* Active Workout session RPE and Back pain now auto-save when changed and show lightweight save status.
+* Active Workout now adds existing exercises only and links users to Settings for exercise creation.
 
 ### Fixed
 
 * Scoped the Garmin auto-sync test monkeypatch for `asyncio.to_thread` so it is restored within the test.
+* Preserved mobile scroll position when adding an exercise to an active workout.
 
 ## 1.2.0 - 2026-07-02
 

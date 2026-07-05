@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import {
@@ -12,7 +12,7 @@ import {
   startCurrentWorkout,
   updateCurrentWorkoutMetadata,
 } from "../api/currentWorkout";
-import { createExercise, getExercises } from "../api/exercises";
+import { getExercises } from "../api/exercises";
 import { syncGarmin } from "../api/garmin";
 import type {
   CurrentWorkout,
@@ -26,6 +26,8 @@ import type {
   SuggestedSet,
 } from "../api/types";
 import LegacyActiveWorkoutView from "../components/LegacyActiveWorkoutView";
+
+type SaveStatus = "idle" | "saving" | "saved" | "error";
 
 function formatGarminDate(value: string | null | undefined) {
   if (!value) {
@@ -424,6 +426,9 @@ export default function CurrentWorkoutPage() {
   const [garminError, setGarminError] = useState<string | null>(null);
   const [garminPending, setGarminPending] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [metadataSaveStatus, setMetadataSaveStatus] =
+    useState<SaveStatus>("idle");
+  const metadataSaveSequence = useRef(0);
 
   async function load() {
     const [workoutResponse, exerciseResponse] = await Promise.all([
@@ -499,32 +504,52 @@ export default function CurrentWorkoutPage() {
     if (!exerciseId) {
       return;
     }
-    await runAction(() => addCurrentWorkoutExercise(exerciseId));
-  }
 
-  async function createNewExercise(name: string, initialWeight: number) {
-    const cleanName = name.trim();
-    if (!cleanName || !Number.isFinite(initialWeight) || initialWeight < 0) {
-      return;
+    const isSmallScreen =
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 640px)").matches;
+    const previousScrollY = isSmallScreen ? window.scrollY : null;
+
+    if (isSmallScreen && document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
     }
 
-    setPending(true);
+    await runAction(() => addCurrentWorkoutExercise(exerciseId));
+
+    if (previousScrollY !== null) {
+      window.requestAnimationFrame(() => {
+        window.scrollTo({ top: previousScrollY, behavior: "auto" });
+      });
+    }
+  }
+
+  async function saveMetadata(
+    sessionRpe: number | null,
+    lowerBackPain: number | null,
+  ) {
+    const sequence = metadataSaveSequence.current + 1;
+    metadataSaveSequence.current = sequence;
+    setMetadataSaveStatus("saving");
     setError(null);
     try {
-      const response = await createExercise({
-        name: cleanName,
-        weights: [initialWeight],
+      const response = await updateCurrentWorkoutMetadata({
+        session_rpe: sessionRpe,
+        lower_back_pain: lowerBackPain,
       });
-      const exerciseResponse = await getExercises();
-      const workoutResponse = await addCurrentWorkoutExercise(response.exercise.id);
-      setExercises(exerciseResponse.exercises);
-      setSelectedExerciseId(String(response.exercise.id));
-      setCurrentWorkout(workoutResponse);
-      setElapsedSeconds(workoutResponse.elapsed_seconds);
+      if (metadataSaveSequence.current === sequence) {
+        setCurrentWorkout(response);
+        setElapsedSeconds(response.elapsed_seconds);
+        setMetadataSaveStatus("saved");
+      }
     } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : "Action failed.");
-    } finally {
-      setPending(false);
+      if (metadataSaveSequence.current === sequence) {
+        setMetadataSaveStatus("error");
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "Could not save session status.",
+        );
+      }
     }
   }
 
@@ -599,26 +624,19 @@ export default function CurrentWorkoutPage() {
       elapsedSeconds={elapsedSeconds}
       error={error}
       exerciseOptions={exerciseOptions}
+      metadataSaveStatus={metadataSaveStatus}
       selectedExerciseId={selectedExerciseId}
       onAddExercise={addSelectedExercise}
       onAddSet={(exerciseId, weight, reps) =>
         runAction(() => addCurrentWorkoutSet(exerciseId, { weight, reps }))
       }
       onCancel={cancelWorkout}
-      onCreateExercise={createNewExercise}
       onDeleteExercise={(exerciseId) =>
         runAction(() => deleteCurrentWorkoutExercise(exerciseId))
       }
       onDeleteSet={(setId) => runAction(() => deleteCurrentWorkoutSet(setId))}
       onFinish={finishWorkout}
-      onSaveMetadata={(sessionRpe, lowerBackPain) =>
-        runAction(() =>
-          updateCurrentWorkoutMetadata({
-            session_rpe: sessionRpe,
-            lower_back_pain: lowerBackPain,
-          }),
-        )
-      }
+      onSaveMetadata={saveMetadata}
       onSelectExercise={setSelectedExerciseId}
     />
   );
