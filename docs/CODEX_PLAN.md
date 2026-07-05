@@ -1035,6 +1035,15 @@ X labels do not overlap heavily.
 Tap/hover tooltip shows full date.
 ```
 
+Status: completed on 2026-07-05.
+
+Implementation notes:
+
+- Added shared chart date formatting helpers with fixed `03 Jul`, `03.07`, and `03 Jul 2026` outputs.
+- Added a reusable media-query hook and responsive X-axis prop helper.
+- Applied shared date tick and tooltip formatting to date-based Stats charts.
+- Kept non-date axes such as exercise names and numeric volume axes unchanged.
+
 Suggested commit:
 
 ```text

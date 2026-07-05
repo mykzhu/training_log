@@ -30,6 +30,15 @@ import type { LoadCalendar } from "../components/stats/StatsLoadCalendar";
 import StatsOverview, {
   StatsRangeToolbar,
 } from "../components/stats/StatsOverview";
+import {
+  getResponsiveXAxisProps,
+  useMediaQuery,
+} from "../hooks/useMediaQuery";
+import {
+  formatChartDateTick,
+  formatChartDateTooltip,
+  isDateLikeChartValue,
+} from "../utils/chartDateFormat";
 
 import type {
   ExerciseRepProgress,
@@ -110,14 +119,7 @@ type WeeklyWorkloadChartPoint =
   };
 
 function formatWeekLabel(weekStart: string) {
-  const [year, month, day] = weekStart
-    .split("-")
-    .map(Number);
-
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-  }).format(new Date(year, month - 1, day));
+  return formatChartDateTick(weekStart);
 }
 
 function weekStartForDate(dateValue: string) {
@@ -333,7 +335,7 @@ function BenchmarkProgressTooltip({
 
   return (
     <div className="benchmark-progress-tooltip">
-      <strong>{point.date}</strong>
+      <strong>{formatChartDateTooltip(point.date)}</strong>
 
       {visibleSeries.map((item) => {
         const normalizedValue = Number(
@@ -399,7 +401,7 @@ function WeeklyWorkloadTooltip({
   return (
     <div className="strength-progress-tooltip">
       <strong>
-        Week of {formatWeekLabel(point.week_start)}
+        Week of {formatChartDateTooltip(point.week_start)}
       </strong>
 
       <div>
@@ -458,7 +460,7 @@ function StrengthWorkloadTooltip({
   return (
     <div className="strength-progress-tooltip">
       <strong>
-        Week of {formatWeekLabel(point.week_start)}
+        Week of {formatChartDateTooltip(point.week_start)}
       </strong>
 
       {mode === "strength" ? (
@@ -551,7 +553,7 @@ function StrengthProgressTooltip({
 
   return (
     <div className="strength-progress-tooltip">
-      <strong>{point.date}</strong>
+      <strong>{formatChartDateTooltip(point.date)}</strong>
 
       <div>
         <span>Session e1RM</span>
@@ -598,7 +600,7 @@ function RepWeightProgressTooltip({
 
   return (
     <div className="strength-progress-tooltip">
-      <strong>{point.date}</strong>
+      <strong>{formatChartDateTooltip(point.date)}</strong>
 
       <div>
         <span>Best {point.reps}-rep weight</span>
@@ -632,12 +634,17 @@ function commonTooltipProps() {
       fontWeight: 700,
     },
     formatter: chartTooltipFormatter,
+    labelFormatter: (value: unknown) =>
+      isDateLikeChartValue(value)
+        ? formatChartDateTooltip(String(value))
+        : String(value),
   };
 }
 
 export default function StatsPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const isSmallScreen = useMediaQuery("(max-width: 640px)");
   const statsLimit = parseStatsLimit(searchParams.get("limit"));
   const {
     data: stats,
@@ -712,6 +719,29 @@ export default function StatsPage() {
     if (exerciseId !== null) {
       navigateToExerciseStats(exerciseId);
     }
+  }
+
+  function dateXAxisProps(pointCount: number) {
+    return {
+      ...getResponsiveXAxisProps(pointCount, isSmallScreen),
+      stroke: chartColors.muted,
+      tick: { fontSize: 12 },
+      tickFormatter: (value: string | Date) =>
+        formatChartDateTick(value, { compact: isSmallScreen }),
+    };
+  }
+
+  function weekXAxisProps(pointCount: number) {
+    return {
+      ...getResponsiveXAxisProps(pointCount, isSmallScreen),
+      stroke: chartColors.muted,
+      tick: { fontSize: 12 },
+      tickFormatter: (value: string | Date) =>
+        formatChartDateTick(value, {
+          compact: isSmallScreen,
+          includeYear: !isSmallScreen,
+        }),
+    };
   }
 
   const workoutData = useMemo(
@@ -1747,8 +1777,7 @@ const strengthWorkloadData =
 
                   <XAxis
                     dataKey="date"
-                    stroke={chartColors.muted}
-                    tick={{ fontSize: 12 }}
+                    {...dateXAxisProps(workoutData.length)}
                   />
 
                   <YAxis
@@ -1838,8 +1867,7 @@ const strengthWorkloadData =
 
                   <XAxis
                     dataKey="date"
-                    stroke={chartColors.muted}
-                    tick={{ fontSize: 12 }}
+                    {...dateXAxisProps(workoutData.length)}
                   />
 
                   <YAxis
@@ -1947,8 +1975,7 @@ const strengthWorkloadData =
 
                   <XAxis
                     dataKey="date"
-                    stroke={chartColors.muted}
-                    tick={{ fontSize: 12 }}
+                    {...dateXAxisProps(workoutData.length)}
                   />
 
                   <YAxis
@@ -2038,8 +2065,7 @@ const strengthWorkloadData =
 
                   <XAxis
                     dataKey="date"
-                    stroke={chartColors.muted}
-                    tick={{ fontSize: 12 }}
+                    {...dateXAxisProps(workoutData.length)}
                   />
 
                   <YAxis
@@ -2197,7 +2223,10 @@ const strengthWorkloadData =
                   onClick={openWorkoutFromChart}
                 >
                   <CartesianGrid stroke={chartColors.grid} strokeDasharray="3 3" />
-                  <XAxis dataKey="date" stroke={chartColors.muted} tick={{ fontSize: 12 }} />
+                  <XAxis
+                    dataKey="date"
+                    {...dateXAxisProps(workoutData.length)}
+                  />
                   <YAxis domain={[0, 10]} stroke={chartColors.muted} tick={{ fontSize: 12 }} />
                   <Tooltip {...commonTooltipProps()} />
                   <Legend wrapperStyle={{ color: chartColors.muted }} />
@@ -2343,11 +2372,7 @@ const strengthWorkloadData =
 
                       <XAxis
                         dataKey="chartKey"
-                        stroke={chartColors.muted}
-                        tick={{ fontSize: 12 }}
-                        tickFormatter={(value) =>
-                          String(value).slice(0, 10)
-                        }
+                        {...dateXAxisProps(strengthChartData.length)}
                       />
 
                       <YAxis
@@ -2568,11 +2593,7 @@ const strengthWorkloadData =
 
                       <XAxis
                         dataKey="chartKey"
-                        stroke={chartColors.muted}
-                        tick={{ fontSize: 12 }}
-                        tickFormatter={(value) =>
-                          String(value).slice(0, 10)
-                        }
+                        {...dateXAxisProps(repWeightChartData.length)}
                       />
 
                       <YAxis
@@ -2811,9 +2832,8 @@ const strengthWorkloadData =
                           />
 
                           <XAxis
-                            dataKey="weekLabel"
-                            stroke={chartColors.muted}
-                            tick={{ fontSize: 12 }}
+                            dataKey="week_start"
+                            {...weekXAxisProps(weeklyWorkloadData.length)}
                           />
 
                           <YAxis
@@ -3166,13 +3186,7 @@ const strengthWorkloadData =
 
                             <XAxis
                               dataKey="week_start"
-                              stroke={chartColors.muted}
-                              tick={{ fontSize: 12 }}
-                              tickFormatter={(value) =>
-                                formatWeekLabel(
-                                  String(value),
-                                )
-                              }
+                              {...weekXAxisProps(strengthWorkloadData.length)}
                             />
 
                             <YAxis
@@ -3419,14 +3433,9 @@ const strengthWorkloadData =
 
                               <XAxis
                                 dataKey="chartKey"
-                                interval="preserveStartEnd"
                                 minTickGap={32}
                                 padding={{ left: 10, right: 10 }}
-                                stroke={chartColors.muted}
-                                tick={{ fontSize: 12 }}
-                                tickFormatter={(value) =>
-                                  formatWeekLabel(String(value))
-                                }
+                                {...dateXAxisProps(benchmarkChartData.length)}
                               />
 
                               <YAxis

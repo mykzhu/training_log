@@ -13,6 +13,7 @@ All notable changes to this project.
 * Active Workout now adds existing exercises only and links users to Settings for exercise creation.
 * Edit Workout now uses one page-level Save workout action with an Unsaved changes state.
 * Current and Edit Workout delete controls now use the same compact `×` style.
+* Stats charts now use consistent readable date labels and responsive mobile X-axis labels.
 
 ### Fixed
 
