@@ -12,6 +12,33 @@
   line-height: 1.4;
 }
 
+.edit-workout-save-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.edit-workout-save-panel h2 {
+  margin: 0;
+  color: var(--blue);
+  font-size: 21px;
+}
+
+.edit-workout-save-panel p {
+  margin: 4px 0 0;
+}
+
+.edit-dirty-text {
+  color: var(--yellow);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.edit-workout-save-button {
+  min-width: 140px;
+}
+
 .edit-workout-stat-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -127,7 +154,7 @@
 }
 
 .edit-set-row {
-  grid-template-columns: 44px minmax(0, 1fr) minmax(0, 1fr) auto 48px;
+  grid-template-columns: 44px minmax(0, 1fr) minmax(0, 1fr) 48px;
   min-height: auto;
   align-items: center;
   padding: 8px 0;
@@ -146,16 +173,6 @@
 .edit-set-row label select,
 .edit-set-add-row label select {
   font-size: 17px;
-}
-
-.edit-set-save-button {
-  background: var(--green);
-  color: #ffffff;
-}
-
-.edit-set-delete-button {
-  background: var(--red);
-  color: #ffffff;
 }
 
 .edit-set-add-row {
@@ -198,6 +215,15 @@
   .edit-exercise-delete-button {
     flex: 0 0 48px;
   }
+
+  .edit-workout-save-panel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .edit-workout-save-button {
+    width: 100%;
+  }
 }
 
 @media (max-width: 520px) {
@@ -215,11 +241,6 @@
   .edit-set-row label,
   .edit-set-row label select {
     min-width: 0;
-    width: 100%;
-  }
-
-  .edit-set-row .edit-set-save-button {
-    grid-column: 2 / 4;
     width: 100%;
   }
 

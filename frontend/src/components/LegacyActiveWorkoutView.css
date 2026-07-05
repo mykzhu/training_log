@@ -186,15 +186,13 @@
   line-height: 1.35;
 }
 
-.active-exercise-delete-button,
-.active-set-delete-button,
 .active-cancel-button {
   background: transparent;
   color: var(--red);
 }
 
 .active-exercise-delete-button {
-  min-height: 36px;
+  min-height: 40px;
   padding: 6px 8px;
 }
 
@@ -236,7 +234,7 @@
 
 .active-set-delete-button {
   min-width: 40px;
-  min-height: 36px;
+  min-height: 40px;
   padding: 6px 8px;
   font-size: 20px;
   line-height: 1;

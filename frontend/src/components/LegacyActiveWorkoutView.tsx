@@ -683,12 +683,14 @@ function LegacyActiveExerciseCard({
           </p>
         </div>
         <button
-          className="active-exercise-delete-button"
+          aria-label={`Remove ${exercise.exercise_name}`}
+          className="icon-delete-button active-exercise-delete-button"
           disabled={disabled}
           onClick={deleteExercise}
+          title={`Remove ${exercise.exercise_name}`}
           type="button"
         >
-          Delete
+          ×
         </button>
       </div>
 
@@ -711,10 +713,11 @@ function LegacyActiveExerciseCard({
                   <td>{setEntry.reps}</td>
                   <td>
                     <button
-                      aria-label={`Delete set ${setEntry.set_number}`}
-                      className="active-set-delete-button"
+                      aria-label={`Remove set ${setEntry.set_number}`}
+                      className="icon-delete-button active-set-delete-button"
                       disabled={disabled}
                       onClick={() => void onDeleteSet(setEntry.id)}
+                      title={`Remove set ${setEntry.set_number}`}
                       type="button"
                     >
                       ×

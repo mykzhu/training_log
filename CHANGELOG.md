@@ -11,11 +11,14 @@ All notable changes to this project.
 * Garmin Stats range controls no longer include a redundant inline Settings link.
 * Active Workout session RPE and Back pain now auto-save when changed and show lightweight save status.
 * Active Workout now adds existing exercises only and links users to Settings for exercise creation.
+* Edit Workout now uses one page-level Save workout action with an Unsaved changes state.
+* Current and Edit Workout delete controls now use the same compact `×` style.
 
 ### Fixed
 
 * Scoped the Garmin auto-sync test monkeypatch for `asyncio.to_thread` so it is restored within the test.
 * Preserved mobile scroll position when adding an exercise to an active workout.
+* Removed scattered edit-workout set and workout-info save buttons.
 
 ## 1.2.0 - 2026-07-02
 

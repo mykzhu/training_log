@@ -19,6 +19,7 @@ type SetRowProps = {
   weightOptions?: number[];
   onDelete: (setId: number) => void;
   onUpdate?: (setId: number, payload: { weight?: number; reps?: number }) => void;
+  updateOnChange?: boolean;
 };
 
 export default function SetRow({
@@ -30,6 +31,7 @@ export default function SetRow({
   setEntry,
   variant = "default",
   weightOptions,
+  updateOnChange = false,
 }: SetRowProps) {
   const [weight, setWeight] = useState(String(setEntry.weight));
   const [reps, setReps] = useState(String(setEntry.reps));
@@ -56,6 +58,23 @@ export default function SetRow({
   const selectWeightOptions = weightOptions ?? buildWeightOptions(setEntry.weight);
   const selectRepsOptions = repsOptions ?? buildRepsOptions(setEntry.reps);
 
+  function updateSet(nextWeight: string, nextReps: string) {
+    const nextParsedWeight = Number(nextWeight);
+    const nextParsedReps = Number(nextReps);
+    if (
+      onUpdate &&
+      Number.isFinite(nextParsedWeight) &&
+      Number.isInteger(nextParsedReps) &&
+      nextParsedWeight >= 0 &&
+      nextParsedReps >= 1
+    ) {
+      onUpdate(setEntry.id, {
+        weight: nextParsedWeight,
+        reps: nextParsedReps,
+      });
+    }
+  }
+
   function deleteSet() {
     if (
       isLegacyEdit &&
@@ -77,7 +96,13 @@ export default function SetRow({
             aria-label={isLegacyEdit ? `Set ${setEntry.set_number} weight` : undefined}
             className="scroll-select"
             disabled={disabled || !onUpdate}
-            onChange={(event) => setWeight(event.target.value)}
+            onChange={(event) => {
+              const value = event.target.value;
+              setWeight(value);
+              if (updateOnChange) {
+                updateSet(value, reps);
+              }
+            }}
             value={weight}
           >
             {selectWeightOptions.map((option) => (
@@ -105,7 +130,13 @@ export default function SetRow({
             aria-label={isLegacyEdit ? `Set ${setEntry.set_number} repetitions` : undefined}
             className="scroll-select"
             disabled={disabled || !onUpdate}
-            onChange={(event) => setReps(event.target.value)}
+            onChange={(event) => {
+              const value = event.target.value;
+              setReps(value);
+              if (updateOnChange) {
+                updateSet(weight, value);
+              }
+            }}
             value={reps}
           >
             {selectRepsOptions.map((option) => (
@@ -126,13 +157,9 @@ export default function SetRow({
           />
         )}
       </label>
-      {onUpdate && (
+      {onUpdate && !updateOnChange && (
         <button
-          className={
-            isLegacyEdit
-              ? "edit-set-save-button"
-              : "secondary-button compact-button"
-          }
+          className="secondary-button compact-button"
           disabled={disabled || !canSave}
           onClick={() =>
             onUpdate(setEntry.id, {
@@ -148,11 +175,13 @@ export default function SetRow({
       <button
         className={
           isLegacyEdit
-            ? "edit-set-delete-button"
+            ? "icon-delete-button edit-set-delete-button"
             : "ghost-button compact-button danger-text"
         }
+        aria-label={`Remove set ${setEntry.set_number}`}
         disabled={disabled}
         onClick={deleteSet}
+        title={`Remove set ${setEntry.set_number}`}
         type="button"
       >
         {isLegacyEdit ? "×" : "Delete"}

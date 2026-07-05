@@ -1,15 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { getExercises } from "../api/exercises";
-import type { Exercise, WorkoutDetail, WorkoutSummary } from "../api/types";
+import type {
+  Exercise,
+  SetEntry,
+  WorkoutDetail,
+  WorkoutExercise,
+  WorkoutSummary,
+} from "../api/types";
 import {
   addWorkoutExercise,
   addWorkoutExerciseSet,
   deleteWorkout,
   deleteWorkoutExercise,
   deleteWorkoutSet,
-  duplicateWorkoutExerciseSet,
   getWorkout,
   getWorkouts,
   updateWorkout,
@@ -20,7 +25,6 @@ import ReadonlyWorkoutDetail, {
   PostWorkoutRecommendationCard,
 } from "../components/ReadonlyWorkoutDetail";
 import StatCard from "../components/StatCard";
-import StatusBadge from "../components/StatusBadge";
 import { rpeOptionLabel } from "../utils/rpeLabels";
 import "../edit-workout-legacy.css";
 
@@ -135,6 +139,67 @@ function scoreMetricClass(value: number | null | undefined) {
   return "metric-red";
 }
 
+type SaveStatus = "idle" | "saving" | "saved" | "error";
+
+function parseOptionalScore(value: string) {
+  return value === "" ? null : Number(value);
+}
+
+function saveStatusLabel(status: SaveStatus) {
+  if (status === "saving") {
+    return "Saving...";
+  }
+  if (status === "saved") {
+    return "Workout saved";
+  }
+  if (status === "error") {
+    return "Could not save workout";
+  }
+
+  return "No changes";
+}
+
+function recalculateExercise(exercise: WorkoutExercise): WorkoutExercise {
+  const sets = exercise.sets.map((setEntry, index) => ({
+    ...setEntry,
+    set_number: index + 1,
+  }));
+  return {
+    ...exercise,
+    sets,
+    total_sets: sets.length,
+    total_reps: sets.reduce((sum, setEntry) => sum + setEntry.reps, 0),
+    total_volume: sets.reduce(
+      (sum, setEntry) => sum + setEntry.weight * setEntry.reps,
+      0,
+    ),
+  };
+}
+
+function recalculateDetail(detail: WorkoutDetail): WorkoutDetail {
+  const exercises = detail.exercises.map(recalculateExercise);
+  return {
+    ...detail,
+    exercises,
+    total_sets: exercises.reduce((sum, exercise) => sum + exercise.total_sets, 0),
+    total_reps: exercises.reduce((sum, exercise) => sum + exercise.total_reps, 0),
+    total_volume: exercises.reduce(
+      (sum, exercise) => sum + exercise.total_volume,
+      0,
+    ),
+  };
+}
+
+function cloneDetail(detail: WorkoutDetail): WorkoutDetail {
+  return {
+    ...detail,
+    workout: { ...detail.workout },
+    exercises: detail.exercises.map((exercise) => ({
+      ...exercise,
+      sets: exercise.sets.map((setEntry) => ({ ...setEntry })),
+    })),
+  };
+}
 
 type HistoryPageProps = {
   initialEditMode: boolean;
@@ -157,9 +222,14 @@ export default function HistoryPage({
   const [createdAt, setCreatedAt] = useState("");
   const [sessionRpe, setSessionRpe] = useState("");
   const [lowerBackPain, setLowerBackPain] = useState("");
+  const [originalDetail, setOriginalDetail] = useState<WorkoutDetail | null>(null);
+  const [isDirty, setIsDirty] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const nextTempWorkoutExerciseId = useRef(-1);
+  const nextTempSetId = useRef(-1);
 
   const exerciseOptions = useMemo(
     () => exercises.map((exercise) => ({ value: String(exercise.id), label: exercise.name })),
@@ -178,10 +248,30 @@ export default function HistoryPage({
   }, [detail]);
 
   function hydrateDetail(response: WorkoutDetail) {
-    setDetail(response);
+    const nextDetail = cloneDetail(response);
+    setDetail(nextDetail);
+    setOriginalDetail(cloneDetail(nextDetail));
     setCreatedAt(toDateTimeLocal(response.workout.created_at));
     setSessionRpe(String(response.workout.session_rpe ?? ""));
     setLowerBackPain(String(response.workout.lower_back_pain ?? ""));
+    setIsDirty(false);
+    setSaveStatus("idle");
+  }
+
+  function markDirty() {
+    setIsDirty(true);
+    setSaveStatus("idle");
+    setMessage(null);
+  }
+
+  function updateDraft(mutator: (current: WorkoutDetail) => WorkoutDetail) {
+    setDetail((current) => {
+      if (!current) {
+        return current;
+      }
+      return recalculateDetail(mutator(cloneDetail(current)));
+    });
+    markDirty();
   }
 
   async function loadWorkouts() {
@@ -210,6 +300,9 @@ export default function HistoryPage({
   useEffect(() => {
     if (selectedWorkoutId === null) {
       setDetail(null);
+      setOriginalDetail(null);
+      setIsDirty(false);
+      setSaveStatus("idle");
       return;
     }
 
@@ -224,34 +317,206 @@ export default function HistoryPage({
       .finally(() => setPending(false));
   }, [selectedWorkoutId]);
 
-  async function runDetailAction(action: () => Promise<WorkoutDetail>) {
-    setPending(true);
-    setError(null);
-    setMessage(null);
-    try {
-      const response = await action();
-      hydrateDetail(response);
-      await loadWorkouts();
-      setMessage("Workout updated");
-    } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : "Action failed.");
-    } finally {
-      setPending(false);
-    }
-  }
-
-  async function saveMetadata() {
-    if (!detail) {
+  useEffect(() => {
+    if (!isDirty) {
       return;
     }
 
-    await runDetailAction(() =>
-      updateWorkout(detail.workout.id, {
-        created_at: createdAt,
-        session_rpe: sessionRpe ? Number(sessionRpe) : null,
-        lower_back_pain: lowerBackPain ? Number(lowerBackPain) : null,
+    const handler = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isDirty]);
+
+  function updateCreatedAt(value: string) {
+    setCreatedAt(value);
+    markDirty();
+  }
+
+  function updateSessionRpe(value: string) {
+    setSessionRpe(value);
+    markDirty();
+  }
+
+  function updateLowerBackPain(value: string) {
+    setLowerBackPain(value);
+    markDirty();
+  }
+
+  function updateDraftSet(
+    setId: number,
+    payload: { weight?: number; reps?: number },
+  ) {
+    updateDraft((current) => ({
+      ...current,
+      exercises: current.exercises.map((exercise) => ({
+        ...exercise,
+        sets: exercise.sets.map((setEntry) =>
+          setEntry.id === setId ? { ...setEntry, ...payload } : setEntry,
+        ),
+      })),
+    }));
+  }
+
+  function addDraftSet(workoutExerciseId: number, weight: number, reps: number) {
+    updateDraft((current) => ({
+      ...current,
+      exercises: current.exercises.map((exercise) => {
+        if (exercise.workout_exercise_id !== workoutExerciseId) {
+          return exercise;
+        }
+
+        const now = new Date().toISOString();
+        const setEntry: SetEntry = {
+          id: nextTempSetId.current--,
+          workout_exercise_id: workoutExerciseId,
+          set_number: exercise.sets.length + 1,
+          weight,
+          reps,
+          created_at: now,
+        };
+        return {
+          ...exercise,
+          sets: [...exercise.sets, setEntry],
+        };
       }),
-    );
+    }));
+  }
+
+  function deleteDraftSet(setId: number) {
+    updateDraft((current) => ({
+      ...current,
+      exercises: current.exercises.map((exercise) => ({
+        ...exercise,
+        sets: exercise.sets.filter((setEntry) => setEntry.id !== setId),
+      })),
+    }));
+  }
+
+  function deleteDraftExercise(workoutExerciseId: number) {
+    updateDraft((current) => ({
+      ...current,
+      exercises: current.exercises.filter(
+        (exercise) => exercise.workout_exercise_id !== workoutExerciseId,
+      ),
+    }));
+  }
+
+  async function saveWorkoutChanges() {
+    if (!detail || !originalDetail) {
+      return;
+    }
+
+    setPending(true);
+    setError(null);
+    setMessage(null);
+    setSaveStatus("saving");
+
+    try {
+      let latest = await updateWorkout(detail.workout.id, {
+        created_at: createdAt,
+        session_rpe: parseOptionalScore(sessionRpe),
+        lower_back_pain: parseOptionalScore(lowerBackPain),
+      });
+
+      const originalExercises = new Map(
+        originalDetail.exercises.map((exercise) => [
+          exercise.workout_exercise_id,
+          exercise,
+        ]),
+      );
+      const draftExercisesById = new Map(
+        detail.exercises.map((exercise) => [
+          exercise.workout_exercise_id,
+          exercise,
+        ]),
+      );
+
+      for (const originalExercise of originalDetail.exercises) {
+        if (!draftExercisesById.has(originalExercise.workout_exercise_id)) {
+          latest = await deleteWorkoutExercise(
+            detail.workout.id,
+            originalExercise.workout_exercise_id,
+          );
+        }
+      }
+
+      const usedWorkoutExerciseIds = new Set(
+        latest.exercises.map((exercise) => exercise.workout_exercise_id),
+      );
+
+      for (const draftExercise of detail.exercises) {
+        let realWorkoutExerciseId = draftExercise.workout_exercise_id;
+
+        if (draftExercise.workout_exercise_id < 0) {
+          latest = await addWorkoutExercise(
+            detail.workout.id,
+            draftExercise.exercise_id,
+          );
+          const addedExercise = [...latest.exercises]
+            .reverse()
+            .find(
+              (exercise) =>
+                exercise.exercise_id === draftExercise.exercise_id &&
+                !usedWorkoutExerciseIds.has(exercise.workout_exercise_id),
+            );
+          if (!addedExercise) {
+            throw new Error("Could not map added exercise.");
+          }
+          realWorkoutExerciseId = addedExercise.workout_exercise_id;
+          usedWorkoutExerciseIds.add(realWorkoutExerciseId);
+        }
+
+        const originalExercise = originalExercises.get(realWorkoutExerciseId);
+        const originalSets = new Map(
+          (originalExercise?.sets ?? []).map((setEntry) => [setEntry.id, setEntry]),
+        );
+        const draftSetIds = new Set(draftExercise.sets.map((setEntry) => setEntry.id));
+
+        if (originalExercise) {
+          for (const originalSet of originalExercise.sets) {
+            if (!draftSetIds.has(originalSet.id)) {
+              latest = await deleteWorkoutSet(originalSet.id);
+            }
+          }
+        }
+
+        for (const draftSet of draftExercise.sets) {
+          if (draftSet.id < 0) {
+            latest = await addWorkoutExerciseSet(realWorkoutExerciseId, {
+              weight: draftSet.weight,
+              reps: draftSet.reps,
+            });
+            continue;
+          }
+
+          const originalSet = originalSets.get(draftSet.id);
+          if (
+            originalSet &&
+            (originalSet.weight !== draftSet.weight ||
+              originalSet.reps !== draftSet.reps)
+          ) {
+            latest = await updateWorkoutSet(draftSet.id, {
+              weight: draftSet.weight,
+              reps: draftSet.reps,
+            });
+          }
+        }
+      }
+
+      hydrateDetail(latest);
+      await loadWorkouts();
+      setSaveStatus("saved");
+      setMessage("Workout saved");
+    } catch (reason: unknown) {
+      setSaveStatus("error");
+      setError(reason instanceof Error ? reason.message : "Could not save workout.");
+    } finally {
+      setPending(false);
+    }
   }
 
   async function deleteSelectedWorkout() {
@@ -282,6 +547,9 @@ export default function HistoryPage({
   }
 
   function backToHistory() {
+    if (isDirty && !window.confirm("Discard unsaved workout changes?")) {
+      return;
+    }
     setSelectedWorkoutId(null);
     setDetail(null);
     navigate("/history");
@@ -318,11 +586,31 @@ export default function HistoryPage({
       return;
     }
 
-    await runDetailAction(() => addWorkoutExercise(detail.workout.id, exerciseId));
-  }
+    const exercise = exercises.find((candidate) => candidate.id === exerciseId);
+    if (!exercise) {
+      return;
+    }
 
-  function openSettings() {
-    navigate("/settings");
+    updateDraft((current) => ({
+      ...current,
+      exercises: [
+        ...current.exercises,
+        {
+          workout_exercise_id: nextTempWorkoutExerciseId.current--,
+          exercise_id: exercise.id,
+          exercise_name: exercise.name,
+          profile_key: exercise.profile_key,
+          position: current.exercises.length + 1,
+          sets: [],
+          total_sets: 0,
+          total_reps: 0,
+          total_volume: 0,
+          default_weight: exercise.weights[0] ?? 0,
+          default_reps: 10,
+          configured_weights: exercise.weights,
+        },
+      ],
+    }));
   }
 
   return (
@@ -420,6 +708,23 @@ export default function HistoryPage({
 
       {selectedWorkoutId !== null && detail && initialEditMode && (
         <section className="page-stack edit-workout-page">
+          <section className="panel edit-workout-save-panel">
+            <div>
+              <h2>Edit workout</h2>
+              <p className={isDirty ? "edit-dirty-text" : "muted"}>
+                {isDirty ? "Unsaved changes" : saveStatusLabel(saveStatus)}
+              </p>
+            </div>
+            <button
+              className="primary-button edit-workout-save-button"
+              disabled={pending || !isDirty || !createdAt}
+              onClick={saveWorkoutChanges}
+              type="button"
+            >
+              {saveStatus === "saving" ? "Saving..." : "Save workout"}
+            </button>
+          </section>
+
           <div className="edit-workout-meta">
             <span>{formatDateTime(detail.workout.created_at)}</span>
             <span>{detail.workout.finished_at ? "finished" : "active"}</span>
@@ -594,7 +899,7 @@ export default function HistoryPage({
               Date and time
               <input
                 disabled={pending}
-                onChange={(event) => setCreatedAt(event.target.value)}
+                onChange={(event) => updateCreatedAt(event.target.value)}
                 type="datetime-local"
                 value={createdAt}
               />
@@ -607,7 +912,7 @@ export default function HistoryPage({
                     sessionRpe ? Number(sessionRpe) : null,
                   )}
                   disabled={pending}
-                  onChange={(event) => setSessionRpe(event.target.value)}
+                  onChange={(event) => updateSessionRpe(event.target.value)}
                   value={sessionRpe}
                 >
                   <option value="">—</option>
@@ -627,7 +932,7 @@ export default function HistoryPage({
                     lowerBackPain ? Number(lowerBackPain) : null,
                   )}
                   disabled={pending}
-                  onChange={(event) => setLowerBackPain(event.target.value)}
+                  onChange={(event) => updateLowerBackPain(event.target.value)}
                   value={lowerBackPain}
                 >
                   <option value="">—</option>
@@ -641,14 +946,6 @@ export default function HistoryPage({
                 </select>
               </label>
             </div>
-            <button
-              className="primary-button edit-workout-full-button"
-              disabled={pending || !createdAt}
-              onClick={saveMetadata}
-              type="button"
-            >
-              Save workout info
-            </button>
           </section>
 
           <section className="panel edit-add-exercise-card">
@@ -689,23 +986,11 @@ export default function HistoryPage({
                 disabled={pending}
                 exercise={exercise}
                 key={exercise.workout_exercise_id}
-                onAddSet={(exerciseId, weight, reps) =>
-                  runDetailAction(() =>
-                    addWorkoutExerciseSet(exerciseId, { weight, reps }),
-                  )
-                }
-                onDeleteExercise={(exerciseId) =>
-                  runDetailAction(() =>
-                    deleteWorkoutExercise(detail.workout.id, exerciseId),
-                  )
-                }
-                onDeleteSet={(setId) => runDetailAction(() => deleteWorkoutSet(setId))}
-                onDuplicateSet={(exerciseId) =>
-                  runDetailAction(() => duplicateWorkoutExerciseSet(exerciseId))
-                }
-                onUpdateSet={(setId, payload) =>
-                  runDetailAction(() => updateWorkoutSet(setId, payload))
-                }
+                onAddSet={addDraftSet}
+                onDeleteExercise={deleteDraftExercise}
+                onDeleteSet={deleteDraftSet}
+                onDuplicateSet={() => undefined}
+                onUpdateSet={updateDraftSet}
                 setEditorMode="select"
                 variant="legacy-edit"
               />

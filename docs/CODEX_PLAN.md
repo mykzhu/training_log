@@ -816,6 +816,16 @@ Confirm no Save workout info button.
 Confirm only one main Save workout button.
 ```
 
+Status: completed on 2026-07-05.
+
+Implementation notes:
+
+- Edit Workout now edits a local page draft and marks changes dirty.
+- A single Save workout button persists metadata, exercise adds/removals, set adds/removals, and set weight/reps changes through existing APIs.
+- Removed the separate Save workout info button and edit set-row Save buttons.
+- Added Unsaved changes and save status messaging plus a browser refresh warning while dirty.
+- Current and Edit Workout exercise/set deletes use the shared compact `×` button style.
+
 Suggested commit:
 
 ```text

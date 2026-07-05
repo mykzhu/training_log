@@ -97,11 +97,13 @@ export default function ExerciseCard({
         <button
           className={
             isLegacyEdit
-              ? "danger-button edit-exercise-delete-button"
+              ? "icon-delete-button edit-exercise-delete-button"
               : "ghost-button danger-text"
           }
+          aria-label={`Remove ${exercise.exercise_name}`}
           disabled={disabled}
           onClick={deleteExercise}
+          title={`Remove ${exercise.exercise_name}`}
           type="button"
         >
           {isLegacyEdit ? "×" : "Delete"}
@@ -115,6 +117,7 @@ export default function ExerciseCard({
             key={setEntry.id}
             onDelete={onDeleteSet}
             onUpdate={onUpdateSet}
+            updateOnChange={isLegacyEdit}
             variant={variant}
             weightOptions={weightOptions}
             setEntry={setEntry}
