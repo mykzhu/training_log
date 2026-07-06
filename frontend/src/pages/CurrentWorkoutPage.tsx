@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import {
@@ -10,7 +10,6 @@ import {
   finishCurrentWorkout,
   getCurrentWorkout,
   startCurrentWorkout,
-  updateCurrentWorkoutSet,
   updateCurrentWorkoutMetadata,
 } from "../api/currentWorkout";
 import { getExercises } from "../api/exercises";
@@ -429,9 +428,6 @@ export default function CurrentWorkoutPage() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [metadataSaveStatus, setMetadataSaveStatus] =
     useState<SaveStatus>("idle");
-  const [finishedSummary, setFinishedSummary] = useState<CurrentWorkout | null>(
-    null,
-  );
   const metadataSaveSequence = useRef(0);
 
   async function load() {
@@ -467,6 +463,11 @@ export default function CurrentWorkoutPage() {
 
   const disabled = pending || currentWorkout === null;
 
+  const exerciseOptions = useMemo(
+    () => exercises.map((exercise) => ({ value: String(exercise.id), label: exercise.name })),
+    [exercises],
+  );
+
   async function runAction(action: () => Promise<CurrentWorkout>) {
     setPending(true);
     setError(null);
@@ -474,9 +475,6 @@ export default function CurrentWorkoutPage() {
       const response = await action();
       setCurrentWorkout(response);
       setElapsedSeconds(response.elapsed_seconds);
-      if (response.active) {
-        setFinishedSummary(null);
-      }
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : "Action failed.");
     } finally {
@@ -560,7 +558,6 @@ export default function CurrentWorkoutPage() {
     setError(null);
     try {
       const response = await finishCurrentWorkout();
-      setFinishedSummary(currentWorkout);
       setCurrentWorkout(response.current_workout);
       setElapsedSeconds(0);
     } catch (reason: unknown) {
@@ -586,15 +583,6 @@ export default function CurrentWorkoutPage() {
     return (
       <section className="page-stack">
         {error && <div className="error-banner">{error}</div>}
-        {finishedSummary && (
-          <WorkoutCompleteCard
-            workout={finishedSummary}
-            onStartAnother={() => {
-              setFinishedSummary(null);
-              void runAction(startCurrentWorkout);
-            }}
-          />
-        )}
         {currentWorkout.recovery_context && (
           <RecoveryContextCard context={currentWorkout.recovery_context} />
         )}
@@ -635,7 +623,7 @@ export default function CurrentWorkoutPage() {
       disabled={disabled}
       elapsedSeconds={elapsedSeconds}
       error={error}
-      exercises={exercises}
+      exerciseOptions={exerciseOptions}
       metadataSaveStatus={metadataSaveStatus}
       selectedExerciseId={selectedExerciseId}
       onAddExercise={addSelectedExercise}
@@ -650,60 +638,7 @@ export default function CurrentWorkoutPage() {
       onFinish={finishWorkout}
       onSaveMetadata={saveMetadata}
       onSelectExercise={setSelectedExerciseId}
-      onUpdateSet={(setId, payload) =>
-        runAction(() => updateCurrentWorkoutSet(setId, payload))
-      }
     />
-  );
-}
-
-function WorkoutCompleteCard({
-  onStartAnother,
-  workout,
-}: {
-  onStartAnother: () => void;
-  workout: CurrentWorkout;
-}) {
-  const loadMetrics = workout.load_metrics;
-
-  return (
-    <section className="panel workout-complete-card">
-      <div className="panel-header">
-        <div>
-          <h2>Workout complete</h2>
-          <div className="muted small">
-            {workout.total_sets} sets across {workout.exercises.length} exercises
-          </div>
-        </div>
-        <span className="active-status-badge complete">saved</span>
-      </div>
-      <div className="active-workout-stat-grid">
-        <MetricTile value={workout.total_sets} label="sets" />
-        <MetricTile value={`${(workout.total_volume / 1000).toFixed(1)} t`} label="volume" />
-        <MetricTile value={workout.session_rpe ?? "—"} label="RPE" />
-        <MetricTile value={workout.lower_back_pain ?? "—"} label="back pain" />
-        {loadMetrics && (
-          <>
-            <MetricTile value={loadMetrics.load_label} label="load" />
-            <MetricTile
-              value={formatNumber(loadMetrics.back_stress_score)}
-              label="back stress"
-            />
-          </>
-        )}
-      </div>
-      <div className="workout-complete-actions">
-        <Link className="primary-button" to="/history">
-          View workout
-        </Link>
-        <button className="ghost-button" onClick={onStartAnother} type="button">
-          Start another
-        </button>
-        <Link className="ghost-button" to="/stats">
-          Go to Stats
-        </Link>
-      </div>
-    </section>
   );
 }
 
