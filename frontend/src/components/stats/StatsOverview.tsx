@@ -582,16 +582,16 @@ export default function StatsOverview({
             <div>
               <h2>Training load status</h2>
               <p className="muted">
-                ATL builds fatigue. CTL reflects fitness. TSB shows freshness
-                balance.
+                Short-term load reacts quickly. Long-term load shows the base.
+                Freshness compares the two.
               </p>
             </div>
             <MetricInfo>Daily load includes rest days through today.</MetricInfo>
           </div>
           <div className="training-load-legend" aria-label="Training load legend">
-            <span className="legend-atl">ATL (Fatigue)</span>
-            <span className="legend-ctl">CTL (Fitness)</span>
-            <span className="legend-tsb">TSB (Stress Balance)</span>
+            <span className="legend-atl">Short-term load (ATL)</span>
+            <span className="legend-ctl">Long-term load (CTL)</span>
+            <span className="legend-tsb">Freshness (TSB)</span>
           </div>
           {trainingLoad && trainingLoad.series.length > 0 ? (
             <div className="training-load-chart">
@@ -621,7 +621,7 @@ export default function StatsOverview({
                   <Line
                     dataKey="atl"
                     dot={false}
-                    name="ATL (Fatigue)"
+                    name="Short-term load (ATL)"
                     stroke="var(--stats-atl)"
                     strokeWidth={2.5}
                     type="monotone"
@@ -629,7 +629,7 @@ export default function StatsOverview({
                   <Line
                     dataKey="ctl"
                     dot={false}
-                    name="CTL (Fitness)"
+                    name="Long-term load (CTL)"
                     stroke="var(--stats-ctl)"
                     strokeWidth={2.5}
                     type="monotone"
@@ -637,7 +637,7 @@ export default function StatsOverview({
                   <Line
                     dataKey="tsb"
                     dot={false}
-                    name="TSB (Stress Balance)"
+                    name="Freshness (TSB)"
                     stroke="var(--stats-tsb)"
                     strokeWidth={2.5}
                     type="monotone"
@@ -649,9 +649,9 @@ export default function StatsOverview({
             <div className="training-load-empty">No load data yet</div>
           )}
           <div className="training-load-chip-grid">
-            <TrainingLoadChip label="ATL" metric={atlMetric} tone="atl" />
-            <TrainingLoadChip label="CTL" metric={ctlMetric} tone="ctl" />
-            <TrainingLoadChip label="TSB" metric={tsbMetric} tone="tsb" />
+            <TrainingLoadChip label="Short-term" metric={atlMetric} tone="atl" />
+            <TrainingLoadChip label="Long-term" metric={ctlMetric} tone="ctl" />
+            <TrainingLoadChip label="Freshness" metric={tsbMetric} tone="tsb" />
           </div>
         </section>
 
@@ -667,20 +667,20 @@ export default function StatsOverview({
           <div className="metric-row-list">
             <TrainingLoadMetricRow
               fallbackDescription="Fatigue from recent load"
-              fallbackLabel="ATL"
-              label="ATL"
+              fallbackLabel="Short-term load"
+              label="Short-term load"
               metric={atlMetric}
             />
             <TrainingLoadMetricRow
               fallbackDescription="Fitness/base from longer load"
-              fallbackLabel="CTL"
-              label="CTL"
+              fallbackLabel="Long-term load"
+              label="Long-term load"
               metric={ctlMetric}
             />
             <TrainingLoadMetricRow
               fallbackDescription="Freshness minus fatigue"
-              fallbackLabel="TSB"
-              label="TSB"
+              fallbackLabel="Freshness"
+              label="Freshness"
               metric={tsbMetric}
             />
             <TrainingLoadMetricRow

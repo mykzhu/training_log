@@ -4,6 +4,21 @@ All notable changes to this project.
 
 ## Unreleased
 
+## 1.5.0 - 2026-07-06
+
+### Improved
+
+* Added recent-change insight cards to the Stats dashboard.
+* Improved the volume trend tooltip with date, volume, sets, and reps.
+* Added a load vs lower-back pain scatter chart with cautious, non-medical wording.
+* Made training-load labels easier to understand with Short-term load, Long-term load, and Freshness labels before ATL/CTL/TSB terms.
+* Improved analytics empty states and mobile behavior for new Stats sections.
+
+### Notes
+
+* This release keeps the single dark theme.
+* No light theme, theme switcher, chart color refactor, backend sparkbar API change, or Active Workout redesign was added.
+
 ## 1.3.2 - 2026-07-06
 
 ### Fixed

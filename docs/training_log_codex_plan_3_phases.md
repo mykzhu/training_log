@@ -9,7 +9,7 @@ Current product assumptions:
 - Single dark theme only.
 - Home Assistant add-on context must remain supported.
 - `master` is the production branch.
-- Current release baseline is `1.3.2`.
+- Current release baseline is `1.5.0`.
 - The active Codex plan should live in `docs/CODEX_PLAN.md`.
 
 ## Phase overview
@@ -1720,6 +1720,10 @@ Phase 32 / `1.3.2` and Phase 33 / `1.4.0` must be completed first.
 
 Do not start this phase until the active workout UI upgrade is merged and verified.
 
+Implementation note: Phase 33 was reverted after user review, and Phase 34 was
+implemented directly from the restored `1.3.2` baseline by explicit user
+direction. This phase intentionally does not include an Active Workout redesign.
+
 ## Main objective
 
 Make analytics easier to understand and more useful for training decisions.
@@ -2303,6 +2307,15 @@ Every chart should have:
 
 ## Phase 34 verification
 
+Implementation status:
+
+- Added Stats "What changed?" insight cards using existing stats response data.
+- Improved the volume trend tooltip with date, total volume, sets, and reps.
+- Added a load vs lower-back pain scatter chart with non-causal wording.
+- Updated training-load labels to show Short-term load, Long-term load, and Freshness before ATL/CTL/TSB terminology.
+- Improved the no-stats empty state and mobile behavior for the new analytics sections.
+- Did not change backend formulas, backend APIs, Garmin sync, theme behavior, or Active Workout UI.
+
 ### Frontend checks
 
 Run:
@@ -2494,12 +2507,12 @@ Intentionally not included:
 
 ## Phase 34 final target
 
-- [ ] `1.5.0` released.
-- [ ] Stats hierarchy improved.
-- [ ] Insight cards added.
-- [ ] Charts are clearer.
-- [ ] Analytics empty states improved.
-- [ ] Mobile Stats experience improved.
+- [x] `1.5.0` release metadata updated.
+- [x] Stats hierarchy improved.
+- [x] Insight cards added.
+- [x] Charts are clearer.
+- [x] Analytics empty states improved.
+- [x] Mobile Stats experience improved.
 
 ## Recommended order for Codex sessions
 

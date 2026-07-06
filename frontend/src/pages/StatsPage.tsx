@@ -13,11 +13,13 @@ import {
   ReferenceDot,
   ReferenceLine,
   ResponsiveContainer,
+  Scatter,
+  ScatterChart,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { getStats } from "../api/stats";
 import {
@@ -191,6 +193,8 @@ type ChartPoint = {
   id: number;
   date: string;
   volume: number;
+  reps: number;
+  sets: number;
   volumePerRep: number | null;
   relativeIntensity: number | null;
   load: number;
@@ -198,6 +202,15 @@ type ChartPoint = {
   backStress: number;
   rpe: number | null;
   backPain: number | null;
+};
+
+type StatsInsightTone = "good" | "watch" | "risk" | "info";
+
+type StatsInsight = {
+  title: string;
+  body: string;
+  detail: string;
+  tone: StatsInsightTone;
 };
 
 type StatsLimit = 10 | 30 | 90 | "all";
@@ -271,6 +284,8 @@ function buildWorkoutData(workouts: StatsWorkout[]): ChartPoint[] {
     id: workout.id,
     date: workout.date,
     volume: workout.total_volume,
+    reps: workout.total_reps,
+    sets: workout.total_sets,
     volumePerRep: workout.avg_intensity,
     relativeIntensity: workout.intensity_score,
     load: workout.load_score,
@@ -279,6 +294,170 @@ function buildWorkoutData(workouts: StatsWorkout[]): ChartPoint[] {
     rpe: workout.session_rpe,
     backPain: workout.lower_back_pain,
   }));
+}
+
+function average(values: number[]) {
+  if (values.length === 0) {
+    return null;
+  }
+
+  return values.reduce((total, value) => total + value, 0) / values.length;
+}
+
+function percentageChange(current: number | null, previous: number | null) {
+  if (
+    current === null ||
+    previous === null ||
+    previous <= 0 ||
+    !Number.isFinite(current) ||
+    !Number.isFinite(previous)
+  ) {
+    return null;
+  }
+
+  return ((current - previous) / previous) * 100;
+}
+
+function splitRecentPeriod(points: ChartPoint[]) {
+  if (points.length < 4) {
+    return { recent: points, previous: [] };
+  }
+
+  const windowSize = Math.min(4, Math.floor(points.length / 2));
+
+  return {
+    previous: points.slice(-windowSize * 2, -windowSize),
+    recent: points.slice(-windowSize),
+  };
+}
+
+function formatSignedPercent(value: number) {
+  const prefix = value > 0 ? "+" : "";
+  return `${prefix}${formatNumber(value, 0)}%`;
+}
+
+function buildStatsInsights(
+  workoutData: ChartPoint[],
+  rpeLoggedCount: number,
+  backPainLoggedCount: number,
+): StatsInsight[] {
+  const insights: StatsInsight[] = [];
+  const { recent, previous } = splitRecentPeriod(workoutData);
+
+  const recentVolume = average(recent.map((point) => point.volume));
+  const previousVolume = average(previous.map((point) => point.volume));
+  const volumeChange = percentageChange(recentVolume, previousVolume);
+
+  if (volumeChange !== null) {
+    const magnitude = Math.abs(volumeChange);
+    insights.push({
+      title: "Volume trend",
+      body:
+        magnitude < 8
+          ? "Recent workout volume is broadly stable."
+          : `Recent workout volume is ${formatSignedPercent(volumeChange)} vs the previous period.`,
+      detail: "Compares the latest workouts with the same number of earlier workouts.",
+      tone:
+        magnitude < 8
+          ? "info"
+          : volumeChange > 25
+            ? "watch"
+            : volumeChange > 0
+              ? "good"
+              : "info",
+    });
+  }
+
+  const recentLoad = average(recent.map((point) => point.load));
+  const previousLoad = average(previous.map((point) => point.load));
+  const loadChange = percentageChange(recentLoad, previousLoad);
+
+  if (loadChange !== null) {
+    insights.push({
+      title: "Load movement",
+      body:
+        Math.abs(loadChange) < 10
+          ? "Session load is moving in a steady range."
+          : `Session load is ${formatSignedPercent(loadChange)} recently.`,
+      detail: "Uses the app's workout load points, not a cardio TRIMP model.",
+      tone:
+        loadChange > 30
+          ? "watch"
+          : loadChange < -20
+            ? "info"
+            : "good",
+    });
+  }
+
+  const recentBackPain = average(
+    recent
+      .map((point) => point.backPain)
+      .filter((value): value is number => value !== null),
+  );
+  const previousBackPain = average(
+    previous
+      .map((point) => point.backPain)
+      .filter((value): value is number => value !== null),
+  );
+
+  if (recentBackPain !== null) {
+    const backPainDelta =
+      previousBackPain === null ? null : recentBackPain - previousBackPain;
+
+    insights.push({
+      title: "Back feedback",
+      body:
+        recentBackPain <= 2
+          ? "Logged lower-back pain has stayed low recently."
+          : backPainDelta !== null && backPainDelta > 1
+            ? "Lower-back pain is higher in recent logs."
+            : "Recent lower-back pain is worth watching.",
+      detail:
+        backPainDelta === null
+          ? "Based on the latest workouts with back-pain feedback."
+          : `Recent average is ${formatNumber(recentBackPain, 1)} vs ${formatNumber(previousBackPain, 1)} before.`,
+      tone:
+        recentBackPain <= 2
+          ? "good"
+          : recentBackPain <= 4
+            ? "watch"
+            : "risk",
+    });
+  }
+
+  const feedbackCoverage =
+    workoutData.length > 0
+      ? ((rpeLoggedCount + backPainLoggedCount) / (workoutData.length * 2)) *
+        100
+      : null;
+
+  if (feedbackCoverage !== null) {
+    insights.push({
+      title: "Feedback coverage",
+      body:
+        feedbackCoverage >= 80
+          ? "Most workouts include recovery feedback."
+          : "Some recovery charts are still based on partial feedback.",
+      detail: `${formatNumber(feedbackCoverage, 0)}% of RPE and back-pain fields are filled in this range.`,
+      tone:
+        feedbackCoverage >= 80
+          ? "good"
+          : feedbackCoverage >= 50
+            ? "watch"
+            : "info",
+    });
+  }
+
+  if (insights.length === 0) {
+    insights.push({
+      title: "More data needed",
+      body: "Complete a few more workouts to unlock trend comparisons.",
+      detail: "Volume, load, and recovery insights become useful after several sessions.",
+      tone: "info",
+    });
+  }
+
+  return insights.slice(0, 4);
 }
 
 function chartTooltipFormatter(value: unknown, name: unknown): [ReactNode, string] {
@@ -300,7 +479,144 @@ function chartTooltipFormatter(value: unknown, name: unknown): [ReactNode, strin
 }
 
 function EmptyStats() {
-  return <div className="empty">No workout data yet.</div>;
+  return (
+    <section className="analytics-empty-state">
+      <div>
+        <h2>No stats yet</h2>
+        <p>
+          Complete a workout to start building volume, strength, load, and
+          recovery trends.
+        </p>
+      </div>
+      <Link className="button-link" to="/current">
+        Open current workout
+      </Link>
+    </section>
+  );
+}
+
+function StatsInsightsSection({
+  insights,
+}: {
+  insights: StatsInsight[];
+}) {
+  return (
+    <section className="stats-insights-section" aria-label="Stats insights">
+      <div className="stats-insights-heading">
+        <h2>What changed?</h2>
+        <p>
+          Recent signals compared with nearby workout history for this range.
+        </p>
+      </div>
+
+      <div className="stats-insights-grid">
+        {insights.map((insight) => (
+          <article
+            className={`stats-insight-card stats-insight-${insight.tone}`}
+            key={insight.title}
+          >
+            <span>{insight.title}</span>
+            <strong>{insight.body}</strong>
+            <p>{insight.detail}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+type ChartPointTooltipProps = {
+  active?: boolean;
+  payload?: Array<{
+    payload?: ChartPoint;
+  }>;
+};
+
+function VolumeTrendTooltip({
+  active,
+  payload,
+}: ChartPointTooltipProps) {
+  const point = payload?.[0]?.payload;
+
+  if (!active || !point) {
+    return null;
+  }
+
+  return (
+    <div className="strength-progress-tooltip">
+      <strong>{formatChartDateTooltip(point.date)}</strong>
+      <div>
+        <span>Total volume</span>
+        <b>{formatNumber(point.volume, 0)} kg</b>
+      </div>
+      <div>
+        <span>Working sets</span>
+        <b>{formatNumber(point.sets, 0)}</b>
+      </div>
+      <div>
+        <span>Reps</span>
+        <b>{formatNumber(point.reps, 0)}</b>
+      </div>
+    </div>
+  );
+}
+
+function RecoveryMarkersTooltip({
+  active,
+  payload,
+}: ChartPointTooltipProps) {
+  const point = payload?.[0]?.payload;
+
+  if (!active || !point) {
+    return null;
+  }
+
+  return (
+    <div className="strength-progress-tooltip">
+      <strong>{formatChartDateTooltip(point.date)}</strong>
+      <div>
+        <span>Session RPE</span>
+        <b>{formatNumber(point.rpe, 1)} / 10</b>
+      </div>
+      <div>
+        <span>Lower-back pain</span>
+        <b>{formatNumber(point.backPain, 1)} / 10</b>
+      </div>
+      <p className="tooltip-note">
+        Recovery markers describe the logged session; they do not diagnose a
+        cause.
+      </p>
+    </div>
+  );
+}
+
+function BackPainLoadTooltip({
+  active,
+  payload,
+}: ChartPointTooltipProps) {
+  const point = payload?.[0]?.payload;
+
+  if (!active || !point) {
+    return null;
+  }
+
+  return (
+    <div className="strength-progress-tooltip">
+      <strong>{formatChartDateTooltip(point.date)}</strong>
+      <div>
+        <span>Overall load</span>
+        <b>{formatNumber(point.load, 1)}</b>
+      </div>
+      <div>
+        <span>Back stress</span>
+        <b>{formatNumber(point.backStress, 1)}</b>
+      </div>
+      <div>
+        <span>Lower-back pain</span>
+        <b>{formatNumber(point.backPain, 1)} / 10</b>
+      </div>
+    </div>
+  );
 }
 
 type BenchmarkProgressTooltipProps = {
@@ -1455,6 +1771,32 @@ const strengthWorkloadData =
     (workout) => workout.lower_back_pain !== null,
   ).length;
 
+  const statsInsights = useMemo(
+    () =>
+      buildStatsInsights(
+        workoutData,
+        rpeLoggedCount,
+        backPainLoggedCount,
+      ),
+    [
+      workoutData,
+      rpeLoggedCount,
+      backPainLoggedCount,
+    ],
+  );
+
+  const backPainLoadData = useMemo(
+    () =>
+      workoutData.filter(
+        (
+          point,
+        ): point is ChartPoint & {
+          backPain: number;
+        } => point.backPain !== null,
+      ),
+    [workoutData],
+  );
+
   function toggleBenchmarkExercise(
     exerciseId: number,
   ) {
@@ -1737,6 +2079,8 @@ const strengthWorkloadData =
             workoutCount={workoutCount}
           />
 
+          <StatsInsightsSection insights={statsInsights} />
+
           <div className="stats-chart-grid">
             <ChartCard
               wide
@@ -1790,7 +2134,7 @@ const strengthWorkloadData =
                     tick={{ fontSize: 12 }}
                   />
 
-                  <Tooltip {...commonTooltipProps()} />
+                  <Tooltip content={<VolumeTrendTooltip />} />
 
                   <Area
                     dataKey="volume"
@@ -2229,11 +2573,12 @@ const strengthWorkloadData =
                     {...dateXAxisProps(workoutData.length)}
                   />
                   <YAxis domain={[0, 10]} stroke={chartColors.muted} tick={{ fontSize: 12 }} />
-                  <Tooltip {...commonTooltipProps()} />
+                  <Tooltip content={<RecoveryMarkersTooltip />} />
                   <Legend wrapperStyle={{ color: chartColors.muted }} />
                   <Line
                     connectNulls
                     dataKey="rpe"
+                    name="Session RPE"
                     stroke={chartColors.purple}
                     strokeWidth={2}
                     type="monotone"
@@ -2241,12 +2586,105 @@ const strengthWorkloadData =
                   <Line
                     connectNulls
                     dataKey="backPain"
+                    name="Lower-back pain"
                     stroke={chartColors.red}
                     strokeWidth={2}
                     type="monotone"
                   />
                 </LineChart>
               </ResponsiveContainer>
+
+              <ChartInsight
+                question="How did the workout feel afterward?"
+                explanation="RPE captures effort and lower-back pain captures the post-session back-pain score."
+              >
+                <div className="chart-insight-scale">
+                  <div>
+                    <strong>0-2</strong>
+                    <span>Low back-pain feedback</span>
+                  </div>
+
+                  <div>
+                    <strong>3-4</strong>
+                    <span>Moderate feedback to watch</span>
+                  </div>
+
+                  <div>
+                    <strong>5+</strong>
+                    <span>High feedback; compare with load and exercise mix</span>
+                  </div>
+                </div>
+              </ChartInsight>
+            </ChartCard>
+
+            <ChartCard
+              subtitle="Completed workouts with logged lower-back pain"
+              title="Load vs lower-back pain"
+            >
+              {backPainLoadData.length > 0 ? (
+                <ResponsiveContainer height={240} width="100%">
+                  <ScatterChart
+                    className="clickable-chart"
+                    data={backPainLoadData}
+                    margin={{ top: 18, right: 18, left: 0, bottom: 0 }}
+                    onClick={openWorkoutFromChart}
+                  >
+                    <CartesianGrid
+                      stroke={chartColors.grid}
+                      strokeDasharray="3 3"
+                    />
+
+                    <XAxis
+                      dataKey="load"
+                      name="Overall load"
+                      stroke={chartColors.muted}
+                      tick={{ fontSize: 12 }}
+                      type="number"
+                    />
+
+                    <YAxis
+                      dataKey="backPain"
+                      domain={[0, 10]}
+                      name="Lower-back pain"
+                      stroke={chartColors.muted}
+                      tick={{ fontSize: 12 }}
+                      type="number"
+                    />
+
+                    <Tooltip content={<BackPainLoadTooltip />} />
+
+                    <Scatter
+                      dataKey="backPain"
+                      fill={chartColors.red}
+                      name="Lower-back pain"
+                    />
+                  </ScatterChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="chart-empty-state">
+                  Log lower-back pain on completed workouts to compare it with
+                  training load.
+                </div>
+              )}
+
+              <ChartInsight
+                question="Do higher-load sessions line up with back feedback?"
+                explanation="Each point is one completed workout. The chart shows association only, not cause."
+              >
+                <div className="chart-insight-details">
+                  <span>
+                    Points high on the chart had higher logged lower-back pain.
+                  </span>
+                  <span>
+                    Points farther right had higher app load points for the
+                    workout.
+                  </span>
+                  <span>
+                    Use this together with exercise mix, back stress, and notes
+                    before changing training decisions.
+                  </span>
+                </div>
+              </ChartInsight>
             </ChartCard>
 
             <ChartCard

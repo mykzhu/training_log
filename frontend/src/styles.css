@@ -1584,6 +1584,126 @@ a.compact-button {
   gap: 14px;
 }
 
+.analytics-empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 18px;
+  background: var(--card);
+}
+
+.analytics-empty-state h2 {
+  margin: 0 0 6px;
+  color: var(--blue);
+  font-size: 22px;
+}
+
+.analytics-empty-state p {
+  max-width: 560px;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.button-link {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: var(--blue);
+  color: #ffffff;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.stats-insights-section {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.stats-insights-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.stats-insights-heading h2 {
+  margin: 0;
+  color: var(--blue);
+  font-size: 21px;
+}
+
+.stats-insights-heading p {
+  max-width: 520px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.stats-insights-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.stats-insight-card {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-height: 132px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px;
+  background: var(--card);
+}
+
+.stats-insight-card span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.stats-insight-card strong {
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.stats-insight-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.stats-insight-good {
+  border-color: rgba(48, 209, 88, 0.5);
+}
+
+.stats-insight-watch {
+  border-color: rgba(255, 214, 10, 0.6);
+}
+
+.stats-insight-risk {
+  border-color: rgba(255, 69, 58, 0.65);
+}
+
+.stats-insight-info {
+  border-color: rgba(10, 132, 255, 0.55);
+}
+
 .load-calendar-scroll {
   width: 100%;
   max-height: none;
@@ -1738,6 +1858,14 @@ button.load-calendar-cell:focus-visible {
 }
 
 @media (max-width: 520px) {
+  .analytics-empty-state {
+    display: grid;
+  }
+
+  .button-link {
+    width: 100%;
+  }
+
   .load-calendar-shell {
     grid-template-columns: 34px max-content;
     gap: 6px;
@@ -1784,6 +1912,18 @@ button.load-calendar-cell:focus-visible {
   min-height: 240px;
 }
 
+.chart-empty-state {
+  display: grid;
+  min-height: 240px;
+  place-items: center;
+  border: 1px dashed var(--border);
+  border-radius: 14px;
+  padding: 18px;
+  color: var(--muted);
+  text-align: center;
+  line-height: 1.45;
+}
+
 .chart-insight {
   display: grid;
   gap: 10px;
@@ -1821,6 +1961,15 @@ button.load-calendar-cell:focus-visible {
 }
 
 @media (max-width: 720px) {
+  .stats-insights-heading {
+    display: grid;
+    align-items: start;
+  }
+
+  .stats-insights-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .chart-insight-metrics {
     grid-template-columns: 1fr;
   }
@@ -1831,6 +1980,10 @@ button.load-calendar-cell:focus-visible {
 }
 
 @media (max-width: 420px) {
+  .stats-insights-grid {
+    grid-template-columns: 1fr;
+  }
+
   .chart-insight-scale-four {
     grid-template-columns: 1fr;
   }
@@ -2627,6 +2780,14 @@ button.load-calendar-cell:focus-visible {
 
 .strength-progress-tooltip b {
   white-space: nowrap;
+}
+
+.tooltip-note {
+  max-width: 220px;
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .strength-progress-pr {
