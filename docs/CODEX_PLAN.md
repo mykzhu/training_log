@@ -1,1071 +1,186 @@
-# Training Log — CODEX_PLAN.md
+# Training Log — Stats UI Polish Codex Plan
 
-**Base:** `master @ 965c7e7` — Release 1.2.0  
-**Next planned version:** `1.3.0`  
-**Phase numbering:** continue after Phase 22.
-
-This plan contains the agreed issues/improvements #1–#10 and turns them into Codex-ready implementation phases.
-
----
-
-## Scope
-
-Implement the next UX and stats improvement batch:
-
-1. Settings foldable sections collapsed by default.
-2. Remove redundant Settings link from Garmin stats range row.
-3. Fix mobile scroll jump when adding the first exercise to a new active workout.
-4. Auto-save RPE and Back pain on active workout page; remove local Session stats Save button.
-5. Remove inline new-exercise creation from active workout page; manage exercises in Settings only.
-6. Keep active page visible in top navigation; only highlight active route.
-7. Align Edit Workout page with Current Workout: one save button, unsaved changes notice, consistent delete controls.
-8. Normalize date formatting for all Stats page date X-axes and improve small-screen chart labels.
-9. Improve Stats metric cards with progress bars, range bars, sparklines, and a Calculations panel.
-10. Add training-load calculations: ATL, CTL, TSB, AC ratio, monotony, training strain, ATL percent.
+**Base:** latest `master` after the 1.3.0 implementation batch
+**Observed problem:** features/calculations were implemented, but the Stats UI does not match the approved design direction. It is cramped, repetitive, visually noisy, and some metric visualizations are semantically wrong.
+**Recommended next version:** `1.3.1` patch release after design polish
+**New phase numbering:** continue after Phase 29.
 
 ---
 
-## Non-goals
-
-- Do not add VO2max, Marathon Shape, race prediction, or other unsupported cardio-only metrics.
-- Do not change Garmin auth/sync backend behavior except UI cleanup and using existing sync controls.
-- Do not persist Settings accordion open/closed state in this version.
-- Do not add new chart/UI dependencies unless existing tools cannot support the design.
-- Do not remove the global Settings navigation item.
-- Do not hide the current active nav item.
-- Do not remove backend exercise creation endpoints; only remove inline creation from Active Workout UI.
-- Do not make Edit Workout auto-save. Edit Workout should be batch-edit + one explicit save.
-
----
-
-# Phase 23 — Navigation, Settings, Garmin stats polish, and carryover cleanup
+# Phase 30 — Stats UI design polish and visual system cleanup
 
 ## Purpose
 
-Resolve small but visible UI issues before larger workout/stats work.
-
-Covers:
-
-- #1 Settings foldable sections collapsed by default.
-- #2 Remove redundant Settings link from Garmin stats page.
-- #6 Keep active page visible in top navigation.
-- Carryover: restore safe `asyncio.to_thread` monkeypatch cleanup in tests.
-- Carryover: keep `docs/CODEX_PLAN.md` in repo.
-
-## Expected target files
-
-```text
-frontend/src/pages/SettingsPage.tsx
-frontend/src/pages/GarminStatsPage.tsx
-frontend/src/App.tsx
-frontend/src/styles.css
-tests/test_garmin_auto_sync.py
-docs/CODEX_PLAN.md
-CHANGELOG.md
-```
-
-## 23.1 Settings foldable sections collapsed by default
-
-### Current problem
-
-Settings foldable sections are expanded by default, so the page becomes too dense.
-
-### Desired behavior
-
-```text
-All foldable Settings sections are collapsed on initial page load.
-User can expand any section manually.
-Refresh returns them to collapsed state.
-No localStorage/sessionStorage persistence in this phase.
-```
-
-### Implementation notes
-
-Find all Settings accordions/details. If native `<details>` is used, remove `open`:
-
-```tsx
-// Before
-<details className="settings-fold-panel garmin-panel" open>
-
-// After
-<details className="settings-fold-panel garmin-panel">
-```
-
-If custom state is used:
-
-```tsx
-// Before
-const [isOpen, setIsOpen] = useState(true);
-
-// After
-const [isOpen, setIsOpen] = useState(false);
-```
-
-Apply this to:
-
-```text
-Garmin
-Analysis Types
-Exercises and Weights
-Backup and Restore
-Advanced
-```
-
-Collapsed rows should still show useful summaries:
-
-```text
-Garmin: Connected/Disconnected, auto-sync enabled/disabled, sync range.
-Analysis Types: N types, M custom.
-Exercises and Weights: N exercises configured.
-Backup and Restore: Backup history and restore data.
-Advanced: Developer and system settings.
-```
-
-### Acceptance criteria
-
-```text
-Open Settings.
-All sections are collapsed by default.
-Clicking each header expands/collapses correctly.
-Refreshing Settings returns all sections to collapsed.
-No Settings content or functionality disappears.
-```
-
-## 23.2 Remove redundant Settings link from Garmin stats page
-
-### Current problem
-
-Garmin stats page has an extra inline `Settings` link in the same row as range buttons and sync.
-
-### Desired behavior
-
-Garmin stats controls show only:
-
-```text
-35 / 90 / 180 / 365 / All / Sync X days
-```
-
-No inline Settings link there. The global top-nav Settings item remains.
-
-### Implementation notes
-
-In `frontend/src/pages/GarminStatsPage.tsx`, find the range/sync action row and remove only the inline Settings link/button.
-
-Do not remove:
-
-```text
-Top navigation Settings
-Garmin Settings page/panel
-Sync button
-Range buttons
-```
-
-### Acceptance criteria
-
-```text
-On /garmin, no inline Settings link is shown next to day range controls.
-Top nav still shows Settings.
-Range buttons work.
-Sync button works.
-Mobile layout is less crowded.
-```
-
-## 23.3 Keep active page visible in top navigation
-
-### Current problem
-
-When opening a page, its nav item may disappear from the top navigation.
-
-### Desired behavior
-
-Top nav list is stable on every page:
-
-```text
-Current | History | Stats | Garmin | Backup | Settings
-```
-
-Current route is highlighted, not removed.
-
-### Implementation notes
-
-Inspect `frontend/src/App.tsx` or the nav component.
-
-Remove any filtering like:
-
-```tsx
-navItems.filter((item) => item.path !== currentPath)
-```
-
-Render all items and apply active class:
-
-```tsx
-navItems.map((item) => (
-  <NavLink
-    key={item.path}
-    to={item.path}
-    className={({ isActive }) => isActive ? "nav-link active" : "nav-link"}
-  >
-    {item.label}
-  </NavLink>
-))
-```
-
-If not using `NavLink`, compute active state manually but still render all items.
-
-### Acceptance criteria
-
-```text
-On /current, Current is visible and active.
-On /history, History is visible and active.
-On /stats, Stats is visible and active.
-On /garmin, Garmin is visible and active.
-On /backup, Backup is visible and active.
-On /settings, Settings is visible and active.
-Nav order and item count never change.
-```
-
-## 23.4 Fix `asyncio.to_thread` monkeypatch cleanup
-
-### Current problem
-
-A test monkeypatches `asyncio.to_thread` but does not restore it.
-
-### Implementation
-
-In `tests/test_garmin_auto_sync.py`, replace direct non-restored assignment with `try/finally`:
-
-```python
-original_to_thread = asyncio.to_thread
-asyncio.to_thread = fake_to_thread
-try:
-    first = asyncio.run(garmin_auto_sync_service.run_garmin_auto_sync_once())
-    second = asyncio.run(garmin_auto_sync_service.run_garmin_auto_sync_once())
-finally:
-    asyncio.to_thread = original_to_thread
-```
-
-Alternative acceptable implementation:
-
-```python
-from unittest.mock import patch
-
-with patch("asyncio.to_thread", side_effect=fake_to_thread):
-    first = asyncio.run(...)
-    second = asyncio.run(...)
-```
-
-### Acceptance criteria
-
-```text
-Test no longer leaks monkeypatch state.
-Full test suite can run in any order.
-No production code is changed for this test-only issue.
-```
-
-## Phase 23 verification
-
-```bash
-python -m unittest discover -s tests
-cd frontend && npm run typecheck && npm run build
-```
-
-Status: completed on 2026-07-05.
-
-Implementation notes:
-
-- Settings Garmin, Analysis Types, and Exercises and Weights sections are collapsed by default with summary text.
-- Garmin Stats no longer shows the inline Settings link next to range/sync controls.
-- Top navigation renders the stable Current, History, Stats, Garmin, Backup, Settings item set on all routes.
-- `asyncio.to_thread` monkeypatching is restored within the auto-sync test.
-- `docs/CODEX_PLAN.md` is present as a pointer to this active plan.
-
-Manual checks:
-
-```text
-Settings sections collapsed by default.
-Garmin stats page has no extra inline Settings link.
-All top-nav items stay visible on every page.
-```
-
-Suggested commit:
-
-```text
-Phase 23: polish navigation, settings accordions, and Garmin stats controls
-```
+Polish the new Stats dashboard UI so it matches the approved design direction:
+
+- premium dark dashboard look
+- readable, less cramped metric cards
+- correct visual semantics for bars/ranges
+- no duplicated ATL/CTL/TSB rows
+- better desktop layout
+- clean mobile layout
+- consistent colors, labels, and spacing
+
+This phase is mostly frontend/CSS. Do not change training-load formulas unless a visual bug exposes a clearly incorrect field mapping.
 
 ---
 
-# Phase 24 — Active Workout mobile and logging UX
+## Current implementation problems
 
-## Purpose
+### Problem 1 — Stats page is too narrow for a 5-card dashboard
 
-Make active workout logging cleaner and more phone-friendly.
+Current CSS caps Stats width at about 820px:
 
-Covers:
-
-- #3 Fix mobile scroll jump when adding first exercise.
-- #4 Auto-save RPE and Back pain; remove Session stats save button.
-- #5 Remove inline exercise creation from active workout page.
-
-## Expected target files
-
-```text
-frontend/src/pages/CurrentWorkoutPage.tsx
-frontend/src/styles.css
-frontend/src/api/client.ts
-frontend/src/types.ts
-app/routes or app/api files only if endpoint changes are required
-tests only if backend behavior changes
-```
-
-## 24.1 Fix mobile scroll jump when adding first exercise
-
-### Current problem
-
-On phone:
-
-```text
-Start new workout.
-Add first exercise.
-Page unexpectedly scrolls/jumps.
-Add second/third exercise.
-Everything works as expected.
-```
-
-### Likely cause
-
-```text
-First exercise card/list appears for the first time.
-Layout height changes.
-Focused select/button/input causes browser auto-scroll.
-There may also be explicit scrollIntoView/focus logic.
-```
-
-### Implementation notes
-
-Inspect add-exercise handler in `CurrentWorkoutPage.tsx`.
-
-Search for:
-
-```text
-scrollIntoView
-focus()
-window.scrollTo
-autoFocus
-setTimeout
-requestAnimationFrame
-```
-
-If explicit scroll/focus exists after add, remove or limit it.
-
-Preserve scroll position around add-exercise operation, especially on small screens:
-
-```ts
-const previousScrollY = window.scrollY;
-const isSmallScreen = window.matchMedia("(max-width: 640px)").matches;
-
-if (isSmallScreen && document.activeElement instanceof HTMLElement) {
-  document.activeElement.blur();
-}
-
-await addExerciseToWorkout(...);
-
-if (isSmallScreen) {
-  requestAnimationFrame(() => {
-    window.scrollTo({ top: previousScrollY, behavior: "auto" });
-  });
+```css
+.app-shell-stats {
+  width: min(100%, 820px);
 }
 ```
 
-Apply only to add-exercise action, not every set edit.
+At the same time the top metric grid uses 5 columns:
 
-### Acceptance criteria
-
-```text
-On phone/small viewport, adding the first exercise does not jump unexpectedly.
-Adding second and later exercises still works normally.
-Desktop behavior is unchanged.
-No automatic scroll to top or bottom.
-Focus does not remain trapped in the exercise selector.
-```
-
-## 24.2 Auto-save RPE and Back pain on active workout page
-
-### Desired behavior
-
-```text
-No separate Save button in Session stats.
-RPE saves when changed.
-Back pain saves when changed.
-Show lightweight Saving/Saved/Failed status.
-```
-
-### Implementation notes
-
-Remove active-workout session stats buttons like:
-
-```text
-Save
-Save workout info
-Save session stats
-```
-
-Add save state:
-
-```ts
-type SaveStatus = "idle" | "saving" | "saved" | "error";
-```
-
-For button-style controls:
-
-```text
-RPE: save immediately on click.
-Back pain: save immediately on click.
-```
-
-For input-style controls, if present:
-
-```text
-Save on blur or 300-500ms debounce.
-```
-
-Example implementation:
-
-```ts
-async function updateSessionStatsPatch(patch: Partial<WorkoutSessionStats>) {
-  setSessionStatsDraft((prev) => ({ ...prev, ...patch }));
-  setSessionStatsSaveStatus("saving");
-
-  try {
-    await updateWorkout(workoutId, patch);
-    setSessionStatsSaveStatus("saved");
-  } catch (error) {
-    setSessionStatsSaveStatus("error");
-    setSessionStatsError("Could not save session stats.");
-  }
+```css
+.metric-card-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 ```
 
-Do not wait until Finish workout to persist these values.
+Result: five cards are squeezed into narrow columns, causing tall cards, cramped labels, and non-premium layout.
 
-### Acceptance criteria
+### Problem 2 — Metric cards look like plain boxes, not dashboard cards
 
-```text
-Changing RPE shows Saving then Saved.
-Refresh keeps changed RPE.
-Changing Back pain shows Saving then Saved.
-Refresh keeps changed Back pain.
-API failure shows error and does not claim Saved.
-No Save button appears in active workout Session stats.
-Finish workout behavior is unchanged.
-```
+Current `MetricCard` supports `icon`, but no icons are actually passed from `StatsOverview`.
 
-## 24.3 Remove inline exercise creation from active workout page
+Cards need:
 
-### Current problem
+- leading colored icon circle
+- better hierarchy
+- value + badge alignment
+- shorter descriptions
+- cleaner visual spacing
+- min width and responsive grid behavior
 
-Active workout page has fields for creating a new exercise:
+### Problem 3 — Sparkline visuals are weak
 
-```text
-new exercise name
-initial numbers/weights field
-create button
-```
+`MetricSparkline` renders only a bare polyline. It has:
 
-### Desired behavior
+- no area fill
+- no empty state
+- no semantic color variants
+- no trend endpoint marker
+- no different colors per card
+- no visible baseline or context
 
-Active workout page only adds existing exercises.
-Exercise creation belongs in Settings.
+This makes Weekly Load and Strength Progress look like thin generic blue lines.
 
-Final active workout add-exercise UI:
+### Problem 4 — Progress/range bars are visually rough
 
-```text
-Exercise dropdown/select
-Add exercise button
-Small helper link: Missing an exercise? Add it in Settings.
-```
+The current bars use full-opacity segmented zones and put the value label below the bar. Problems:
 
-### Implementation notes
+- marker can sit at extreme edge and look clipped
+- label appears twice in rows
+- no axis labels like Low / Moderate / High
+- consistency uses recovery zones, which is semantically wrong
+- row bars are too large and heavy
 
-Remove from `CurrentWorkoutPage.tsx`:
+### Problem 5 — Training load status repeats the same metrics twice
 
-```text
-New exercise name field.
-Initial numbers/weights field.
-Inline Create button.
-Inline create-exercise API call.
-```
+Current Stats page shows:
 
-Keep:
+1. Training load chart
+2. Full rows for ATL / CTL / TSB directly below chart
+3. Calculations panel with ATL / CTL / TSB again
+
+This duplicates information and makes the page feel messy.
+
+Final design should be:
 
 ```text
-Existing exercise dropdown.
-Add selected exercise button.
+Training load status card:
+- chart
+- small summary chips for ATL / CTL / TSB
+
+Calculations panel:
+- full compact rows for ATL / CTL / TSB / AC ratio / Monotony / Strain
 ```
 
-Add helper link:
+### Problem 6 — Calculations rows are too chunky
 
-```tsx
-<Link to="/settings">Missing an exercise? Add it in Settings.</Link>
-```
+Current `MetricRow` layout is functional but visually heavy. Each row is a large card. It should become a compact table-like row.
 
-Optional if easy:
+### Problem 7 — Status labels are inconsistent
 
-```tsx
-<Link to="/settings?section=exercises">Missing an exercise? Add it in Settings.</Link>
-```
-
-Do not make accordion persistence part of this phase.
-
-### Acceptance criteria
+Metric rows currently pass raw status strings to `MetricStatusBadge`, so labels become lower-case like:
 
 ```text
-Active workout page has no inline exercise creation form.
-User can still add existing exercises.
-Settings page remains the place for creating/managing exercises.
-Mobile active workout page is shorter and cleaner.
-Backend exercise creation endpoint remains available.
+good
+info
+watch
 ```
 
-## Phase 24 verification
-
-```bash
-cd frontend && npm run typecheck && npm run build
-```
-
-Status: completed on 2026-07-05.
-
-Implementation notes:
-
-- Active Workout preserves mobile scroll position around add-exercise actions.
-- RPE and Back pain save immediately on select changes with Saving/Saved/Failed status.
-- Removed inline active-workout exercise creation fields and API usage.
-- Added a Settings link for missing exercises while keeping backend exercise creation endpoints unchanged.
-
-Manual mobile checks:
+Final UI should show human labels:
 
 ```text
-Start new workout.
-Add first exercise; no scroll jump.
-Add second exercise; still normal.
-Change RPE; refresh; value persists.
-Change Back pain; refresh; value persists.
-Confirm no inline new-exercise fields.
+Good
+Info
+Watch
+Risk
+No data
 ```
 
-Suggested commit:
+### Problem 8 — Training load chart color mapping does not match approved design
+
+Current chart uses:
 
 ```text
-Phase 24: simplify active workout logging and auto-save session stats
+ATL = orange
+CTL = green
+TSB = blue
 ```
+
+Approved design direction:
+
+```text
+ATL / Fatigue = blue
+CTL / Fitness = teal/cyan
+TSB / Stress Balance = purple
+```
+
+Use consistent colors in chart, rows, legends, and summary chips.
+
+### Problem 9 — No chart legend in Training load chart
+
+The chart needs a visible legend:
+
+```text
+ATL (Fatigue)
+CTL (Fitness)
+TSB (Stress Balance)
+```
+
+### Problem 10 — Desktop layout should be two-column for main Stats body
+
+Approved direction had:
+
+```text
+Top metric cards full width
+Main grid:
+  left: Training load status
+  right: Calculations
+Bottom charts
+Summary
+```
+
+Current implementation stacks Training load and Calculations vertically.
 
 ---
 
-# Phase 25 — Edit Workout UX alignment and page-level dirty save
+## Target files
 
-## Purpose
-
-Make Edit Workout consistent with Current Workout and avoid scattered save buttons.
-
-Covers:
-
-- #7 Remove `Save workout info`.
-- #7 Use one main `Save workout` button.
-- #7 Notify user about unsaved changes.
-- #7 Use same delete button style as Current Workout.
-
-## Expected target files
+Primary:
 
 ```text
-frontend/src/pages/HistoryPage.tsx
-frontend/src/pages/CurrentWorkoutPage.tsx
-frontend/src/styles.css
-frontend/src/components/workout/* if components exist or are added
-app/services/draft_service.py only if backend behavior requires change
-```
-
-Note: edit-workout UI may currently live inside `HistoryPage.tsx`, not a separate `EditWorkoutPage.tsx`.
-
-## 25.1 Remove `Save workout info`
-
-Search for UI text:
-
-```text
-Save workout info
-```
-
-Remove this local metadata/session-info save button.
-
-Do not remove the new page-level final save button.
-
-## 25.2 Add one page-level Save workout button
-
-### Desired behavior
-
-```text
-User edits workout metadata, session stats, exercises, and sets.
-Page shows Unsaved changes.
-User presses one Save workout button.
-All changes are persisted.
-```
-
-### Implementation notes
-
-Add page-level state:
-
-```ts
-const [draftWorkout, setDraftWorkout] = useState(...);
-const [originalWorkout, setOriginalWorkout] = useState(...);
-const [isDirty, setIsDirty] = useState(false);
-const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
-```
-
-Use explicit dirty flag:
-
-```ts
-function markDirty() {
-  setIsDirty(true);
-}
-```
-
-Call `markDirty()` on every edit:
-
-```text
-workout name
-workout date/time
-session RPE
-back pain
-set weight/reps/RPE
-add set
-remove set
-add exercise
-remove exercise
-exercise order if supported
-```
-
-Save logic:
-
-```ts
-async function saveWorkoutChanges() {
-  setSaveStatus("saving");
-
-  try {
-    await persistWorkoutDraft(draftWorkout);
-    setOriginalWorkout(draftWorkout);
-    setIsDirty(false);
-    setSaveStatus("saved");
-  } catch (error) {
-    setSaveStatus("error");
-  }
-}
-```
-
-Use existing APIs if possible.
-Do not create a large new backend endpoint unless current endpoints cannot safely persist all fields.
-
-If multiple calls are needed:
-
-```text
-1. Save workout metadata/session fields.
-2. Save exercise/set changes.
-3. Save ordering/removals/additions.
-```
-
-If any call fails:
-
-```text
-Show error.
-Keep dirty state.
-Do not reset UI as saved.
-Avoid partial success messaging.
-```
-
-## 25.3 Unsaved changes notification
-
-Show when dirty:
-
-```text
-Unsaved changes
-```
-
-Suggested placement:
-
-```text
-Top-right of edit page header, and/or near Save workout button.
-```
-
-Show save status:
-
-```text
-Saving...
-Workout saved
-Could not save workout
-```
-
-Optional browser leave protection:
-
-```ts
-useEffect(() => {
-  if (!isDirty) return;
-
-  const handler = (event: BeforeUnloadEvent) => {
-    event.preventDefault();
-    event.returnValue = "";
-  };
-
-  window.addEventListener("beforeunload", handler);
-  return () => window.removeEventListener("beforeunload", handler);
-}, [isDirty]);
-```
-
-Internal React Router blocking can be added only if simple; visible warning is required.
-
-## 25.4 Align delete controls with Current Workout
-
-### Desired behavior
-
-Use same delete control everywhere. Prefer compact `×` icon.
-
-Create reusable component if useful:
-
-```tsx
-type IconDeleteButtonProps = {
-  label: string;
-  onClick: () => void;
-  disabled?: boolean;
-};
-
-function IconDeleteButton({ label, onClick, disabled }: IconDeleteButtonProps) {
-  return (
-    <button
-      type="button"
-      className="icon-delete-button"
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-      disabled={disabled}
-    >
-      ×
-    </button>
-  );
-}
-```
-
-Use it on:
-
-```text
-Current workout exercise delete.
-Current workout set delete, if present.
-Edit workout exercise delete.
-Edit workout set delete, if present.
-```
-
-Accessibility:
-
-```text
-Visual text can be ×.
-aria-label must be clear: Remove exercise, Remove set, etc.
-```
-
-## 25.5 Important UX distinction
-
-```text
-Current Workout:
-- live logging
-- session stats auto-save
-- status can say Saved
-
-Edit Workout:
-- batch editing
-- changes persist only after Save workout
-- show Unsaved changes until saved
-```
-
-Do not make Edit Workout auto-save in this phase.
-
-### Acceptance criteria
-
-```text
-Edit workout page has no Save workout info button.
-One main Save workout button exists.
-Changing workout name marks page dirty.
-Changing date/time marks page dirty.
-Changing RPE/back pain marks page dirty.
-Changing set weight/reps/RPE marks page dirty.
-Adding/removing sets marks page dirty.
-Adding/removing exercises marks page dirty.
-Save workout persists all changes.
-After successful save, dirty warning disappears.
-After failed save, dirty warning remains.
-Delete controls use same × style as Current Workout.
-Current Workout behavior is unchanged.
-```
-
-## Phase 25 verification
-
-Manual:
-
-```text
-Open existing workout from History.
-Edit metadata; Unsaved changes appears.
-Edit sets; dirty state remains.
-Click Save workout; success state appears.
-Refresh; changes persist.
-Remove exercise; save; refresh; removal persists.
-Confirm no Save workout info button.
-Confirm only one main Save workout button.
-```
-
-Status: completed on 2026-07-05.
-
-Implementation notes:
-
-- Edit Workout now edits a local page draft and marks changes dirty.
-- A single Save workout button persists metadata, exercise adds/removals, set adds/removals, and set weight/reps changes through existing APIs.
-- Removed the separate Save workout info button and edit set-row Save buttons.
-- Added Unsaved changes and save status messaging plus a browser refresh warning while dirty.
-- Current and Edit Workout exercise/set deletes use the shared compact `×` button style.
-
-Suggested commit:
-
-```text
-Phase 25: unify edit workout save flow and delete controls
-```
-
----
-
-# Phase 26 — Stats chart X-axis date formatting and mobile layout
-
-## Purpose
-
-Make Stats charts visually consistent and readable on small screens.
-
-Covers:
-
-- #8 Align X-axis date format for all Stats charts that use dates on X.
-- #8 Improve phone/small-screen chart label layout.
-
-## Expected target files
-
-```text
-frontend/src/pages/StatsPage.tsx
-frontend/src/styles.css
-frontend/src/utils/chartDateFormat.ts
-frontend/src/hooks/useMediaQuery.ts
-frontend tests if available
-```
-
-## 26.1 Add shared chart date formatter
-
-Create:
-
-```text
-frontend/src/utils/chartDateFormat.ts
-```
-
-Recommended helpers:
-
-```ts
-export function parseChartDate(value: string | Date): Date | null;
-
-export function formatChartDateTick(
-  value: string | Date,
-  options?: {
-    compact?: boolean;
-    includeYear?: boolean;
-    monthOnly?: boolean;
-  }
-): string;
-
-export function formatChartDateTooltip(value: string | Date): string;
-
-export function isDateLikeChartValue(value: unknown): boolean;
-```
-
-Formatting rules:
-
-```text
-Desktop day axis: 03 Jul, 10 Jul, 17 Jul.
-Desktop with year if needed: 03 Jul 2026.
-Month-level: Jul 2026.
-Mobile day axis: 03.07, 10.07, 17.07.
-Tooltip: 03 Jul 2026.
-No raw ISO dates on axes.
-```
-
-Bad:
-
-```text
-2026-07-03
-```
-
-Good:
-
-```text
-03 Jul
-```
-
-## 26.2 Add responsive chart axis helper
-
-Create:
-
-```text
-frontend/src/hooks/useMediaQuery.ts
-```
-
-or use an existing hook if present.
-
-Recommended hook:
-
-```ts
-export function useMediaQuery(query: string): boolean {
-  const [matches, setMatches] = useState(false);
-
-  useEffect(() => {
-    const media = window.matchMedia(query);
-    setMatches(media.matches);
-
-    const listener = () => setMatches(media.matches);
-    media.addEventListener("change", listener);
-    return () => media.removeEventListener("change", listener);
-  }, [query]);
-
-  return matches;
-}
-```
-
-Add helper:
-
-```ts
-export function getResponsiveXAxisProps(
-  pointCount: number,
-  isSmallScreen: boolean
-) {
-  if (!isSmallScreen) {
-    return {
-      angle: 0,
-      textAnchor: "middle",
-      interval: "preserveStartEnd",
-      height: 36,
-    };
-  }
-
-  if (pointCount <= 6) {
-    return {
-      angle: 0,
-      textAnchor: "middle",
-      interval: 0,
-      height: 36,
-    };
-  }
-
-  if (pointCount <= 12) {
-    return {
-      angle: -45,
-      textAnchor: "end",
-      interval: 0,
-      height: 56,
-    };
-  }
-
-  return {
-    angle: -65,
-    textAnchor: "end",
-    interval: "preserveStartEnd",
-    height: 72,
-  };
-}
-```
-
-Avoid always using vertical 90° labels. Prefer `-45` or `-65` first.
-
-## 26.3 Apply to every date-based Stats chart
-
-In `StatsPage.tsx`, identify all charts where X-axis is date/time.
-
-Apply:
-
-```tsx
-<XAxis
-  dataKey="date"
-  tickFormatter={(value) =>
-    formatChartDateTick(value, { compact: isSmallScreen })
-  }
-  {...getResponsiveXAxisProps(data.length, isSmallScreen)}
-/>
-```
-
-For tooltip:
-
-```tsx
-<Tooltip
-  labelFormatter={(value) => formatChartDateTooltip(value)}
-/>
-```
-
-Do not apply date formatting to non-date axes such as exercise names/categories.
-
-### Acceptance criteria
-
-```text
-All date-based Stats X-axes use one consistent format.
-No raw ISO dates are visible on chart axes.
-Tooltips show full readable dates.
-Mobile chart labels do not overlap badly.
-Non-date X-axes are unaffected.
-```
-
-## Phase 26 verification
-
-Utility tests if available:
-
-```text
-formatChartDateTick("2026-07-03") => "03 Jul"
-formatChartDateTick("2026-07-03", { compact: true }) => "03.07"
-formatChartDateTooltip("2026-07-03") => "03 Jul 2026"
-Invalid values return safe fallback.
-```
-
-Manual:
-
-```text
-Open Stats at 360px width.
-Charts remain readable.
-X labels do not overlap heavily.
-Tap/hover tooltip shows full date.
-```
-
-Status: completed on 2026-07-05.
-
-Implementation notes:
-
-- Added shared chart date formatting helpers with fixed `03 Jul`, `03.07`, and `03 Jul 2026` outputs.
-- Added a reusable media-query hook and responsive X-axis prop helper.
-- Applied shared date tick and tooltip formatting to date-based Stats charts.
-- Kept non-date axes such as exercise names and numeric volume axes unchanged.
-
-Suggested commit:
-
-```text
-Phase 26: standardize Stats chart dates and mobile axis layout
-```
-
----
-
-# Phase 27 — Stats metric card visual representation
-
-## Purpose
-
-Improve Stats page data representation using cards, progress bars, range bars, sparklines, and a compact calculations panel.
-
-Covers:
-
-- #9 Improve metrics cards/data presentation.
-
-## Expected target files
-
-```text
-frontend/src/pages/StatsPage.tsx
+frontend/src/components/stats/StatsOverview.tsx
 frontend/src/components/stats/MetricCard.tsx
 frontend/src/components/stats/MetricRow.tsx
 frontend/src/components/stats/MetricProgressBar.tsx
@@ -1076,132 +191,126 @@ frontend/src/components/stats/MetricInfo.tsx
 frontend/src/styles.css
 ```
 
-Create `frontend/src/components/stats/` if it does not exist.
-
-## 27.1 Create shared visual components
-
-### MetricStatusBadge
-
-```tsx
-type MetricStatus = "good" | "watch" | "bad" | "neutral" | "info";
-
-type MetricStatusBadgeProps = {
-  status: MetricStatus;
-  label: string;
-};
-```
-
-Example labels:
+Secondary:
 
 ```text
-Good
-On Track
-Improving
-Low
-Watch
-High
-Risky
-No data
+frontend/src/pages/StatsPage.tsx
+frontend/src/api/types.ts
+docs/CODEX_PLAN.md
+CHANGELOG.md
 ```
 
-### MetricProgressBar
+Do not change backend unless a frontend data field is missing or incorrectly named.
 
-For bounded 0-100 metrics:
+---
 
-```tsx
-type MetricProgressBarProps = {
-  value: number | null;
-  min?: number;
-  max?: number;
-  markerLabel?: string;
-  zones?: Array<{
-    from: number;
-    to: number;
-    status: MetricStatus;
-    label?: string;
-  }>;
-};
-```
+## Required visual target
 
-Use for:
+The Stats page should visually follow this structure:
 
 ```text
-Recovery
-Consistency
-Readiness
-ATL percent
-CTL percent, if implemented
+Stats page
+  Page header + range selector
+
+  Top metric cards
+    Recovery
+    7-day Load
+    Strength Intensity
+    Back Pain Risk
+    Consistency
+
+  Stats main grid
+    Training load status
+      ATL/CTL/TSB chart
+      ATL chip
+      CTL chip
+      TSB chip
+
+    Calculations
+      compact rows:
+      ATL
+      CTL
+      TSB
+      AC ratio
+      Monotony
+      Training strain
+
+  Existing charts / summary
 ```
 
-### MetricRangeBar
+---
 
-For zone/range metrics:
+# 30.1 Widen Stats page desktop layout
 
-```tsx
-type MetricRangeBarProps = {
-  value: number | null;
-  min: number;
-  max: number;
-  zones: Array<{
-    from: number;
-    to: number;
-    status: MetricStatus;
-    label: string;
-  }>;
-  valueLabel?: string;
-};
+## Implementation
+
+Change Stats shell width from narrow 820px to a dashboard width.
+
+In `frontend/src/styles.css`:
+
+```css
+.app-shell-stats {
+  width: min(100%, 1180px);
+}
 ```
 
-Use for:
+If Home Assistant ingress feels too wide, use:
+
+```css
+.app-shell-stats {
+  width: min(100%, 1120px);
+}
+```
+
+Do not widen non-stats pages.
+
+## Responsive grid
+
+Update metric cards:
+
+```css
+.metric-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(205px, 1fr));
+  gap: 14px;
+  margin: 0 0 16px;
+}
+```
+
+Use this instead of hard-coded `repeat(5, 1fr)`.
+
+Desktop with enough space will show five cards. Narrow desktop/tablet will wrap naturally.
+
+## Acceptance criteria
 
 ```text
-Back pain risk
-TSB
-AC ratio
-Monotony
-Training strain
+On wide desktop, top metric cards are not cramped.
+On 820px viewport, cards wrap cleanly.
+On mobile, cards become one or two columns depending width.
+No horizontal overflow.
 ```
 
-### MetricSparkline
+---
 
-Small trend chart:
+# 30.2 Redesign MetricCard component
+
+## Current issue
+
+`MetricCard` is too minimal and does not use icon/tones well.
+
+## New API
+
+Update `MetricCard.tsx`:
 
 ```tsx
-type MetricSparklinePoint = {
-  date: string;
-  value: number;
-};
+type MetricTone = "recovery" | "load" | "strength" | "pain" | "consistency" | "neutral";
 
-type MetricSparklineProps = {
-  data: MetricSparklinePoint[];
-  valueKey?: "value";
-  label?: string;
-};
-```
-
-Use for:
-
-```text
-Weekly load
-Strength progress
-Consistency mini history
-Volume trend
-Average RPE trend
-Back pain trend
-```
-
-Use SVG or existing Recharts. Prefer no new dependency.
-
-### MetricCard
-
-Top dashboard card:
-
-```tsx
 type MetricCardProps = {
   title: string;
   value: string;
   subtitle?: string;
   icon?: ReactNode;
+  tone?: MetricTone;
   status?: {
     label: string;
     status: MetricStatus;
@@ -1211,728 +320,725 @@ type MetricCardProps = {
 };
 ```
 
-### MetricRow
+## New markup
 
-Advanced calculations row:
+Target structure:
 
 ```tsx
-type MetricRowProps = {
-  label: string;
-  description: string;
-  value: string;
-  status: MetricStatus;
-  visual: ReactNode;
+<article className={`metric-card metric-card-${tone ?? "neutral"}`}>
+  <div className="metric-card-top">
+    <div className="metric-card-icon" aria-hidden="true">
+      {icon}
+    </div>
+
+    <div className="metric-card-copy">
+      <span className="metric-card-title">{title}</span>
+      {subtitle && <small>{subtitle}</small>}
+    </div>
+
+    {status && <MetricStatusBadge ... />}
+  </div>
+
+  <div className="metric-card-value-row">
+    <strong>{value}</strong>
+  </div>
+
+  {visual && <div className="metric-card-visual">{visual}</div>}
+
+  {description && <p>{description}</p>}
+</article>
+```
+
+## Icons
+
+Do not add an icon package if not already installed.
+
+Use simple inline SVG icons:
+
+```text
+Recovery: heartbeat/heart
+7-day Load: dumbbell/barbell or kg
+Strength: upward trend arrow
+Back Pain Risk: warning/back/spine simple icon
+Consistency: calendar/check
+```
+
+## CSS target
+
+```css
+.metric-card {
+  position: relative;
+  min-height: 164px;
+  padding: 16px;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at top left, rgba(10, 132, 255, 0.10), transparent 42%),
+    var(--card);
+  border: 1px solid var(--border);
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.metric-card-top {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.metric-card-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(10, 132, 255, 0.38);
+  background: rgba(10, 132, 255, 0.13);
+  color: var(--blue);
+}
+
+.metric-card-title {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.metric-card-copy small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.metric-card-value-row strong {
+  font-size: 28px;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.metric-card p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+```
+
+Tone classes should only change icon/accent color, not the entire card background.
+
+## Acceptance criteria
+
+```text
+Each top card has a leading icon.
+Value hierarchy is clearer.
+Descriptions are readable but not dominant.
+Badges align consistently.
+Cards look like dashboard cards, not plain boxes.
+```
+
+---
+
+# 30.3 Fix top metric card semantics and labels
+
+## Recovery
+
+Final:
+
+```text
+Recovery
+RPE + back pain
+68%
+Watch
+```
+
+Description:
+
+```text
+Combined session feedback from RPE and back pain.
+```
+
+## Weekly Load should be renamed to 7-day Load
+
+Current screenshot shows:
+
+```text
+Weekly Load
+15.3 average per workout
+0.0
+```
+
+This feels broken because current 7-day load can be zero while average per workout is not zero.
+
+Final card:
+
+```text
+7-day Load
+Including rest days
+```
+
+Value rule:
+
+```text
+If trainingLoad.weekly_load is null or zero: "No recent load"
+Otherwise: formatted weekly_load
+```
+
+Description:
+
+```text
+Load from the last 7 local days.
+```
+
+Do not show `average per workout` as subtitle for this card; it is not the same concept.
+
+## Strength Progress should be renamed to Strength Intensity
+
+Current title implies trend/progress, but value is average relative intensity.
+
+Final:
+
+```text
+Strength Intensity
+Average e1RM context
+105%
+```
+
+Status:
+
+```text
+Info
+```
+
+or no badge if no trend is computed.
+
+Do not use `Trend` badge unless the backend actually computes a trend.
+
+## Back Pain Risk
+
+Keep title:
+
+```text
+Back Pain Risk
+```
+
+Description:
+
+```text
+Average reported back pain across logged workouts.
+```
+
+Use range bar with labels:
+
+```text
+Low | Moderate | High
+```
+
+## Consistency
+
+Current visual uses `recoveryZones`, which is wrong.
+
+Create separate consistency zones:
+
+```ts
+const consistencyZones = [
+  { from: 0, to: 50, status: "bad", label: "Low" },
+  { from: 50, to: 80, status: "watch", label: "Partial" },
+  { from: 80, to: 100, status: "good", label: "Good" },
+];
+```
+
+For 100%, show full green-dominant progress, not a misleading recovery bar.
+
+Description:
+
+```text
+Workouts with both RPE and back-pain feedback.
+```
+
+## Acceptance criteria
+
+```text
+No top card uses misleading labels.
+7-day Load no longer shows contradictory 0.0 + average per workout.
+Strength card no longer says Progress unless actual progress is calculated.
+Consistency bar uses consistency-specific zones.
+```
+
+---
+
+# 30.4 Improve MetricProgressBar and MetricRangeBar
+
+## New props
+
+Update both components to support:
+
+```tsx
+size?: "sm" | "md"
+showValueLabel?: boolean
+showEdgeLabels?: boolean
+edgeLabels?: {
+  left?: string;
+  center?: string;
+  right?: string;
+}
+tone?: "recovery" | "load" | "strength" | "pain" | "neutral"
+```
+
+## Marker clamp
+
+Do not let marker visually overflow at 0% or 100%.
+
+```ts
+const markerPercent = percent === null ? null : Math.min(98, Math.max(2, percent));
+```
+
+## Bar labels
+
+For top cards:
+
+```text
+showEdgeLabels = true
+```
+
+Examples:
+
+Recovery:
+
+```text
+0%   50%   100%
+```
+
+Back pain:
+
+```text
+Low   Moderate   High
+```
+
+For calculation rows:
+
+```text
+showValueLabel = false
+```
+
+because row already has a value column.
+
+## CSS
+
+Use smaller bars in rows:
+
+```css
+.metric-row .metric-progress-track,
+.metric-row .metric-range-track {
+  height: 8px;
+}
+
+.metric-card .metric-progress-track,
+.metric-card .metric-range-track {
+  height: 10px;
+}
+```
+
+Add labels:
+
+```css
+.metric-bar-labels {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.metric-bar-labels span:nth-child(2) {
+  text-align: center;
+}
+
+.metric-bar-labels span:last-child {
+  text-align: right;
+}
+```
+
+## Acceptance criteria
+
+```text
+Top card bars have useful labels.
+Row bars do not duplicate value labels.
+Markers never clip at edges.
+Bars look consistent across cards and rows.
+```
+
+---
+
+# 30.5 Redesign MetricSparkline
+
+## New API
+
+```tsx
+type MetricSparklineProps = {
+  data: MetricSparklinePoint[];
+  tone?: "load" | "strength" | "consistency" | "neutral";
+  label?: string;
+  emptyLabel?: string;
+  showArea?: boolean;
 };
 ```
 
-## 27.2 Top Stats overview cards
+## Empty state
 
-Improve overview section with cards:
+If data length is less than 2:
 
-```text
-Recovery
-Weekly Load
-Strength Progress
-Back Pain Risk
-Consistency
+```tsx
+return <div className="metric-sparkline-empty">No trend yet</div>;
 ```
 
-Each card should contain:
+Do not draw a flat line if there is no real trend.
 
-```text
-title
-current value
-status badge
-compact visual
-short explanation/subtitle
-```
-
-Suggested visual type:
-
-```text
-Recovery: progress bar.
-Weekly Load: sparkline.
-Strength Progress: sparkline.
-Back Pain Risk: range bar.
-Consistency: mini bars or sparkline.
-```
-
-## 27.3 Training load status card
-
-Add grouped card:
-
-```text
-Training load status
-```
-
-Group:
-
-```text
-ATL — fatigue
-CTL — fitness/base
-TSB — freshness/fatigue balance
-```
-
-Display:
-
-```text
-Line chart with ATL and CTL.
-TSB as line or area.
-Summary chips below chart.
-Short explanation.
-```
-
-Explanation text:
-
-```text
-ATL builds fatigue. CTL reflects fitness. TSB shows how fresh (+) or fatigued (–) you are.
-```
-
-Do not show ATL/CTL/TSB as disconnected random cards only.
-
-## 27.4 Advanced Calculations panel
-
-Add collapsible panel:
-
-```text
-Calculations
-```
-
-Rows:
-
-```text
-Fatigue (ATL)
-Fitness (CTL)
-Stress Balance (TSB)
-Workload Ratio (AC)
-Monotony
-Training strain
-```
-
-Each row:
-
-```text
-info icon
-metric name
-compact visual bar
-current value
-small status dot/badge
-```
-
-Add legend:
-
-```text
-Low / High risk
-Moderate
-Good
-```
-
-## 27.5 Hide unsupported cardio-only metrics
-
-Do not add:
-
-```text
-Effective VO2max
-Marathon Shape
-Race predictor
-```
-
-until running/cardio data supports them.
-
-Focus metrics on:
-
-```text
-Load
-Recovery
-Fatigue
-Fitness
-Stress balance
-Workload ratio
-Monotony
-Training strain
-Volume
-Intensity
-Back pain
-RPE
-Consistency
-Strength progress
-```
-
-### Acceptance criteria
-
-```text
-Stats page has clearer top metric cards.
-Important metrics are not only raw numbers.
-Bounded scores use progress bars.
-Zone-based metrics use range bars.
-Trend metrics use sparklines.
-ATL/CTL/TSB are grouped in one Training load status card.
-Advanced calculations are in collapsible Calculations panel.
-No unsupported cardio-only metrics appear.
-Mobile layout remains readable.
-```
-
-Status: completed on 2026-07-05.
-
-Implementation notes:
-
-- Added shared metric card, row, status badge, progress bar, range bar, sparkline, and info components.
-- Reworked the top Stats overview into visual metric cards for Recovery, Weekly Load, Strength Progress, Back Pain Risk, and Consistency.
-- Added grouped Training load status and collapsible Calculations panels as visual scaffolding for Phase 28 training-load values.
-- Did not add unsupported cardio-only metrics.
-
-Suggested commit:
-
-```text
-Phase 27: add visual metric cards and calculations panel
-```
-
----
-
-# Phase 28 — Training load model calculations
-
-## Purpose
-
-Add calculated training-load metrics for fatigue, fitness, stress balance, workload ratio, monotony, and strain.
-
-Covers:
-
-- #10 Add ATL, CTL, TSB, AC ratio, monotony, training strain, ATL percent.
-
-## Expected target files
-
-```text
-app/services/stats_service.py
-app/services/training_load_service.py
-app/schemas.py
-app/routes/stats routes if separate
-docs/openapi.json
-frontend/src/api/generated types if generated
-frontend/src/pages/StatsPage.tsx
-tests/test_stats_service.py
-tests/test_stats_training_load.py
-```
-
-## 28.1 Use app-native daily training load
-
-Do not copy Runalyze TRIMP blindly.
-
-The app is primarily strength-training based, so use the app’s existing training load calculation as base.
-
-Codex must inspect `app/services/stats_service.py` and identify current workout/daily load logic.
-
-Preferred approach:
-
-```text
-If stats_service already calculates workout/daily load:
-- reuse it
-- extract helper if needed
-
-If load is only calculated in frontend:
-- move/copy canonical calculation to backend stats service
-- keep frontend display-only
-
-If several load concepts exist:
-- choose the same one already used for recovery/readiness/stats
-```
-
-Final base metric:
-
-```text
-daily_load[date] = sum of all workout load points for that local app date
-```
-
-Important:
-
-```text
-Use APP_TIMEZONE/local app date.
-Include zero-load days between first date and today.
-Do not skip rest days in ATL/CTL calculation.
-```
-
-## 28.2 Add EWMA calculations
-
-Create helper service if useful:
-
-```text
-app/services/training_load_service.py
-```
-
-Recommended function:
-
-```python
-def ewma_time_constant_series(
-    values_by_date: dict[date, float],
-    start_date: date,
-    end_date: date,
-    window_days: int,
-) -> list[dict]:
-    ...
-```
-
-Use time-constant EWMA:
-
-```python
-today_value = yesterday_value + (daily_load - yesterday_value) / window_days
-```
-
-Settings:
-
-```text
-ATL window_days = 7
-CTL window_days = 42
-```
-
-Initial value:
-
-```text
-First day in series starts at that day’s daily_load.
-Then continue day by day including zero-load days.
-```
-
-Alternative acceptable but less preferred:
-
-```text
-Start at 0 and mark warm-up period as low confidence.
-```
-
-## 28.3 Metrics to calculate
-
-For each date:
-
-```text
-date
-daily_load
-atl
-ctl
-tsb
-ac_ratio
-atl_percent
-ctl_percent optional
-```
-
-Definitions:
-
-```text
-ATL = 7-day EWMA of daily_load.
-CTL = 42-day EWMA of daily_load.
-TSB = CTL - ATL.
-AC ratio = ATL / CTL, if CTL > 0 else null.
-```
-
-Reference max:
-
-```text
-atl_reference_max = historical 95th percentile of ATL values.
-fallback = max(ATL) if not enough data.
-fallback = null if no data.
-```
-
-Do not use all-time maximum as the only normalization because a past overload spike can make scale misleading.
-
-ATL percent:
-
-```text
-atl_percent = atl / atl_reference_max * 100
-```
-
-CTL percent optional:
-
-```text
-ctl_percent = ctl / ctl_reference_max * 100
-```
-
-## 28.4 Monotony and strain
-
-Use last 7 local days:
-
-```text
-last_7_daily_loads = today and previous 6 days
-weekly_load = sum(last_7_daily_loads)
-mean_load = average(last_7_daily_loads)
-std_load = standard deviation
-```
-
-Recommended:
-
-```python
-monotony = mean_load / std_load if std_load > 0 else None
-training_strain = weekly_load * monotony if monotony is not None else None
-```
-
-Handle edge cases:
-
-```text
-If std == 0 and mean == 0:
-  monotony = None
-  strain = None
-
-If std == 0 and mean > 0:
-  monotony = None for first implementation, with status/description explaining insufficient variation.
-```
-
-Avoid infinity or fake huge numbers in UI.
-
-## 28.5 Status zones
-
-Backend can return statuses, or frontend can derive them. Prefer backend returns statuses for consistency.
-
-### ATL percent
-
-```text
-0–40%: low
-40–70%: normal/good
-70–90%: high/watch
-90%+: very high/bad
-```
-
-### TSB
-
-```text
-> +10: fresh
--10 to +10: balanced
--25 to -10: fatigued/watch
-< -25: very fatigued/bad
-```
-
-### AC ratio
-
-```text
-<0.8: low/underloading
-0.8–1.3: good
-1.3–1.5: high/watch
->1.5: risky/bad
-```
-
-### Monotony
-
-```text
-<1.0: varied/good
-1.0–2.0: moderate/watch
->2.0: high/bad
-```
-
-### Back pain risk
-
-If already available, keep current logic. Do not invent medical risk model in this phase.
-
-## 28.6 API schema
-
-Add to `app/schemas.py`.
-
-Suggested models:
-
-```python
-class TrainingLoadPoint(BaseModel):
-    date: str
-    daily_load: float
-    atl: float
-    ctl: float
-    tsb: float
-    ac_ratio: float | None = None
-    atl_percent: float | None = None
-    ctl_percent: float | None = None
-
-class MetricZone(BaseModel):
-    from_value: float
-    to_value: float
-    label: str
-    status: str
-
-class TrainingLoadMetricSummary(BaseModel):
-    key: str
-    label: str
-    value: float | None
-    formatted_value: str
-    status: str
-    description: str
-    zones: list[MetricZone] = []
-
-class TrainingLoadSummary(BaseModel):
-    latest_date: str | None
-    daily_load: float | None
-    atl: float | None
-    ctl: float | None
-    tsb: float | None
-    ac_ratio: float | None
-    atl_percent: float | None
-    ctl_percent: float | None = None
-    atl_reference_max: float | None
-    ctl_reference_max: float | None = None
-    weekly_load: float | None
-    monotony: float | None
-    training_strain: float | None
-    metrics: list[TrainingLoadMetricSummary]
-    series: list[TrainingLoadPoint]
-```
-
-Add to existing Stats response:
-
-```python
-training_load: TrainingLoadSummary
-```
-
-Keep it additive/backward-compatible if possible.
-
-## 28.7 OpenAPI and generated frontend types
-
-Because API response changes:
-
-```text
-Update docs/openapi.json.
-Regenerate frontend API/types if project uses generated types.
-Ensure TypeScript compile passes.
-```
-
-Codex must inspect existing scripts. Possible commands:
-
-```bash
-python -m app.scripts.generate_openapi
-npm run generate-api
-```
-
-If no generator exists, update in existing project style.
-
-## 28.8 Backend tests
-
-Create:
-
-```text
-tests/test_stats_training_load.py
-```
-
-Test cases:
-
-### EWMA basics
-
-```text
-Day 1 daily_load = 100
-Day 2 daily_load = 0
-Day 3 daily_load = 0
-ATL window = 7
-Day 1 ATL = 100
-Day 2 ATL = 100 + (0 - 100) / 7
-Day 3 ATL = previous + (0 - previous) / 7
-```
-
-### Zero days included
-
-```text
-Workout on Monday and Thursday.
-Series includes Tuesday and Wednesday with daily_load = 0.
-ATL decays on rest days.
-```
-
-### TSB
-
-```text
-TSB = CTL - ATL
-```
-
-### AC ratio
-
-```text
-CTL > 0 => ATL / CTL
-CTL == 0 => None
-```
-
-### Reference max
-
-```text
-Enough ATL values => 95th percentile.
-Not enough values => max.
-No values => None.
-```
-
-### Monotony
-
-```text
-Loads [10,20,30,40,50,60,70]
-monotony = mean / std
-strain = weekly_sum * monotony
-```
-
-### Empty history
-
-```text
-No workouts.
-training_load summary returns null values and empty series.
-Stats page does not crash.
-```
-
-## 28.9 Frontend integration
-
-Stats page consumes `training_load`.
-
-Map metrics into Phase 27 components:
-
-```text
-ATL -> MetricRow + range/progress bar.
-CTL -> MetricRow + range/progress bar.
-TSB -> MetricRow + range bar.
-AC ratio -> MetricRow + range bar.
-Monotony -> MetricRow + range bar.
-Training strain -> MetricRow + range/progress by relative status.
-```
-
-Training load chart:
-
-```text
-Series:
-- ATL
-- CTL
-- TSB
-```
-
-Labels:
-
-```text
-ATL (Fatigue)
-CTL (Fitness)
-TSB (Stress Balance)
-```
-
-Use Phase 26 date formatting.
-
-### Acceptance criteria
-
-```text
-Stats API returns training_load object.
-Stats page shows Training load status card.
-Calculations panel shows ATL, CTL, TSB, AC ratio, monotony, strain.
-Rest days affect ATL/CTL decay.
-No crash with empty workout history.
-No unsupported cardio metrics appear.
-TypeScript builds.
-Backend tests pass.
-```
-
-Status: completed on 2026-07-05.
-
-Implementation notes:
-
-- Added `app/services/training_load_service.py` for daily app-load aggregation, rest-day series filling, EWMA ATL/CTL, TSB, AC ratio, ATL/CTL reference percentages, monotony, strain, statuses, and metric zones.
-- Added top-level `training_load` to the Stats API response while also retaining it inside `stats` for local consumers.
-- Regenerated OpenAPI/generated frontend contracts and added frontend API types for training-load metrics and series.
-- Replaced Phase 27 training-load placeholders with real backend metrics, ATL/CTL/TSB charting, and populated calculation rows.
-- Added focused backend tests for rest days, empty history, percentile fallback, and route-level `training_load` exposure.
-
-Suggested commit:
-
-```text
-Phase 28: add training load calculations and Stats integration
-```
-
----
-
-# Phase 29 — Final integration, docs, changelog, and release prep
-
-## Purpose
-
-Stabilize the whole batch and prepare version `1.3.0`.
-
-Covers:
-
-```text
-Final verification
-Docs update
-Changelog update
-Version bump
-Docker build
-Manual smoke tests
-```
-
-## Expected target files
-
-```text
-CHANGELOG.md
-config.yaml
-docs/CODEX_PLAN.md
-docs/openapi.json
-frontend generated API/types if applicable
-```
-
-## 29.1 Update docs
-
-Update this file:
-
-```text
-docs/CODEX_PLAN.md
-```
-
-After implementation, mark completed:
-
-```text
-Phase 23 — completed
-Phase 24 — completed
-Phase 25 — completed
-Phase 26 — completed
-Phase 27 — completed
-Phase 28 — completed
-```
-
-Add summary:
-
-```text
-1.3.0 focuses on:
-- cleaner Settings and navigation
-- simplified active workout mobile UX
-- unified edit workout save behavior
-- improved Stats chart formatting
-- visual metric cards
-- training load model: ATL, CTL, TSB, AC ratio, monotony, strain
-```
-
-## 29.2 Update CHANGELOG
+## SVG improvements
 
 Add:
 
-```markdown
-## 1.3.0 - YYYY-MM-DD
+```tsx
+<defs>...</defs>
+<polygon className="metric-sparkline-area" ... />
+<polyline className="metric-sparkline-line" ... />
+<circle className="metric-sparkline-end" ... />
+```
 
-### Added
-- Added training-load calculations: ATL, CTL, TSB, AC ratio, monotony, and training strain.
-- Added visual metric cards with progress bars, range bars, and sparklines on the Stats page.
-- Added grouped Training load status chart for ATL, CTL, and TSB.
-- Added advanced Calculations panel for training-load metrics.
+## Acceptance criteria
+
+```text
+Sparkline cards look intentional.
+Empty trend state does not render misleading flat line.
+Load and strength can have different tones.
+```
+
+---
+
+# 30.6 Redesign Training load status layout
+
+## Final structure
+
+```tsx
+<section className="panel training-load-status-card">
+  <div className="panel-header training-load-header">...</div>
+
+  <div className="training-load-legend">
+    <span className="legend-atl">ATL (Fatigue)</span>
+    <span className="legend-ctl">CTL (Fitness)</span>
+    <span className="legend-tsb">TSB (Stress Balance)</span>
+  </div>
+
+  <div className="training-load-chart">...</div>
+
+  <div className="training-load-chip-grid">
+    <TrainingLoadChip metric={atlMetric} tone="atl" />
+    <TrainingLoadChip metric={ctlMetric} tone="ctl" />
+    <TrainingLoadChip metric={tsbMetric} tone="tsb" />
+  </div>
+</section>
+```
+
+Remove full `TrainingLoadMetricRow` rows from the Training load card. Those rows belong only in Calculations.
+
+## Chart color mapping
+
+Set:
+
+```text
+ATL = blue
+CTL = teal/cyan
+TSB = purple
+```
+
+CSS variables:
+
+```css
+:root {
+  --stats-atl: #0a84ff;
+  --stats-ctl: #30d5c8;
+  --stats-tsb: #af52de;
+}
+```
+
+Use:
+
+```tsx
+<Line dataKey="atl" stroke="var(--stats-atl)" />
+<Line dataKey="ctl" stroke="var(--stats-ctl)" />
+<Line dataKey="tsb" stroke="var(--stats-tsb)" />
+```
+
+## Acceptance criteria
+
+```text
+Training load card does not duplicate the full Calculations rows.
+ATL/CTL/TSB chart has visible legend.
+ATL is blue, CTL is teal, TSB is purple.
+Three summary chips appear below chart.
+Chart looks closer to approved mockup.
+```
+
+---
+
+# 30.7 Make Calculations panel compact and premium
+
+## MetricRow markup
+
+```tsx
+<div className="metric-row">
+  <div className="metric-row-main">
+    <strong>{label}</strong>
+    <span>{description}</span>
+  </div>
+
+  <div className="metric-row-visual">{visual}</div>
+
+  <div className="metric-row-value">{value}</div>
+
+  <MetricStatusBadge ... />
+</div>
+```
+
+Use human labels:
+
+```ts
+function metricStatusDisplay(status: MetricStatus) {
+  switch (status) {
+    case "good": return "Good";
+    case "watch": return "Watch";
+    case "bad": return "Risk";
+    case "info": return "Info";
+    case "neutral": return "No data";
+  }
+}
+```
+
+## CSS
+
+```css
+.metric-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.15fr) minmax(220px, 1fr) minmax(64px, auto) auto;
+  gap: 12px;
+  align-items: center;
+  border: 0;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  border-radius: 0;
+  padding: 12px 0;
+  background: transparent;
+}
+
+.metric-row:first-of-type {
+  border-top: 0;
+}
+
+.metric-row-main strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.metric-row-main span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.metric-row-value {
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 800;
+  text-align: right;
+}
+```
+
+## Mobile layout
+
+```css
+@media (max-width: 640px) {
+  .metric-row {
+    grid-template-columns: 1fr auto;
+  }
+
+  .metric-row-visual {
+    grid-column: 1 / -1;
+  }
+
+  .metric-row-value {
+    text-align: left;
+  }
+}
+```
+
+## Acceptance criteria
+
+```text
+Calculations rows are compact.
+Rows do not look like separate chunky cards.
+Badges use Good/Watch/Risk/Info/No data labels.
+Rows are readable on mobile.
+No duplicated value labels under bars.
+```
+
+---
+
+# 30.8 Add desktop two-column Stats main grid
+
+In `StatsOverview.tsx`, wrap Training load card and Calculations panel:
+
+```tsx
+<section className="stats-main-grid">
+  <TrainingLoadStatusCard ... />
+  <CalculationsPanel ... />
+</section>
+```
+
+CSS:
+
+```css
+.stats-main-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(340px, 0.95fr);
+  gap: 16px;
+  margin-bottom: 16px;
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .stats-main-grid {
+    grid-template-columns: 1fr;
+  }
+}
+```
+
+## Acceptance criteria
+
+```text
+On wide desktop, Training load status and Calculations are side by side.
+On tablet/mobile, they stack.
+The layout resembles approved dashboard mockup.
+```
+
+---
+
+# 30.9 Move Summary lower and reduce visual priority
+
+Keep Summary, but it should not compete with top dashboard cards.
+
+Visual treatment:
+
+```css
+.stats-summary-panel {
+  background: rgba(255,255,255,0.025);
+}
+```
+
+Do not remove Summary.
+
+## Acceptance criteria
+
+```text
+Summary is still available.
+Summary does not visually dominate the new Stats dashboard.
+```
+
+---
+
+# 30.10 Fix CSS color tokens for stats
+
+Add stats-specific tokens:
+
+```css
+:root {
+  --stats-atl: #0a84ff;
+  --stats-ctl: #30d5c8;
+  --stats-tsb: #af52de;
+  --stats-load: #0a84ff;
+  --stats-strength: #af52de;
+  --stats-pain: #ff9f0a;
+  --stats-good: #30d158;
+  --stats-watch: #ffd60a;
+  --stats-risk: #ff453a;
+}
+```
+
+Do not replace global `--green` everywhere unless necessary.
+
+For metric badges, use `--stats-good`, not the dark global `--green`.
+
+## Acceptance criteria
+
+```text
+Green labels are readable.
+ATL/CTL/TSB colors are consistent.
+Badges and bars use same semantic colors.
+```
+
+---
+
+# 30.11 Update empty/no-data states
+
+Rules:
+
+```text
+If trainingLoad.weekly_load is null or 0 and no workouts in last 7 days:
+  show "No recent load"
+
+If sparkline data has fewer than 2 points:
+  show "No trend yet"
+
+If monotony/strain are null:
+  show "No data", no marker, neutral badge
+
+If AC ratio is very low because CTL is nonzero but ATL near zero:
+  show value but description should explain "Recent load is low versus base"
+```
+
+Do not hide true zero values if they are meaningful, but avoid making the dashboard look broken.
+
+## Acceptance criteria
+
+```text
+No misleading flat blue line for no data.
+No confusing 0.0 with unrelated average subtitle.
+No data rows look intentional.
+```
+
+---
+
+# 30.12 Update docs and plan
+
+Update:
+
+```text
+docs/CODEX_PLAN.md
+CHANGELOG.md
+```
+
+Add:
+
+```text
+Phase 30 — Stats UI design polish and visual system cleanup
+```
+
+Do not bump `config.yaml` during Phase 30 unless this phase is combined with release prep.
+
+Recommended `CHANGELOG.md` under Unreleased or 1.3.1 draft:
+
+```markdown
+## 1.3.1 - Unreleased
 
 ### Changed
-- Settings sections are collapsed by default.
-- Top navigation now keeps the active page visible and highlights it consistently.
-- Active workout page now uses cleaner add-existing-exercise flow.
-- RPE and Back pain on active workout auto-save when changed.
-- Edit workout page now uses one page-level Save workout button.
-- Stats charts now use consistent date formatting and improved mobile X-axis layout.
-
-### Removed
-- Removed redundant inline Settings link from Garmin stats controls.
-- Removed inline exercise creation from active workout page.
-- Removed separate Save workout info button from edit workout page.
+- Polished Stats dashboard layout, metric cards, training-load chart, and calculations panel.
+- Improved Stats desktop layout and mobile readability.
+- Standardized ATL/CTL/TSB colors and metric status labels.
 
 ### Fixed
-- Fixed mobile scroll jump when adding the first exercise to a new workout.
-- Fixed test monkeypatch cleanup for asyncio.to_thread.
+- Fixed misleading top-card labels and visuals for 7-day load, strength intensity, and consistency.
+- Removed duplicate ATL/CTL/TSB rows from the Training load card.
 ```
 
-## 29.3 Version bump
+---
 
-In `config.yaml`:
+## Phase 30 verification
 
-```yaml
-version: "1.3.0"
-```
-
-Only do this after Phases 23–28 pass.
-
-## 29.4 Verification commands
-
-Backend:
-
-```bash
-python -m unittest discover -s tests
-```
-
-Frontend:
+Run:
 
 ```bash
 cd frontend
@@ -1941,170 +1047,163 @@ npm run build
 cd ..
 ```
 
-Docker:
+If any backend files are touched:
 
 ```bash
-docker build -t training-log:1.3.0 .
+python -m unittest discover -s tests
 ```
 
-If lint exists:
-
-```bash
-cd frontend
-npm run lint
-cd ..
-```
-
-## 29.5 Manual smoke test checklist
-
-### Navigation
+Manual desktop checks:
 
 ```text
-Open every page.
-Current nav item remains visible on /current.
-History nav item remains visible on /history.
-Stats nav item remains visible on /stats.
-Garmin nav item remains visible on /garmin.
-Backup nav item remains visible on /backup.
-Settings nav item remains visible on /settings.
-Only active item is highlighted.
+Open Stats on desktop width >= 1100px.
+Top cards are readable and not cramped.
+Training load and Calculations are side by side.
+ATL/CTL/TSB chart has legend.
+ATL/CTL/TSB colors match across chart/chips/rows.
+No duplicate ATL/CTL/TSB full rows in Training load card.
 ```
 
-### Settings
+Manual mobile checks:
 
 ```text
-Open Settings.
-All sections are collapsed by default.
-Expand Garmin.
-Auto-sync controls still work.
-Collapse Garmin.
-Refresh page.
-All sections collapsed again.
+Open Stats at 360px width.
+No horizontal overflow.
+Cards stack cleanly.
+Calculation rows stack cleanly.
+Bars are readable.
+Summary does not dominate.
 ```
 
-### Garmin stats
+Data state checks:
 
 ```text
-Open Garmin stats.
-No inline Settings link in range row.
-Range buttons work.
-Sync button works.
-Top nav Settings still exists.
+Recent load = 0.
+7-day Load card shows "No recent load" or clear zero state.
+No sparkline renders fake trend for insufficient data.
+Monotony/strain No data state looks intentional.
 ```
 
-### Active Workout
+Suggested commit message:
 
 ```text
-Start new workout on phone viewport.
-Add first exercise.
-No scroll jump.
-Add second exercise.
-Still normal.
-Change RPE.
-Status shows Saved.
-Refresh.
-RPE persists.
-Change Back pain.
-Status shows Saved.
-Refresh.
-Back pain persists.
-No inline new exercise creation fields.
-Helper link to Settings exists.
-```
-
-### Edit Workout
-
-```text
-Open workout from History.
-Change workout name.
-Unsaved changes appears.
-Change set values.
-Unsaved changes remains.
-Delete set or exercise.
-Delete control uses × style.
-Click Save workout.
-Success status appears.
-Refresh.
-Changes persist.
-No Save workout info button exists.
-Only one main Save workout button exists.
-```
-
-### Stats
-
-```text
-Open Stats desktop.
-Top metric cards render.
-Training load status chart renders.
-Calculations panel renders.
-Date labels are consistent.
-No raw ISO dates on chart axes.
-Open mobile viewport.
-Date labels do not overlap badly.
-Tooltips show full dates.
-No VO2max or Marathon Shape metrics.
-```
-
-### Empty/low-data state
-
-```text
-Use empty or nearly empty DB if possible.
-Stats page does not crash.
-Training load cards show No data / insufficient data.
-Charts show empty states gracefully.
+Phase 30: polish Stats dashboard visual design
 ```
 
 Status: completed on 2026-07-05.
 
 Implementation notes:
 
-- Added the `1.3.0` changelog section covering Phases 23-28.
-- Bumped `config.yaml` to `1.3.0`.
-- Confirmed Phases 23-28 are marked completed and added release summary context.
-- Release verification includes automated backend/frontend checks and Docker build; manual smoke checks remain a human release step.
-
-Suggested commit:
-
-```text
-Phase 29: document and release Training Log 1.3.0
-```
+- Widened the Stats desktop shell and replaced the fixed five-column card grid with responsive dashboard cards.
+- Redesigned metric cards with tone accents, inline icons, clearer labels, and corrected 7-day Load, Strength Intensity, and Consistency semantics.
+- Improved progress/range bars with clamped markers, optional edge labels, and compact row mode.
+- Reworked sparklines with area fill, endpoint markers, tone colors, and intentional empty states.
+- Rebuilt Training load status with ATL/CTL/TSB legend, approved blue/teal/purple color mapping, and summary chips instead of duplicated full rows.
+- Made Calculations a compact table-like panel and placed it beside Training load on wide desktop.
 
 ---
 
-# Final phase order
+# Phase 31 — Stats UI polish release verification
+
+## Purpose
+
+Prepare patch release `1.3.1` after Phase 30.
+
+## Target files
 
 ```text
-Phase 23 — Navigation, Settings, Garmin stats polish, and carryover cleanup
-Phase 24 — Active Workout mobile and logging UX
-Phase 25 — Edit Workout UX alignment and page-level dirty save
-Phase 26 — Stats chart X-axis date formatting and mobile layout
-Phase 27 — Stats metric card visual representation
-Phase 28 — Training load model calculations
-Phase 29 — Final integration, docs, changelog, and release prep
+config.yaml
+CHANGELOG.md
+docs/CODEX_PLAN.md
 ```
 
-Recommended order:
+## Tasks
 
-1. Phase 23 reduces small UX noise and restores docs.
-2. Phase 24 cleans active workout mobile flow.
-3. Phase 25 aligns edit-workout saving and deletion behavior.
-4. Phase 26 prepares chart formatting infrastructure.
-5. Phase 27 builds visual metric components and layout.
-6. Phase 28 adds real training-load calculations under the visual layer.
-7. Phase 29 stabilizes, verifies, documents, and releases `1.3.0`.
+1. Confirm Phase 30 is implemented and manually checked.
+2. Run full backend tests:
 
----
+```bash
+python -m unittest discover -s tests
+```
 
-# Final release rule
+3. Run frontend checks:
 
-Do not bump `config.yaml` to `1.3.0` until:
+```bash
+cd frontend
+npm run typecheck
+npm run build
+cd ..
+```
+
+4. Run Docker build:
+
+```bash
+docker build -t training-log:1.3.1 .
+```
+
+5. Update `config.yaml`:
+
+```yaml
+version: "1.3.1"
+```
+
+6. Update `CHANGELOG.md`:
+
+```markdown
+## 1.3.1 - YYYY-MM-DD
+```
+
+7. Mark Phase 30 and Phase 31 complete in `docs/CODEX_PLAN.md`.
+
+## Acceptance criteria
 
 ```text
-All backend tests pass.
-Frontend typecheck passes.
 Frontend build passes.
+Backend tests pass.
 Docker build passes.
-Manual smoke test is completed.
-CHANGELOG is updated.
-CODEX_PLAN.md marks phases correctly.
+Stats UI manually approved.
+config.yaml version is 1.3.1.
+CHANGELOG has 1.3.1 section.
+CODEX_PLAN marks Phase 30 and 31 complete.
+```
+
+Suggested commit message:
+
+```text
+Phase 31: release Stats UI polish 1.3.1
+```
+
+---
+
+# Codex prompt to use
+
+```text
+Read AGENTS.md.
+Read docs/CODEX_PLAN.md.
+Use:
+- docs/codex-skills/skills/training-log-phase-executor/SKILL.md
+- docs/codex-skills/skills/training-log-frontend-ux/SKILL.md
+- docs/codex-skills/skills/training-log-stats-training-load/SKILL.md
+
+Implement Phase 30 only: Stats UI design polish and visual system cleanup.
+
+Important:
+- Do not change backend training-load formulas.
+- Do not bump config.yaml version.
+- Do not start Phase 31.
+- Focus on Stats UI layout and visual quality.
+- Match the approved dark dashboard design direction.
+- Fix the bad UI from current implementation: cramped cards, duplicated ATL/CTL/TSB rows, chunky calculation rows, wrong semantic labels, weak sparklines, and inconsistent colors.
+
+Run:
+cd frontend && npm run typecheck && npm run build
+
+If backend files are touched, also run:
+python -m unittest discover -s tests
+
+Return:
+- changed files
+- screenshots/manual notes if available
+- verification results
+- remaining risks
 ```

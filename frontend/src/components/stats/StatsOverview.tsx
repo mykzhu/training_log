@@ -92,6 +92,60 @@ const ratioZones = [
   { from: 1.5, to: 2, status: "bad" as const, label: "Risky" },
 ];
 
+const consistencyZones = [
+  { from: 0, to: 50, status: "bad" as const, label: "Low" },
+  { from: 50, to: 80, status: "watch" as const, label: "Partial" },
+  { from: 80, to: 100, status: "good" as const, label: "Good" },
+];
+
+function StatsIcon({
+  type,
+}: {
+  type: "recovery" | "load" | "strength" | "pain" | "consistency";
+}) {
+  if (type === "recovery") {
+    return (
+      <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
+        <path d="M4 12h4l2-5 4 10 2-5h4" />
+      </svg>
+    );
+  }
+
+  if (type === "load") {
+    return (
+      <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
+        <path d="M4 9v6M8 7v10M8 12h8M16 7v10M20 9v6" />
+      </svg>
+    );
+  }
+
+  if (type === "strength") {
+    return (
+      <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
+        <path d="M4 17l5-5 4 4 7-9" />
+        <path d="M15 7h5v5" />
+      </svg>
+    );
+  }
+
+  if (type === "pain") {
+    return (
+      <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
+        <path d="M12 4l9 16H3L12 4z" />
+        <path d="M12 9v5M12 17h.01" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
+      <path d="M7 3v4M17 3v4M4 9h16" />
+      <path d="M5 5h14v15H5z" />
+      <path d="M8 14l2 2 5-5" />
+    </svg>
+  );
+}
+
 function SummaryMetric({
   detail,
   label,
@@ -212,7 +266,14 @@ function toMetricZones(zones: MetricZone[]) {
 
 function metricVisual(metric: TrainingLoadMetric | undefined) {
   if (!metric) {
-    return <MetricProgressBar value={null} zones={recoveryZones} />;
+    return (
+      <MetricProgressBar
+        showValueLabel={false}
+        size="sm"
+        value={null}
+        zones={recoveryZones}
+      />
+    );
   }
 
   const zones = toMetricZones(metric.zones);
@@ -227,8 +288,9 @@ function metricVisual(metric: TrainingLoadMetric | undefined) {
       <MetricRangeBar
         max={metric.max}
         min={metric.min}
+        showValueLabel={false}
+        size="sm"
         value={metric.value}
-        valueLabel={metric.formatted}
         zones={zones.length > 0 ? zones : ratioZones}
       />
     );
@@ -236,7 +298,8 @@ function metricVisual(metric: TrainingLoadMetric | undefined) {
 
   return (
     <MetricProgressBar
-      markerLabel={metric.formatted}
+      showValueLabel={false}
+      size="sm"
       value={value}
       zones={zones.length > 0 ? zones : recoveryZones}
     />
@@ -246,20 +309,48 @@ function metricVisual(metric: TrainingLoadMetric | undefined) {
 function TrainingLoadMetricRow({
   fallbackDescription,
   fallbackLabel,
+  label,
   metric,
 }: {
   fallbackDescription: string;
   fallbackLabel: string;
+  label?: string;
   metric?: TrainingLoadMetric;
 }) {
+  const description =
+    metric?.key === "ac_ratio" &&
+    metric.value !== null &&
+    metric.value !== undefined &&
+    metric.value < 0.8
+      ? "Recent load is low versus your longer-term base."
+      : metric?.description ?? fallbackDescription;
+
   return (
     <MetricRow
-      description={metric?.description ?? fallbackDescription}
-      label={metric?.label ?? fallbackLabel}
+      description={description}
+      label={label ?? metric?.label ?? fallbackLabel}
       status={metric?.status ?? "neutral"}
       value={metric?.formatted ?? "No data"}
       visual={metricVisual(metric)}
     />
+  );
+}
+
+function TrainingLoadChip({
+  label,
+  metric,
+  tone,
+}: {
+  label: string;
+  metric?: TrainingLoadMetric;
+  tone: "atl" | "ctl" | "tsb";
+}) {
+  return (
+    <div className={`training-load-chip training-load-chip-${tone}`}>
+      <span>{label}</span>
+      <strong>{metric?.formatted ?? "No data"}</strong>
+      <small>{statusLabel(metric?.status ?? "neutral")}</small>
+    </div>
   );
 }
 
@@ -326,57 +417,89 @@ export default function StatsOverview({
       : recovery >= 40
         ? { label: "Watch", status: "watch" as const }
         : { label: "High stress", status: "bad" as const };
+  const weeklyLoadValue =
+    trainingLoad?.weekly_load === null ||
+    trainingLoad?.weekly_load === undefined ||
+    trainingLoad.weekly_load <= 0
+      ? "No recent load"
+      : formatNumber(trainingLoad.weekly_load, 1);
 
   return (
     <>
       <section className="metric-card-grid">
         <MetricCard
-          description="Blends average RPE and back pain into a simple recovery view."
+          description="Combined session feedback from RPE and back pain."
+          icon={<StatsIcon type="recovery" />}
           status={recoveryStatus}
-          subtitle="RPE and back pain"
+          subtitle="RPE + back pain"
+          tone="recovery"
           title="Recovery"
           value={`${formatNumber(recovery, 0)}%`}
           visual={
             <MetricProgressBar
+              edgeLabels={{ left: "0%", center: "50%", right: "100%" }}
               markerLabel={`${formatNumber(recovery, 0)}%`}
+              showEdgeLabels
+              tone="recovery"
               value={recovery}
               zones={recoveryZones}
             />
           }
         />
         <MetricCard
-          description="App load from the last 7 local days, including rest days."
+          description="Load from the last 7 local days."
+          icon={<StatsIcon type="load" />}
           status={{
             label: statusLabel(atlMetric?.status ?? "neutral"),
             status: atlMetric?.status ?? "neutral",
           }}
-          subtitle={`${formatNumber(summary.avg_load_score, 1)} average per workout`}
-          title="Weekly Load"
-          value={formatNumber(trainingLoad?.weekly_load, 1)}
-          visual={<MetricSparkline data={sparkbarToPoints(sparkbars?.load)} />}
+          subtitle="Including rest days"
+          tone="load"
+          title="7-day Load"
+          value={weeklyLoadValue}
+          visual={
+            <MetricSparkline
+              data={sparkbarToPoints(sparkbars?.load)}
+              label="Load trend"
+              tone="load"
+            />
+          }
         />
         <MetricCard
           description="Average relative strength intensity across eligible sets."
-          status={{ label: "Trend", status: "info" }}
-          subtitle="Relative intensity"
-          title="Strength Progress"
+          icon={<StatsIcon type="strength" />}
+          status={{ label: "Info", status: "info" }}
+          subtitle="Average e1RM context"
+          tone="strength"
+          title="Strength Intensity"
           value={
             summary.avg_relative_intensity === null
               ? "No data"
               : `${formatNumber(summary.avg_relative_intensity, 0)}%`
           }
-          visual={<MetricSparkline data={sparkbarToPoints(sparkbars?.intensity)} />}
+          visual={
+            <MetricSparkline
+              data={sparkbarToPoints(sparkbars?.intensity)}
+              label="Strength intensity trend"
+              tone="strength"
+            />
+          }
         />
         <MetricCard
-          description={`${backPainLoggedCount}/${workoutCount} workouts include back pain feedback.`}
+          description="Average reported back pain across logged workouts."
+          icon={<StatsIcon type="pain" />}
           status={backPainStatus(backPain)}
           subtitle="Average back pain"
+          tone="pain"
           title="Back Pain Risk"
           value={backPain === null ? "No data" : `${formatNumber(backPain, 1)}/10`}
           visual={
             <MetricRangeBar
+              edgeLabels={{ left: "Low", center: "Moderate", right: "High" }}
               max={10}
               min={0}
+              showEdgeLabels
+              tone="pain"
               value={backPain}
               valueLabel={backPain === null ? "No data" : `${formatNumber(backPain, 1)}/10`}
               zones={backPainZones}
@@ -384,151 +507,173 @@ export default function StatsOverview({
           }
         />
         <MetricCard
-          description="Share of workouts with both RPE and back-pain context available."
+          description="Workouts with both RPE and back-pain feedback."
+          icon={<StatsIcon type="consistency" />}
           status={{
-            label: consistency !== null && consistency >= 80 ? "On Track" : "Watch",
-            status: consistency !== null && consistency >= 80 ? "good" : "watch",
+            label:
+              consistency === null
+                ? "No data"
+                : consistency >= 80
+                  ? "Good"
+                  : consistency >= 50
+                    ? "Watch"
+                    : "Risk",
+            status:
+              consistency === null
+                ? "neutral"
+                : consistency >= 80
+                  ? "good"
+                  : consistency >= 50
+                    ? "watch"
+                    : "bad",
           }}
           subtitle="Feedback coverage"
+          tone="consistency"
           title="Consistency"
           value={consistency === null ? "No data" : `${formatNumber(consistency, 0)}%`}
           visual={
             <MetricProgressBar
+              edgeLabels={{ left: "Low", center: "Partial", right: "Good" }}
               markerLabel={
                 consistency === null ? "No data" : `${formatNumber(consistency, 0)}%`
               }
+              showEdgeLabels
+              tone="strength"
               value={consistency}
-              zones={recoveryZones}
+              zones={consistencyZones}
             />
           }
         />
       </section>
 
-      <section className="panel training-load-status-card">
-        <div className="panel-header">
-          <div>
-            <h2>Training load status</h2>
-            <p className="muted">
-              ATL builds fatigue. CTL reflects fitness. TSB shows how fresh (+)
-              or fatigued (-) you are.
-            </p>
+      <section className="stats-main-grid">
+        <section className="panel training-load-status-card">
+          <div className="panel-header training-load-header">
+            <div>
+              <h2>Training load status</h2>
+              <p className="muted">
+                ATL builds fatigue. CTL reflects fitness. TSB shows freshness
+                balance.
+              </p>
+            </div>
+            <MetricInfo>Daily load includes rest days through today.</MetricInfo>
           </div>
-          <MetricInfo>Daily load includes rest days from the first workout through today.</MetricInfo>
-        </div>
-        {trainingLoad && trainingLoad.series.length > 0 ? (
-          <div className="training-load-chart">
-            <ResponsiveContainer height={220} width="100%">
-              <LineChart
-                data={trainingLoad.series}
-                margin={{ top: 12, right: 12, bottom: 0, left: 0 }}
-              >
-                <CartesianGrid stroke="#2e2e2e" strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="date"
-                  minTickGap={24}
-                  tickFormatter={(value) => formatChartDateTick(String(value))}
-                />
-                <YAxis width={42} />
-                <Tooltip
-                  formatter={(value, name) => [
-                    typeof value === "number"
-                      ? formatNumber(value, 1)
-                      : String(value),
-                    String(name).toUpperCase(),
-                  ]}
-                  labelFormatter={(value) =>
-                    formatChartDateTooltip(String(value))
-                  }
-                />
-                <Line
-                  dataKey="atl"
-                  dot={false}
-                  name="ATL"
-                  stroke="#ff9f0a"
-                  strokeWidth={2}
-                  type="monotone"
-                />
-                <Line
-                  dataKey="ctl"
-                  dot={false}
-                  name="CTL"
-                  stroke="#30d158"
-                  strokeWidth={2}
-                  type="monotone"
-                />
-                <Line
-                  dataKey="tsb"
-                  dot={false}
-                  name="TSB"
-                  stroke="#0a84ff"
-                  strokeWidth={2}
-                  type="monotone"
-                />
-              </LineChart>
-            </ResponsiveContainer>
+          <div className="training-load-legend" aria-label="Training load legend">
+            <span className="legend-atl">ATL (Fatigue)</span>
+            <span className="legend-ctl">CTL (Fitness)</span>
+            <span className="legend-tsb">TSB (Stress Balance)</span>
           </div>
-        ) : (
-          <div className="training-load-empty">No load data yet</div>
-        )}
-        <div className="training-load-placeholder">
-          <TrainingLoadMetricRow
-            fallbackDescription="Short-term fatigue"
-            fallbackLabel="ATL"
-            metric={atlMetric}
-          />
-          <TrainingLoadMetricRow
-            fallbackDescription="Longer-term base"
-            fallbackLabel="CTL"
-            metric={ctlMetric}
-          />
-          <TrainingLoadMetricRow
-            fallbackDescription="Freshness balance"
-            fallbackLabel="TSB"
-            metric={tsbMetric}
-          />
-        </div>
-      </section>
+          {trainingLoad && trainingLoad.series.length > 0 ? (
+            <div className="training-load-chart">
+              <ResponsiveContainer height={240} width="100%">
+                <LineChart
+                  data={trainingLoad.series}
+                  margin={{ top: 12, right: 12, bottom: 0, left: 0 }}
+                >
+                  <CartesianGrid stroke="#2e2e2e" strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="date"
+                    minTickGap={24}
+                    tickFormatter={(value) => formatChartDateTick(String(value))}
+                  />
+                  <YAxis width={42} />
+                  <Tooltip
+                    formatter={(value, name) => [
+                      typeof value === "number"
+                        ? formatNumber(value, 1)
+                        : String(value),
+                      String(name),
+                    ]}
+                    labelFormatter={(value) =>
+                      formatChartDateTooltip(String(value))
+                    }
+                  />
+                  <Line
+                    dataKey="atl"
+                    dot={false}
+                    name="ATL (Fatigue)"
+                    stroke="var(--stats-atl)"
+                    strokeWidth={2.5}
+                    type="monotone"
+                  />
+                  <Line
+                    dataKey="ctl"
+                    dot={false}
+                    name="CTL (Fitness)"
+                    stroke="var(--stats-ctl)"
+                    strokeWidth={2.5}
+                    type="monotone"
+                  />
+                  <Line
+                    dataKey="tsb"
+                    dot={false}
+                    name="TSB (Stress Balance)"
+                    stroke="var(--stats-tsb)"
+                    strokeWidth={2.5}
+                    type="monotone"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="training-load-empty">No load data yet</div>
+          )}
+          <div className="training-load-chip-grid">
+            <TrainingLoadChip label="ATL" metric={atlMetric} tone="atl" />
+            <TrainingLoadChip label="CTL" metric={ctlMetric} tone="ctl" />
+            <TrainingLoadChip label="TSB" metric={tsbMetric} tone="tsb" />
+          </div>
+        </section>
 
-      <details className="panel metric-calculations-panel">
-        <summary>
-          <span>Calculations</span>
-          <span className="metric-calculation-legend">
-            <b className="metric-dot metric-dot-good" /> Good
-            <b className="metric-dot metric-dot-watch" /> Moderate
-            <b className="metric-dot metric-dot-bad" /> Risk
-          </span>
-        </summary>
-        <TrainingLoadMetricRow
-          fallbackDescription="Fatigue from recent load"
-          fallbackLabel="Fatigue (ATL)"
-          metric={atlMetric}
-        />
-        <TrainingLoadMetricRow
-          fallbackDescription="Fitness/base from longer load"
-          fallbackLabel="Fitness (CTL)"
-          metric={ctlMetric}
-        />
-        <TrainingLoadMetricRow
-          fallbackDescription="Freshness minus fatigue"
-          fallbackLabel="Stress Balance (TSB)"
-          metric={tsbMetric}
-        />
-        <TrainingLoadMetricRow
-          fallbackDescription="Acute load divided by chronic load"
-          fallbackLabel="Workload Ratio (AC)"
-          metric={acMetric}
-        />
-        <TrainingLoadMetricRow
-          fallbackDescription="How repetitive the last week was"
-          fallbackLabel="Monotony"
-          metric={monotonyMetric}
-        />
-        <TrainingLoadMetricRow
-          fallbackDescription="Weekly load multiplied by monotony"
-          fallbackLabel="Training strain"
-          metric={strainMetric}
-        />
-      </details>
+        <details className="panel metric-calculations-panel" open>
+          <summary>
+            <span>Calculations</span>
+            <span className="metric-calculation-legend">
+              <b className="metric-dot metric-dot-good" /> Good
+              <b className="metric-dot metric-dot-watch" /> Watch
+              <b className="metric-dot metric-dot-bad" /> Risk
+            </span>
+          </summary>
+          <div className="metric-row-list">
+            <TrainingLoadMetricRow
+              fallbackDescription="Fatigue from recent load"
+              fallbackLabel="ATL"
+              label="ATL"
+              metric={atlMetric}
+            />
+            <TrainingLoadMetricRow
+              fallbackDescription="Fitness/base from longer load"
+              fallbackLabel="CTL"
+              label="CTL"
+              metric={ctlMetric}
+            />
+            <TrainingLoadMetricRow
+              fallbackDescription="Freshness minus fatigue"
+              fallbackLabel="TSB"
+              label="TSB"
+              metric={tsbMetric}
+            />
+            <TrainingLoadMetricRow
+              fallbackDescription="Acute load divided by chronic load"
+              fallbackLabel="AC ratio"
+              label="AC ratio"
+              metric={acMetric}
+            />
+            <TrainingLoadMetricRow
+              fallbackDescription="How repetitive the last week was"
+              fallbackLabel="Monotony"
+              label="Monotony"
+              metric={monotonyMetric}
+            />
+            <TrainingLoadMetricRow
+              fallbackDescription="Weekly load multiplied by monotony"
+              fallbackLabel="Training strain"
+              label="Training strain"
+              metric={strainMetric}
+            />
+          </div>
+        </details>
+      </section>
 
       <section className="stats-summary-panel">
         <h2>Summary</h2>

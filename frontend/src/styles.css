@@ -11,6 +11,15 @@
   --border: #2e2e2e;
   --yellow: #ffd60a;
   --orange: #ff9f0a;
+  --stats-atl: #0a84ff;
+  --stats-ctl: #30d5c8;
+  --stats-tsb: #af52de;
+  --stats-load: #0a84ff;
+  --stats-strength: #af52de;
+  --stats-pain: #ff9f0a;
+  --stats-good: #30d158;
+  --stats-watch: #ffd60a;
+  --stats-risk: #ff453a;
   background: var(--bg);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -82,7 +91,7 @@ label {
 }
 
 .app-shell-stats {
-  width: min(100%, 820px);
+  width: min(100%, 1120px);
 }
 
 .app-shell-garmin {
@@ -1065,45 +1074,94 @@ a.compact-button {
 
 .metric-card-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 10px;
-  margin: 0 0 14px;
+  grid-template-columns: repeat(auto-fit, minmax(205px, 1fr));
+  gap: 14px;
+  margin: 0 0 16px;
 }
 
 .metric-card {
+  position: relative;
   display: grid;
-  gap: 10px;
-  min-height: 180px;
+  align-content: start;
+  gap: 12px;
+  min-height: 164px;
   border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 14px;
-  background: var(--card);
+  border-radius: 18px;
+  padding: 16px;
+  background:
+    radial-gradient(circle at top left, rgba(10, 132, 255, 0.1), transparent 42%),
+    var(--card);
 }
 
-.metric-card-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
+.metric-card-top {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+}
+
+.metric-card-icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid rgba(10, 132, 255, 0.38);
+  border-radius: 999px;
+  background: rgba(10, 132, 255, 0.13);
+  color: var(--blue);
+}
+
+.metric-card-icon svg {
+  width: 21px;
+  height: 21px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.metric-card .metric-status-badge {
+  justify-self: end;
+}
+
+.metric-card-load .metric-card-icon {
+  border-color: rgba(10, 132, 255, 0.38);
+  background: rgba(10, 132, 255, 0.13);
+  color: var(--stats-load);
+}
+
+.metric-card-strength .metric-card-icon,
+.metric-card-consistency .metric-card-icon {
+  border-color: rgba(175, 82, 222, 0.42);
+  background: rgba(175, 82, 222, 0.13);
+  color: var(--stats-strength);
+}
+
+.metric-card-pain .metric-card-icon {
+  border-color: rgba(255, 159, 10, 0.42);
+  background: rgba(255, 159, 10, 0.13);
+  color: var(--stats-pain);
 }
 
 .metric-card-title {
   display: block;
-  color: var(--muted);
-  font-size: 13px;
+  color: var(--text);
+  font-size: 14px;
   font-weight: 800;
 }
 
-.metric-card-heading small {
+.metric-card-copy small {
   display: block;
   margin-top: 3px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
+  line-height: 1.3;
 }
 
-.metric-card > strong {
-  font-size: 24px;
-  line-height: 1.1;
+.metric-card-value-row strong {
+  font-size: 28px;
+  letter-spacing: 0;
+  line-height: 1;
 }
 
 .metric-card p {
@@ -1129,7 +1187,7 @@ a.compact-button {
 .metric-status-good {
   border-color: rgba(48, 209, 88, 0.55);
   background: rgba(48, 209, 88, 0.13);
-  color: var(--green);
+  color: var(--stats-good);
 }
 
 .metric-status-watch {
@@ -1141,7 +1199,7 @@ a.compact-button {
 .metric-status-bad {
   border-color: rgba(255, 69, 58, 0.6);
   background: rgba(255, 69, 58, 0.14);
-  color: var(--red);
+  color: var(--stats-risk);
 }
 
 .metric-status-info {
@@ -1170,6 +1228,18 @@ a.compact-button {
   background: var(--card2);
 }
 
+.metric-bar-sm .metric-progress-track,
+.metric-bar-sm .metric-range-track,
+.metric-row .metric-progress-track,
+.metric-row .metric-range-track {
+  height: 8px;
+}
+
+.metric-card .metric-progress-track,
+.metric-card .metric-range-track {
+  height: 10px;
+}
+
 .metric-zone {
   position: absolute;
   top: 0;
@@ -1177,7 +1247,7 @@ a.compact-button {
 }
 
 .metric-zone-good {
-  background: rgba(48, 209, 88, 0.55);
+  background: rgba(48, 209, 88, 0.58);
 }
 
 .metric-zone-watch {
@@ -1185,12 +1255,10 @@ a.compact-button {
 }
 
 .metric-zone-bad {
-  background: rgba(255, 69, 58, 0.55);
+  background: rgba(255, 69, 58, 0.58);
 }
 
 .metric-zone-info {
-  left: 0;
-  width: 100%;
   background: rgba(10, 132, 255, 0.45);
 }
 
@@ -1215,35 +1283,158 @@ a.compact-button {
   font-weight: 700;
 }
 
+.metric-bar-labels {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.metric-bar-labels span:nth-child(2) {
+  text-align: center;
+}
+
+.metric-bar-labels span:last-child {
+  text-align: right;
+}
+
 .metric-sparkline {
-  height: 44px;
+  height: 54px;
 }
 
 .metric-sparkline svg {
   width: 100%;
-  height: 44px;
+  height: 54px;
 }
 
-.metric-sparkline polyline {
+.metric-sparkline-line {
   fill: none;
   stroke: var(--blue);
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 3;
+  stroke-width: 3.2;
+}
+
+.metric-sparkline-area {
+  opacity: 0.42;
+}
+
+.metric-sparkline-baseline {
+  stroke: rgba(255, 255, 255, 0.1);
+  stroke-width: 1;
+}
+
+.metric-sparkline-end {
+  fill: var(--blue);
+  stroke: var(--card);
+  stroke-width: 1.5;
+}
+
+.metric-sparkline-load .metric-sparkline-line,
+.metric-sparkline-load .metric-sparkline-end {
+  stroke: var(--stats-load);
+  fill: var(--stats-load);
+}
+
+.metric-sparkline-load {
+  color: var(--stats-load);
+}
+
+.metric-sparkline-strength .metric-sparkline-line,
+.metric-sparkline-strength .metric-sparkline-end,
+.metric-sparkline-consistency .metric-sparkline-line,
+.metric-sparkline-consistency .metric-sparkline-end {
+  stroke: var(--stats-strength);
+  fill: var(--stats-strength);
+}
+
+.metric-sparkline-strength,
+.metric-sparkline-consistency {
+  color: var(--stats-strength);
+}
+
+.metric-sparkline-fill-start {
+  stop-color: currentColor;
+  stop-opacity: 0.55;
+}
+
+.metric-sparkline-fill-end {
+  stop-color: currentColor;
+  stop-opacity: 0;
+}
+
+.metric-sparkline-empty {
+  display: grid;
+  min-height: 54px;
+  place-items: center;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.stats-main-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(340px, 0.95fr);
+  align-items: start;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 960px) {
+  .stats-main-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .training-load-status-card,
 .metric-calculations-panel {
-  margin-bottom: 14px;
+  margin-bottom: 0;
 }
 
-.training-load-placeholder {
-  display: grid;
+.training-load-header {
+  gap: 12px;
+}
+
+.training-load-legend {
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
+  margin: 12px 0;
+}
+
+.training-load-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.training-load-legend span::before {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  content: "";
+}
+
+.training-load-legend .legend-atl::before {
+  background: var(--stats-atl);
+}
+
+.training-load-legend .legend-ctl::before {
+  background: var(--stats-ctl);
+}
+
+.training-load-legend .legend-tsb::before {
+  background: var(--stats-tsb);
 }
 
 .training-load-chart {
-  min-height: 220px;
+  min-height: 240px;
   margin-bottom: 12px;
 }
 
@@ -1259,29 +1450,80 @@ a.compact-button {
   font-weight: 700;
 }
 
-.metric-row {
+.training-load-chip-grid {
   display: grid;
-  grid-template-columns: minmax(150px, 1.1fr) minmax(160px, 1fr) auto auto;
-  align-items: center;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
-  border: 1px solid var(--border);
+}
+
+.training-load-chip {
+  display: grid;
+  gap: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
   padding: 10px;
-  background: var(--card2);
+  background: rgba(255, 255, 255, 0.035);
 }
 
-.metric-row strong {
+.training-load-chip span,
+.training-load-chip small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.training-load-chip strong {
+  color: var(--text);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.training-load-chip-atl {
+  border-color: rgba(10, 132, 255, 0.35);
+}
+
+.training-load-chip-ctl {
+  border-color: rgba(48, 213, 200, 0.35);
+}
+
+.training-load-chip-tsb {
+  border-color: rgba(175, 82, 222, 0.35);
+}
+
+.metric-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.15fr) minmax(180px, 1fr) minmax(64px, auto) auto;
+  align-items: center;
+  gap: 12px;
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0;
+  padding: 12px 0;
+  background: transparent;
+}
+
+.metric-row-list .metric-row:first-child {
+  border-top: 0;
+}
+
+.metric-row-main strong {
   display: block;
+  color: var(--text);
+  font-size: 14px;
 }
 
-.metric-row span {
+.metric-row-main span {
   display: block;
   margin-top: 3px;
   color: var(--muted);
   font-size: 12px;
 }
 
-.metric-row b {
+.metric-row-value {
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 800;
+  text-align: right;
   white-space: nowrap;
 }
 
@@ -1292,7 +1534,7 @@ a.compact-button {
   gap: 10px;
   cursor: pointer;
   color: var(--blue);
-  font-size: 21px;
+  font-size: 20px;
   font-weight: 800;
 }
 
@@ -1313,7 +1555,7 @@ a.compact-button {
 }
 
 .metric-dot-good {
-  background: var(--green);
+  background: var(--stats-good);
 }
 
 .metric-dot-watch {
@@ -1321,7 +1563,7 @@ a.compact-button {
 }
 
 .metric-dot-bad {
-  background: var(--red);
+  background: var(--stats-risk);
 }
 
 .metric-info {
@@ -2031,14 +2273,22 @@ button.load-calendar-cell:focus-visible {
   .recovery-grid,
   .history-stat-grid,
   .dashboard-grid,
-  .metric-card-grid,
   .stats-chart-grid,
   .analysis-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .metric-row {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: 1fr auto;
+  }
+
+  .metric-row-visual {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .metric-row-value {
+    text-align: left;
   }
 
   .controls-grid {
@@ -2129,8 +2379,7 @@ button.load-calendar-cell:focus-visible {
     flex-basis: 100%;
   }
   .recovery-grid,
-  .dashboard-grid,
-  .metric-card-grid {
+  .dashboard-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -2153,7 +2402,7 @@ button.load-calendar-cell:focus-visible {
   border: 1px solid var(--border);
   border-radius: 18px;
   padding: 14px;
-  background: var(--card);
+  background: rgba(255, 255, 255, 0.025);
 }
 
 .stats-summary-panel h2 {

@@ -3,11 +3,20 @@ import type { ReactNode } from "react";
 import MetricStatusBadge from "./MetricStatusBadge";
 import type { MetricStatus } from "./MetricStatusBadge";
 
+type MetricTone =
+  | "recovery"
+  | "load"
+  | "strength"
+  | "pain"
+  | "consistency"
+  | "neutral";
+
 type MetricCardProps = {
   title: string;
   value: string;
   subtitle?: string;
   icon?: ReactNode;
+  tone?: MetricTone;
   status?: {
     label: string;
     status: MetricStatus;
@@ -21,22 +30,27 @@ export default function MetricCard({
   icon,
   status,
   subtitle,
+  tone = "neutral",
   title,
   value,
   visual,
 }: MetricCardProps) {
   return (
-    <article className="metric-card">
-      <div className="metric-card-heading">
-        <div>
+    <article className={`metric-card metric-card-${tone}`}>
+      <div className="metric-card-top">
+        <div className="metric-card-icon" aria-hidden="true">
+          {icon}
+        </div>
+        <div className="metric-card-copy">
           <span className="metric-card-title">{title}</span>
           {subtitle && <small>{subtitle}</small>}
         </div>
-        {icon}
         {status && <MetricStatusBadge label={status.label} status={status.status} />}
       </div>
-      <strong>{value}</strong>
-      {visual}
+      <div className="metric-card-value-row">
+        <strong>{value}</strong>
+      </div>
+      {visual && <div className="metric-card-visual">{visual}</div>}
       {description && <p>{description}</p>}
     </article>
   );

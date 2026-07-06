@@ -4,6 +4,19 @@ All notable changes to this project.
 
 ## Unreleased
 
+## 1.3.1 - Unreleased
+
+### Changed
+
+* Polished Stats dashboard layout, metric cards, training-load chart, and calculations panel.
+* Improved Stats desktop layout and mobile readability.
+* Standardized ATL/CTL/TSB colors and metric status labels.
+
+### Fixed
+
+* Fixed misleading top-card labels and visuals for 7-day load, strength intensity, and consistency.
+* Removed duplicate ATL/CTL/TSB rows from the Training load card.
+
 ## 1.3.0 - 2026-07-05
 
 Training Log 1.3.0 focuses on cleaner Settings and navigation, simplified workout logging on mobile, unified edit-workout saving, improved Stats chart formatting, visual metric cards, and app-native training-load metrics.

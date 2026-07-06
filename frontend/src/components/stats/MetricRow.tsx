@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import MetricStatusBadge from "./MetricStatusBadge";
+import { metricStatusDisplay } from "./MetricStatusBadge";
 import type { MetricStatus } from "./MetricStatusBadge";
 
 type MetricRowProps = {
@@ -20,13 +21,13 @@ export default function MetricRow({
 }: MetricRowProps) {
   return (
     <div className="metric-row">
-      <div>
+      <div className="metric-row-main">
         <strong>{label}</strong>
         <span>{description}</span>
       </div>
       <div className="metric-row-visual">{visual}</div>
-      <b>{value}</b>
-      <MetricStatusBadge label={status === "neutral" ? "No data" : status} status={status} />
+      <div className="metric-row-value">{value}</div>
+      <MetricStatusBadge label={metricStatusDisplay(status)} status={status} />
     </div>
   );
 }

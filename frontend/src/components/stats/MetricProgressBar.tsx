@@ -5,6 +5,15 @@ type MetricProgressBarProps = {
   min?: number;
   max?: number;
   markerLabel?: string;
+  size?: "sm" | "md";
+  showValueLabel?: boolean;
+  showEdgeLabels?: boolean;
+  edgeLabels?: {
+    left?: string;
+    center?: string;
+    right?: string;
+  };
+  tone?: "recovery" | "load" | "strength" | "pain" | "neutral";
   zones?: Array<{
     from: number;
     to: number;
@@ -18,17 +27,24 @@ function clamp(value: number, min: number, max: number) {
 }
 
 export default function MetricProgressBar({
+  edgeLabels,
   markerLabel,
   max = 100,
   min = 0,
+  showEdgeLabels = false,
+  showValueLabel = true,
+  size = "md",
+  tone = "neutral",
   value,
   zones = [],
 }: MetricProgressBarProps) {
   const percent =
     value === null ? null : ((clamp(value, min, max) - min) / (max - min)) * 100;
+  const markerPercent =
+    percent === null ? null : Math.min(98, Math.max(2, percent));
 
   return (
-    <div className="metric-progress">
+    <div className={`metric-progress metric-bar-${size} metric-bar-${tone}`}>
       <div className="metric-progress-track">
         {zones.length > 0
           ? zones.map((zone) => (
@@ -44,10 +60,19 @@ export default function MetricProgressBar({
             ))
           : <span className="metric-zone metric-zone-info" />}
         {percent !== null && (
-          <span className="metric-progress-marker" style={{ left: `${percent}%` }} />
+          <span className="metric-progress-marker" style={{ left: `${markerPercent}%` }} />
         )}
       </div>
-      {markerLabel && <div className="metric-visual-label">{markerLabel}</div>}
+      {showEdgeLabels && (
+        <div className="metric-bar-labels">
+          <span>{edgeLabels?.left ?? String(min)}</span>
+          <span>{edgeLabels?.center ?? ""}</span>
+          <span>{edgeLabels?.right ?? String(max)}</span>
+        </div>
+      )}
+      {showValueLabel && markerLabel && (
+        <div className="metric-visual-label">{markerLabel}</div>
+      )}
     </div>
   );
 }
