@@ -1173,6 +1173,16 @@ Suggested commit message:
 Phase 31: release Stats UI polish 1.3.1
 ```
 
+Status: completed on 2026-07-06.
+
+Implementation notes:
+
+- Confirmed Phase 30 is implemented in `9e59713`.
+- Ran backend verification with `python3 -m unittest discover -s tests` because `python` is not available in this environment.
+- Re-ran frontend typecheck and production build.
+- Built Docker image `training-log:1.3.1`.
+- Bumped `config.yaml` to `1.3.1` and dated the `1.3.1` changelog section.
+
 ---
 
 # Codex prompt to use
