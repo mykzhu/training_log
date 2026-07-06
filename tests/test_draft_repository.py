@@ -86,7 +86,7 @@ class DraftRepositoryTests(unittest.TestCase):
         draft = self.draft()
 
         create_active_draft(draft["started_at"])
-        update_active_draft_metadata(6, 2)
+        update_active_draft_metadata({"session_rpe": 6, "lower_back_pain": 2})
         self.assertIsNotNone(
             insert_draft_exercise(draft["workout_exercises"][0]["exercise_id"])
         )

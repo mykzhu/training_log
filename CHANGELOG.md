@@ -4,6 +4,15 @@ All notable changes to this project.
 
 ## Unreleased
 
+## 1.3.2 - 2026-07-06
+
+### Fixed
+
+* Fixed Stats overview sparklines by parsing the exact glyph set emitted by the backend sparkbar builder.
+* Fixed current workout metadata PATCH behavior so omitted fields no longer clear existing RPE or lower back pain values.
+* Hardened completed workout exercise and set numbering against duplicate position/set-number collisions.
+* Renumbered completed workout exercise positions after deleting an exercise to keep ordering sequential.
+
 ## 1.3.1 - 2026-07-06
 
 ### Changed

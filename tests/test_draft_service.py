@@ -187,7 +187,11 @@ class DraftServiceTests(unittest.TestCase):
         self.assertFalse(created_again)
         self.assertEqual(same_draft, draft)
 
-        self.assertTrue(update_active_draft_metadata(session_rpe=7, lower_back_pain=3))
+        self.assertTrue(
+            update_active_draft_metadata(
+                {"session_rpe": 7, "lower_back_pain": 3}
+            )
+        )
         draft_exercise = add_exercise_to_active_draft(
             exercise_id=deadlift_id,
             exercise_name="Deadlift",
@@ -220,7 +224,7 @@ class DraftServiceTests(unittest.TestCase):
         deadlift_id = self.exercise_id("Deadlift")
 
         start_active_workout_draft()
-        update_active_draft_metadata(session_rpe=6, lower_back_pain=2)
+        update_active_draft_metadata({"session_rpe": 6, "lower_back_pain": 2})
         draft_exercise = add_exercise_to_active_draft(
             exercise_id=deadlift_id,
             exercise_name="Deadlift",

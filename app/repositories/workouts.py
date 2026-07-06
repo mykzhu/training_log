@@ -4,6 +4,27 @@ from typing import Any
 from app.db import get_db
 from app.repositories.exercises import get_weight_options_by_exercise_ids
 
+MAX_NUMBERING_RETRIES = 2
+
+
+class NumberingConflictError(RuntimeError):
+    pass
+
+
+def _begin_immediate(conn: sqlite3.Connection) -> None:
+    conn.execute("BEGIN IMMEDIATE")
+
+
+def _is_unique_constraint_error(
+    exc: sqlite3.IntegrityError,
+    columns: tuple[str, ...],
+) -> bool:
+    message = str(exc).lower()
+    return (
+        "unique constraint failed" in message
+        and all(column.lower() in message for column in columns)
+    )
+
 
 def list_recent_workouts(limit: int = 30) -> list[dict[str, Any]]:
     with get_db() as conn:
@@ -105,25 +126,40 @@ def get_workout_exercise(workout_exercise_id: int) -> dict[str, Any] | None:
 
 
 def add_workout_exercise(workout_id: int, exercise_id: int) -> int:
-    with get_db() as conn:
-        next_position = conn.execute(
-            """
-            SELECT COALESCE(MAX(position), 0) + 1
-            FROM workout_exercises
-            WHERE workout_id = ?
-            """,
-            (workout_id,),
-        ).fetchone()[0]
+    for attempt in range(MAX_NUMBERING_RETRIES + 1):
+        try:
+            with get_db() as conn:
+                _begin_immediate(conn)
+                next_position = conn.execute(
+                    """
+                    SELECT COALESCE(MAX(position), 0) + 1
+                    FROM workout_exercises
+                    WHERE workout_id = ?
+                    """,
+                    (workout_id,),
+                ).fetchone()[0]
 
-        cursor = conn.execute(
-            """
-            INSERT INTO workout_exercises (workout_id, exercise_id, position)
-            VALUES (?, ?, ?)
-            """,
-            (workout_id, exercise_id, next_position),
-        )
+                cursor = conn.execute(
+                    """
+                    INSERT INTO workout_exercises (workout_id, exercise_id, position)
+                    VALUES (?, ?, ?)
+                    """,
+                    (workout_id, exercise_id, next_position),
+                )
 
-    return int(cursor.lastrowid)
+                return int(cursor.lastrowid)
+        except sqlite3.IntegrityError as exc:
+            if not _is_unique_constraint_error(
+                exc,
+                ("workout_exercises.workout_id", "workout_exercises.position"),
+            ):
+                raise
+            if attempt >= MAX_NUMBERING_RETRIES:
+                raise NumberingConflictError(
+                    "Could not assign a unique exercise position."
+                ) from exc
+
+    raise NumberingConflictError("Could not assign a unique exercise position.")
 
 
 def delete_workout_exercise(
@@ -131,6 +167,7 @@ def delete_workout_exercise(
     workout_exercise_id: int,
 ) -> bool:
     with get_db() as conn:
+        _begin_immediate(conn)
         cursor = conn.execute(
             """
             DELETE FROM workout_exercises
@@ -139,8 +176,12 @@ def delete_workout_exercise(
             """,
             (workout_exercise_id, workout_id),
         )
+        if cursor.rowcount == 0:
+            return False
 
-    return cursor.rowcount > 0
+        renumber_workout_exercises(conn, workout_id)
+
+    return True
 
 
 def get_previous_set_for_exercise(
@@ -223,6 +264,38 @@ def renumber_sets(conn: sqlite3.Connection, workout_exercise_id: int) -> None:
         )
 
 
+def renumber_workout_exercises(conn: sqlite3.Connection, workout_id: int) -> None:
+    workout_exercises = conn.execute(
+        """
+        SELECT id
+        FROM workout_exercises
+        WHERE workout_id = ?
+        ORDER BY position ASC, id ASC
+        """,
+        (workout_id,),
+    ).fetchall()
+
+    for index, row in enumerate(workout_exercises, start=1):
+        conn.execute(
+            """
+            UPDATE workout_exercises
+            SET position = ?
+            WHERE id = ?
+            """,
+            (-index, row["id"]),
+        )
+
+    for index, row in enumerate(workout_exercises, start=1):
+        conn.execute(
+            """
+            UPDATE workout_exercises
+            SET position = ?
+            WHERE id = ?
+            """,
+            (index, row["id"]),
+        )
+
+
 def get_set_entry(set_id: int) -> dict[str, Any] | None:
     with get_db() as conn:
         row = conn.execute(
@@ -252,49 +325,65 @@ def add_set_to_workout_exercise(
     reps: int,
     created_at: str,
 ) -> dict[str, Any] | None:
-    with get_db() as conn:
-        workout_exercise = conn.execute(
-            """
-            SELECT id
-            FROM workout_exercises
-            WHERE id = ?
-            """,
-            (workout_exercise_id,),
-        ).fetchone()
+    for attempt in range(MAX_NUMBERING_RETRIES + 1):
+        try:
+            with get_db() as conn:
+                _begin_immediate(conn)
+                workout_exercise = conn.execute(
+                    """
+                    SELECT id
+                    FROM workout_exercises
+                    WHERE id = ?
+                    """,
+                    (workout_exercise_id,),
+                ).fetchone()
 
-        if workout_exercise is None:
-            return None
+                if workout_exercise is None:
+                    return None
 
-        next_set_number = conn.execute(
-            """
-            SELECT COALESCE(MAX(set_number), 0) + 1
-            FROM set_entries
-            WHERE workout_exercise_id = ?
-            """,
-            (workout_exercise_id,),
-        ).fetchone()[0]
+                next_set_number = conn.execute(
+                    """
+                    SELECT COALESCE(MAX(set_number), 0) + 1
+                    FROM set_entries
+                    WHERE workout_exercise_id = ?
+                    """,
+                    (workout_exercise_id,),
+                ).fetchone()[0]
 
-        cursor = conn.execute(
-            """
-            INSERT INTO set_entries (
-                workout_exercise_id,
-                set_number,
-                weight,
-                reps,
-                created_at
-            )
-            VALUES (?, ?, ?, ?, ?)
-            """,
-            (
-                workout_exercise_id,
-                next_set_number,
-                weight,
-                reps,
-                created_at,
-            ),
-        )
+                cursor = conn.execute(
+                    """
+                    INSERT INTO set_entries (
+                        workout_exercise_id,
+                        set_number,
+                        weight,
+                        reps,
+                        created_at
+                    )
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        workout_exercise_id,
+                        next_set_number,
+                        weight,
+                        reps,
+                        created_at,
+                    ),
+                )
+                set_id = int(cursor.lastrowid)
+        except sqlite3.IntegrityError as exc:
+            if not _is_unique_constraint_error(
+                exc,
+                ("set_entries.workout_exercise_id", "set_entries.set_number"),
+            ):
+                raise
+            if attempt >= MAX_NUMBERING_RETRIES:
+                raise NumberingConflictError(
+                    "Could not assign a unique set number."
+                ) from exc
+        else:
+            return get_set_entry(set_id)
 
-    return get_set_entry(int(cursor.lastrowid))
+    raise NumberingConflictError("Could not assign a unique set number.")
 
 
 def duplicate_set_for_workout_exercise(

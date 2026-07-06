@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from app.repositories.exercises import get_exercise
 from app.repositories.workouts import (
+    NumberingConflictError,
     add_set_to_workout_exercise,
     add_workout_exercise,
     delete_set_entry,
@@ -295,7 +296,13 @@ def add_workout_exercise_endpoint(
     if not exercise["is_active"]:
         raise HTTPException(status_code=409, detail="Exercise is inactive.")
 
-    add_workout_exercise(workout_id, payload.exercise_id)
+    try:
+        add_workout_exercise(workout_id, payload.exercise_id)
+    except NumberingConflictError:
+        raise HTTPException(
+            status_code=409,
+            detail="Could not assign a unique position. Please retry.",
+        ) from None
     return get_workout_detail(workout_id)
 
 
@@ -322,12 +329,18 @@ def add_workout_exercise_set_endpoint(
     if workout_exercise is None:
         raise HTTPException(status_code=404, detail="Workout exercise not found.")
 
-    set_entry = add_set_to_workout_exercise(
-        workout_exercise_id,
-        weight=payload.weight,
-        reps=payload.reps,
-        created_at=datetime.now().isoformat(timespec="seconds"),
-    )
+    try:
+        set_entry = add_set_to_workout_exercise(
+            workout_exercise_id,
+            weight=payload.weight,
+            reps=payload.reps,
+            created_at=datetime.now().isoformat(timespec="seconds"),
+        )
+    except NumberingConflictError:
+        raise HTTPException(
+            status_code=409,
+            detail="Could not assign a unique set number. Please retry.",
+        ) from None
     if set_entry is None:
         raise HTTPException(status_code=404, detail="Workout exercise not found.")
 

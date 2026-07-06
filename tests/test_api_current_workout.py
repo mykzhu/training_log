@@ -144,6 +144,52 @@ class CurrentWorkoutApiTests(unittest.TestCase):
         response = delete_current_workout_exercise(draft_exercise_id)
         self.assertEqual(response["exercises"], [])
 
+    def test_metadata_patch_preserves_omitted_fields(self) -> None:
+        start_current_workout()
+        response = update_current_workout_metadata(
+            WorkoutMetadataUpdate(session_rpe=7, lower_back_pain=3)
+        )
+        self.assertEqual(response["session_rpe"], 7)
+        self.assertEqual(response["lower_back_pain"], 3)
+
+        response = update_current_workout_metadata(
+            WorkoutMetadataUpdate(session_rpe=8)
+        )
+        self.assertEqual(response["session_rpe"], 8)
+        self.assertEqual(response["lower_back_pain"], 3)
+
+        response = update_current_workout_metadata(
+            WorkoutMetadataUpdate(lower_back_pain=4)
+        )
+        self.assertEqual(response["session_rpe"], 8)
+        self.assertEqual(response["lower_back_pain"], 4)
+
+    def test_metadata_patch_can_clear_one_field_without_clearing_omitted_field(
+        self,
+    ) -> None:
+        start_current_workout()
+        update_current_workout_metadata(
+            WorkoutMetadataUpdate(session_rpe=7, lower_back_pain=3)
+        )
+
+        response = update_current_workout_metadata(
+            WorkoutMetadataUpdate(session_rpe=None)
+        )
+
+        self.assertIsNone(response["session_rpe"])
+        self.assertEqual(response["lower_back_pain"], 3)
+
+    def test_metadata_patch_empty_object_is_noop(self) -> None:
+        start_current_workout()
+        update_current_workout_metadata(
+            WorkoutMetadataUpdate(session_rpe=7, lower_back_pain=3)
+        )
+
+        response = update_current_workout_metadata(WorkoutMetadataUpdate())
+
+        self.assertEqual(response["session_rpe"], 7)
+        self.assertEqual(response["lower_back_pain"], 3)
+
     def test_active_workout_inline_created_exercise_can_be_added_mutated_and_finished(self) -> None:
         start_current_workout()
 
@@ -383,7 +429,13 @@ class CurrentWorkoutApiTests(unittest.TestCase):
             WorkoutMetadataUpdate(session_rpe=11)
 
         with self.assertRaises(Exception):
+            WorkoutMetadataUpdate(session_rpe=0)
+
+        with self.assertRaises(Exception):
             WorkoutMetadataUpdate(lower_back_pain=-1)
+
+        with self.assertRaises(Exception):
+            WorkoutMetadataUpdate(lower_back_pain=11)
 
         with self.assertRaises(Exception):
             AddSetRequest(weight=-1, reps=5)

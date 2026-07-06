@@ -8,6 +8,8 @@ from fastapi import HTTPException
 from app import config
 from app.db import get_db, init_db
 import app.main as main
+import app.routes.api_workouts as api_workouts_module
+from app.repositories.workouts import NumberingConflictError
 from app.routes.api_workouts import (
     add_workout_exercise_endpoint,
     add_workout_exercise_set_endpoint,
@@ -623,12 +625,174 @@ class WorkoutsApiTests(unittest.TestCase):
 
         self.assertEqual(len(response["exercises"]), 1)
         self.assertEqual(response["exercises"][0]["exercise_name"], "Squats")
+        self.assertEqual(response["exercises"][0]["position"], 1)
         self.assertEqual(response["total_volume"], 400.0)
 
         with get_db() as conn:
             set_count = conn.execute("SELECT COUNT(*) FROM set_entries").fetchone()[0]
 
         self.assertEqual(set_count, 1)
+
+    def test_delete_workout_exercise_renumbers_remaining_positions(self) -> None:
+        workout_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            exercises=[
+                {"name": "Deadlift", "sets": [{"weight": 100, "reps": 5}]},
+                {"name": "Squats", "sets": [{"weight": 40, "reps": 10}]},
+                {"name": "Bench Press", "sets": [{"weight": 60, "reps": 8}]},
+            ],
+        )
+        detail = get_workout_detail(workout_id)
+        squat_workout_exercise_id = self.get_workout_exercise_id(detail, "Squats")
+
+        response = delete_workout_exercise_endpoint(
+            workout_id,
+            squat_workout_exercise_id,
+        )
+
+        self.assertEqual(
+            [exercise["exercise_name"] for exercise in response["exercises"]],
+            ["Deadlift", "Bench Press"],
+        )
+        self.assertEqual(
+            [exercise["position"] for exercise in response["exercises"]],
+            [1, 2],
+        )
+
+    def test_delete_first_and_last_workout_exercise_renumbers_positions(self) -> None:
+        workout_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            exercises=[
+                {"name": "Deadlift", "sets": [{"weight": 100, "reps": 5}]},
+                {"name": "Squats", "sets": [{"weight": 40, "reps": 10}]},
+                {"name": "Bench Press", "sets": [{"weight": 60, "reps": 8}]},
+            ],
+        )
+
+        detail = get_workout_detail(workout_id)
+        first_id = self.get_workout_exercise_id(detail, "Deadlift")
+        response = delete_workout_exercise_endpoint(workout_id, first_id)
+        self.assertEqual(
+            [exercise["position"] for exercise in response["exercises"]],
+            [1, 2],
+        )
+        self.assertEqual(
+            [exercise["exercise_name"] for exercise in response["exercises"]],
+            ["Squats", "Bench Press"],
+        )
+
+        last_id = self.get_workout_exercise_id(response, "Bench Press")
+        response = delete_workout_exercise_endpoint(workout_id, last_id)
+        self.assertEqual(
+            [exercise["position"] for exercise in response["exercises"]],
+            [1],
+        )
+        self.assertEqual(response["exercises"][0]["exercise_name"], "Squats")
+
+    def test_add_workout_exercise_after_delete_uses_next_sequential_position(
+        self,
+    ) -> None:
+        workout_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            exercises=[
+                {"name": "Deadlift", "sets": [{"weight": 100, "reps": 5}]},
+                {"name": "Squats", "sets": [{"weight": 40, "reps": 10}]},
+                {"name": "Bench Press", "sets": [{"weight": 60, "reps": 8}]},
+            ],
+        )
+        detail = get_workout_detail(workout_id)
+        squat_workout_exercise_id = self.get_workout_exercise_id(detail, "Squats")
+        delete_workout_exercise_endpoint(workout_id, squat_workout_exercise_id)
+
+        response = add_workout_exercise_endpoint(
+            workout_id,
+            AddExerciseRequest(exercise_id=self.exercise_id("Shoulder Press")),
+        )
+        positions = [exercise["position"] for exercise in response["exercises"]]
+
+        self.assertEqual(positions, [1, 2, 3])
+        self.assertEqual(len(positions), len(set(positions)))
+
+    def test_add_set_after_delete_uses_next_sequential_set_number(self) -> None:
+        workout_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [
+                        {"weight": 100, "reps": 5},
+                        {"weight": 102.5, "reps": 5},
+                        {"weight": 105, "reps": 5},
+                    ],
+                },
+            ],
+        )
+        detail = get_workout_detail(workout_id)
+        workout_exercise_id = self.get_workout_exercise_id(detail, "Deadlift")
+        set_id = int(detail["exercises"][0]["sets"][1]["id"])
+        delete_set_endpoint(set_id)
+
+        response = add_workout_exercise_set_endpoint(
+            workout_exercise_id,
+            AddSetRequest(weight=107.5, reps=5),
+        )
+        set_numbers = [
+            set_entry["set_number"]
+            for set_entry in response["exercises"][0]["sets"]
+        ]
+
+        self.assertEqual(set_numbers, [1, 2, 3])
+        self.assertEqual(len(set_numbers), len(set(set_numbers)))
+
+    def test_add_workout_exercise_numbering_conflict_returns_409(self) -> None:
+        workout_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            exercises=[],
+        )
+        original = api_workouts_module.add_workout_exercise
+        api_workouts_module.add_workout_exercise = lambda *_args, **_kwargs: (
+            (_ for _ in ()).throw(NumberingConflictError("collision"))
+        )
+        try:
+            with self.assertRaises(HTTPException) as exc:
+                add_workout_exercise_endpoint(
+                    workout_id,
+                    AddExerciseRequest(exercise_id=self.exercise_id("Deadlift")),
+                )
+        finally:
+            api_workouts_module.add_workout_exercise = original
+
+        self.assertEqual(exc.exception.status_code, 409)
+        self.assertEqual(
+            exc.exception.detail,
+            "Could not assign a unique position. Please retry.",
+        )
+
+    def test_add_set_numbering_conflict_returns_409(self) -> None:
+        workout_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            exercises=[{"name": "Deadlift", "sets": []}],
+        )
+        detail = get_workout_detail(workout_id)
+        workout_exercise_id = self.get_workout_exercise_id(detail, "Deadlift")
+        original = api_workouts_module.add_set_to_workout_exercise
+        api_workouts_module.add_set_to_workout_exercise = lambda *_args, **_kwargs: (
+            (_ for _ in ()).throw(NumberingConflictError("collision"))
+        )
+        try:
+            with self.assertRaises(HTTPException) as exc:
+                add_workout_exercise_set_endpoint(
+                    workout_exercise_id,
+                    AddSetRequest(weight=100, reps=5),
+                )
+        finally:
+            api_workouts_module.add_set_to_workout_exercise = original
+
+        self.assertEqual(exc.exception.status_code, 409)
+        self.assertEqual(
+            exc.exception.detail,
+            "Could not assign a unique set number. Please retry.",
+        )
 
     def test_add_workout_exercise_set_endpoint_appends_set(self) -> None:
         workout_id = self.insert_workout(

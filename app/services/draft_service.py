@@ -61,25 +61,26 @@ def start_active_workout_draft() -> tuple[dict[str, Any], bool]:
         return existing_draft, False
 
 
-def update_active_draft_metadata(
-    session_rpe: int | None,
-    lower_back_pain: int | None,
-) -> bool:
+def update_active_draft_metadata(updates: dict[str, int | None]) -> bool:
+    allowed = {"session_rpe", "lower_back_pain"}
+    unexpected = set(updates) - allowed
+    if unexpected:
+        raise ValueError(f"Unexpected draft metadata fields: {sorted(unexpected)}")
+
     with DRAFT_LOCK:
         draft = draft_repository.get_active_draft()
         if draft is None:
             logger.warning("workout.draft.metadata.no_active")
             return False
 
-        updated = draft_repository.update_active_draft_metadata(
-            session_rpe,
-            lower_back_pain,
-        )
+        if not updates:
+            return True
+
+        updated = draft_repository.update_active_draft_metadata(updates)
 
     logger.info(
-        "workout.draft.metadata.update session_rpe=%s lower_back_pain=%s",
-        session_rpe,
-        lower_back_pain,
+        "workout.draft.metadata.update updates=%s",
+        sorted(updates),
     )
     return updated
 

@@ -144,10 +144,16 @@ def update_current_workout_metadata(
     payload: WorkoutMetadataUpdate,
 ) -> dict[str, Any]:
     require_active_draft()
-    update_active_draft_metadata(
-        session_rpe=payload.session_rpe,
-        lower_back_pain=payload.lower_back_pain,
-    )
+
+    updates: dict[str, int | None] = {}
+    if "session_rpe" in payload.model_fields_set:
+        updates["session_rpe"] = payload.session_rpe
+    if "lower_back_pain" in payload.model_fields_set:
+        updates["lower_back_pain"] = payload.lower_back_pain
+
+    if updates:
+        update_active_draft_metadata(updates)
+
     return build_current_workout_response()
 
 

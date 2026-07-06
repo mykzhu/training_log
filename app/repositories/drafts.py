@@ -119,22 +119,28 @@ def create_active_draft(started_at: str) -> dict[str, Any]:
     return draft
 
 
-def update_active_draft_metadata(
-    session_rpe: int | None,
-    lower_back_pain: int | None,
-) -> bool:
+def update_active_draft_metadata(updates: dict[str, int | None]) -> bool:
+    allowed = {"session_rpe", "lower_back_pain"}
+    unexpected = set(updates) - allowed
+    if unexpected:
+        raise ValueError(f"Unexpected draft metadata fields: {sorted(unexpected)}")
+    if not updates:
+        return True
+
     updated_at = datetime.now().isoformat(timespec="seconds")
+    assignments = [f"{key} = ?" for key in updates]
+    values = list(updates.values())
+    assignments.append("updated_at = ?")
+    values.append(updated_at)
 
     with get_db() as conn:
         cursor = conn.execute(
-            """
+            f"""
             UPDATE active_workout_draft
-            SET session_rpe = ?,
-                lower_back_pain = ?,
-                updated_at = ?
+            SET {", ".join(assignments)}
             WHERE id = 1
             """,
-            (session_rpe, lower_back_pain, updated_at),
+            values,
         )
 
     return cursor.rowcount > 0

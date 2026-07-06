@@ -224,15 +224,45 @@ function recoveryScore(summary: StatsSummary) {
   return Math.max(0, Math.min(100, 100 - rpePenalty - backPenalty));
 }
 
+const SPARK_CHARS_INC = " ⢀⣀⣠⣤⣴⣶⣾⣿";
+const SPARK_CHARS_DEC = "⣿⣷⣶⣦⣤⣄⣀⡀ ";
+
 function sparkbarToPoints(value: string | undefined): MetricSparklinePoint[] {
-  if (!value) {
+  if (!value || value === "—") {
     return [];
   }
 
-  return Array.from(value).map((char, index) => ({
-    date: String(index),
-    value: "▁▂▃▄▅▆▇█".indexOf(char) + 1 || 1,
-  }));
+  return Array.from(value).map((char, index) => {
+    const incIndex = SPARK_CHARS_INC.indexOf(char);
+
+    if (incIndex >= 0) {
+      return {
+        date: String(index),
+        value: incIndex + 1,
+      };
+    }
+
+    const decIndex = SPARK_CHARS_DEC.indexOf(char);
+
+    if (decIndex >= 0) {
+      return {
+        date: String(index),
+        value: SPARK_CHARS_DEC.length - decIndex,
+      };
+    }
+
+    if (char === "·") {
+      return {
+        date: String(index),
+        value: 0,
+      };
+    }
+
+    return {
+      date: String(index),
+      value: 1,
+    };
+  });
 }
 
 function statusLabel(status: MetricStatus) {
