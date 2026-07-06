@@ -9,7 +9,7 @@ Current product assumptions:
 - Single dark theme only.
 - Home Assistant add-on context must remain supported.
 - `master` is the production branch.
-- Current release baseline is `1.3.2`.
+- Current release baseline is `1.4.0`.
 - The active Codex plan should live in `docs/CODEX_PLAN.md`.
 
 ## Phase overview
@@ -1701,6 +1701,20 @@ Intentionally not included:
 - [ ] Manual active workout logging check
 - [ ] Manual mobile layout check
 ```
+
+Status: completed on 2026-07-06.
+
+Implementation notes:
+
+- Redesigned the active workout surface with a sticky cockpit header showing elapsed time, sets, volume, exercise count, load, and back-stress context.
+- Added safe finish confirmation for non-empty workouts and a post-finish summary card with actions to view History, start another workout, or go to Stats.
+- Reworked active exercise cards with category labels, last/previous set hints, collapse controls, editable set rows, set volume display, and larger mobile-friendly controls.
+- Added fast set actions: `+ Same`, `+ Previous`, `+ Warm-up`, and `Delete last`.
+- Added a searchable, grouped exercise picker with recent active-workout exercises and inactive-exercise protection.
+- Added a mobile sticky bottom action bar for `+ Exercise`, `+ Set`, and `Finish`.
+- Kept Phase 33 frontend-only; no backend files, DB schema, Stats dashboard, theme system, or Home Assistant ingress behavior were changed.
+- Bumped `config.yaml` to `1.4.0` and added the `1.4.0` changelog entry.
+- Verification passed with `npm run typecheck` and `npm run build`.
 
 ---
 

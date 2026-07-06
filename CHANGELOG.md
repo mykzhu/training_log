@@ -4,6 +4,22 @@ All notable changes to this project.
 
 ## Unreleased
 
+## 1.4.0 - 2026-07-06
+
+### Improved
+
+* Redesigned the active workout screen for faster set logging and better mobile use.
+* Added clearer workout summary information while training.
+* Improved exercise cards, set rows, and common workout actions.
+* Improved active workout mobile layout and touch ergonomics.
+* Improved workout finish confirmation and post-workout summary.
+
+### Notes
+
+* This release keeps the single dark theme.
+* No light theme or theme switching was added.
+* Stats dashboard redesign is planned separately for 1.5.0.
+
 ## 1.3.2 - 2026-07-06
 
 ### Fixed

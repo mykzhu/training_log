@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
-import type { CurrentWorkout, CurrentWorkoutExercise } from "../api/types";
+import type {
+  CurrentWorkout,
+  CurrentWorkoutExercise,
+  Exercise,
+  SetEntry,
+} from "../api/types";
 import { rpeOptionLabel } from "../utils/rpeLabels";
 import {
   buildRepsOptions,
@@ -10,17 +15,12 @@ import {
 } from "../utils/setOptions";
 import "./LegacyActiveWorkoutView.css";
 
-type ExerciseOption = {
-  value: string;
-  label: string;
-};
-
 type LegacyActiveWorkoutViewProps = {
   currentWorkout: CurrentWorkout;
   disabled: boolean;
   elapsedSeconds: number;
   error: string | null;
-  exerciseOptions: ExerciseOption[];
+  exercises: Exercise[];
   metadataSaveStatus: "idle" | "saving" | "saved" | "error";
   selectedExerciseId: string;
   onAddExercise: () => Promise<void> | void;
@@ -34,6 +34,10 @@ type LegacyActiveWorkoutViewProps = {
     lowerBackPain: number | null,
   ) => Promise<void> | void;
   onSelectExercise: (exerciseId: string) => void;
+  onUpdateSet: (
+    setId: number,
+    payload: { weight?: number; reps?: number },
+  ) => Promise<void> | void;
 };
 
 type RecommendationTone = "good" | "warning" | "danger";
@@ -91,6 +95,50 @@ function formatBestSet(setEntry: { weight: number; reps: number } | null) {
   }
 
   return `${setEntry.reps} reps`;
+}
+
+function formatSetSummary(setEntry: { weight: number; reps: number } | null) {
+  if (!setEntry) {
+    return "No previous set";
+  }
+
+  if (setEntry.weight > 0) {
+    return `${formatNumber(setEntry.weight)} kg x ${setEntry.reps}`;
+  }
+
+  return `${setEntry.reps} reps`;
+}
+
+function profileLabel(profileKey: string | null | undefined) {
+  const labels: Record<string, string> = {
+    deadlift: "Hinge",
+    squats: "Lower body",
+    db_squats: "Lower body",
+    bench_press: "Push",
+    incline_bench_press: "Push",
+    db_bench_press: "Push",
+    shoulder_press: "Push",
+    db_shoulder_press: "Push",
+    db_row: "Pull",
+    ez_curl: "Arms",
+    triceps_extension: "Arms",
+    triceps_pushdown: "Arms",
+    lateral_raise: "Shoulders",
+    crunches: "Core",
+    accessory: "Accessory",
+  };
+
+  return profileKey ? labels[profileKey] ?? profileKey.replace(/_/g, " ") : "Exercise";
+}
+
+function exerciseSearchText(exercise: Exercise) {
+  return `${exercise.name} ${exercise.profile_key} ${profileLabel(
+    exercise.profile_key,
+  )}`.toLowerCase();
+}
+
+function setVolume(setEntry: { weight: number; reps: number }) {
+  return Number(setEntry.weight) * Number(setEntry.reps);
 }
 
 function estimatedOneRepMax(weight: number, reps: number) {
@@ -294,7 +342,7 @@ export default function LegacyActiveWorkoutView({
   disabled,
   elapsedSeconds,
   error,
-  exerciseOptions,
+  exercises,
   metadataSaveStatus,
   selectedExerciseId,
   onAddExercise,
@@ -305,6 +353,7 @@ export default function LegacyActiveWorkoutView({
   onFinish,
   onSaveMetadata,
   onSelectExercise,
+  onUpdateSet,
 }: LegacyActiveWorkoutViewProps) {
   const [sessionRpe, setSessionRpe] = useState(
     String(currentWorkout.session_rpe ?? ""),
@@ -312,6 +361,12 @@ export default function LegacyActiveWorkoutView({
   const [backPain, setBackPain] = useState(
     String(currentWorkout.lower_back_pain ?? ""),
   );
+  const [exerciseSearch, setExerciseSearch] = useState("");
+  const [collapsedExerciseIds, setCollapsedExerciseIds] = useState<Set<number>>(
+    () => new Set(),
+  );
+  const [finishConfirmOpen, setFinishConfirmOpen] = useState(false);
+  const [quickHint, setQuickHint] = useState<string | null>(null);
 
   useEffect(() => {
     setSessionRpe(String(currentWorkout.session_rpe ?? ""));
@@ -325,46 +380,132 @@ export default function LegacyActiveWorkoutView({
     );
   }
 
+  const selectedExercise = exercises.find(
+    (exercise) => String(exercise.id) === selectedExerciseId,
+  );
+  const activeExercises = exercises.filter((exercise) => exercise.is_active);
+  const filteredExercises = activeExercises.filter((exercise) =>
+    exerciseSearchText(exercise).includes(exerciseSearch.trim().toLowerCase()),
+  );
+  const usedExerciseIds = new Set(
+    currentWorkout.exercises.map((exercise) => exercise.exercise_id),
+  );
+  const recentExercises = activeExercises.filter((exercise) =>
+    usedExerciseIds.has(exercise.id),
+  );
+  const groupedExercises = filteredExercises.reduce<Record<string, Exercise[]>>(
+    (groups, exercise) => {
+      const label = profileLabel(exercise.profile_key);
+      groups[label] = [...(groups[label] ?? []), exercise];
+      return groups;
+    },
+    {},
+  );
+
+  const lastExercise =
+    currentWorkout.exercises[currentWorkout.exercises.length - 1] ?? null;
+
+  function toggleExercise(exerciseId: number) {
+    setCollapsedExerciseIds((current) => {
+      const next = new Set(current);
+      if (next.has(exerciseId)) {
+        next.delete(exerciseId);
+      } else {
+        next.add(exerciseId);
+      }
+      return next;
+    });
+  }
+
+  function addQuickSet(exercise: CurrentWorkoutExercise, mode: "same" | "previous" | "warmup") {
+    const currentLastSet = exercise.sets[exercise.sets.length - 1] ?? null;
+    const previousSet = {
+      weight: Number(exercise.default_weight || 0),
+      reps: Number(exercise.default_reps || 10),
+    };
+    const source =
+      mode === "same" && currentLastSet
+        ? { weight: Number(currentLastSet.weight), reps: Number(currentLastSet.reps) }
+        : previousSet;
+
+    if (mode === "previous" && !exercise.default_weight) {
+      setQuickHint(`No previous set found yet for ${exercise.exercise_name}.`);
+    } else {
+      setQuickHint(null);
+    }
+
+    if (mode === "warmup") {
+      const warmupWeight = source.weight > 0 ? Math.round(source.weight * 0.6 * 2) / 2 : 0;
+      void onAddSet(exercise.draft_exercise_id, warmupWeight, 8);
+      return;
+    }
+
+    void onAddSet(exercise.draft_exercise_id, source.weight, source.reps);
+  }
+
+  function addBottomSet() {
+    if (!lastExercise) {
+      return;
+    }
+
+    addQuickSet(lastExercise, "same");
+  }
+
+  function requestFinish() {
+    if (currentWorkout.total_sets === 0) {
+      void onFinish();
+      return;
+    }
+
+    setFinishConfirmOpen(true);
+  }
+
   return (
-    <section className="page-stack legacy-active-workout">
+    <section className="page-stack legacy-active-workout active-cockpit">
       {error && <div className="error-banner">{error}</div>}
 
-      <div className="active-workout-meta">
-        <span>Started · {formatDateTime(currentWorkout.started_at)}</span>
-        <span className="active-status-badge">active</span>
-      </div>
-
-      <div className="active-workout-stat-grid">
-        <ActiveStat label="duration" value={formatClockDuration(elapsedSeconds)} />
-        <ActiveStat label="sets" value={currentWorkout.total_sets} />
-        <ActiveStat label="reps" value={currentWorkout.total_reps} />
-        <ActiveStat
-          label="kg volume"
-          value={currentWorkout.total_volume.toFixed(1)}
-        />
-        {currentWorkout.load_metrics && (
-          <>
-            <ActiveStat
-              className={metricClassForLoad(
-                currentWorkout.load_metrics.load_label,
-              )}
-              label={`${formatNumber(
-                currentWorkout.load_metrics.load_score,
-              )} load`}
-              value={currentWorkout.load_metrics.load_label}
-            />
-            <ActiveStat
-              className={metricClassForScore(
-                currentWorkout.load_metrics.back_stress_score,
-              )}
-              label="back stress"
-              value={formatNumber(
-                currentWorkout.load_metrics.back_stress_score,
-              )}
-            />
-          </>
-        )}
-      </div>
+      <header className="active-cockpit-header">
+        <div className="active-cockpit-title">
+          <div>
+            <span className="active-status-badge">active</span>
+            <h1>Active Workout</h1>
+          </div>
+          <button
+            className="active-finish-button active-header-finish"
+            disabled={disabled}
+            onClick={requestFinish}
+            type="button"
+          >
+            Finish
+          </button>
+        </div>
+        <div className="active-cockpit-summary">
+          <strong>{formatClockDuration(elapsedSeconds)}</strong>
+          <span>
+            {currentWorkout.total_sets} sets ·{" "}
+            {(currentWorkout.total_volume / 1000).toFixed(1)} t ·{" "}
+            {currentWorkout.exercises.length} exercises
+          </span>
+        </div>
+        <div className="active-cockpit-signals">
+          <span>
+            Started <strong>{formatDateTime(currentWorkout.started_at)}</strong>
+          </span>
+          {currentWorkout.load_metrics && (
+            <>
+              <span>
+                Load <strong>{currentWorkout.load_metrics.load_label}</strong>
+              </span>
+              <span>
+                Back stress{" "}
+                <strong>
+                  {formatNumber(currentWorkout.load_metrics.back_stress_score)}
+                </strong>
+              </span>
+            </>
+          )}
+        </div>
+      </header>
 
       {currentWorkout.exercises.length > 0 && (
         <ActiveWorkoutAnalysis currentWorkout={currentWorkout} />
@@ -429,45 +570,86 @@ export default function LegacyActiveWorkoutView({
         </div>
       </section>
 
-      <section className="panel active-add-exercise-card">
+      <section className="panel active-add-exercise-card" id="active-exercise-picker">
         <h2>Add exercise</h2>
+        <label className="active-picker-search">
+          Search exercises
+          <input
+            disabled={disabled}
+            onChange={(event) => setExerciseSearch(event.target.value)}
+            placeholder="Search by name or category"
+            type="search"
+            value={exerciseSearch}
+          />
+        </label>
+        {recentExercises.length > 0 && (
+          <div className="active-picker-chips" aria-label="Recent exercises">
+            {recentExercises.slice(0, 5).map((exercise) => (
+              <button
+                className="ghost-button compact-action"
+                disabled={disabled}
+                key={exercise.id}
+                onClick={() => onSelectExercise(String(exercise.id))}
+                type="button"
+              >
+                {exercise.name}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="active-exercise-add-row">
           <select
             aria-label="Exercise"
-            disabled={disabled || exerciseOptions.length === 0}
+            disabled={disabled || filteredExercises.length === 0}
             onChange={(event) => onSelectExercise(event.target.value)}
             value={selectedExerciseId}
           >
-            {exerciseOptions.map((exercise) => (
-              <option key={exercise.value} value={exercise.value}>
-                {exercise.label}
-              </option>
+            {Object.entries(groupedExercises).map(([group, items]) => (
+              <optgroup key={group} label={group}>
+                {items.map((exercise) => (
+                  <option key={exercise.id} value={exercise.id}>
+                    {exercise.name}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
           <button
             className="primary-button"
-            disabled={disabled || !selectedExerciseId}
+            disabled={disabled || !selectedExerciseId || !selectedExercise?.is_active}
             onClick={() => void onAddExercise()}
             type="button"
           >
             Add
           </button>
         </div>
+        {selectedExercise && (
+          <div className="muted small">
+            {profileLabel(selectedExercise.profile_key)} ·{" "}
+            {selectedExercise.is_active ? "active" : "inactive"}
+          </div>
+        )}
         <Link className="active-settings-link" to="/settings">
           Missing an exercise? Add it in Settings.
         </Link>
       </section>
 
+      {quickHint && <div className="status-banner">{quickHint}</div>}
+
       {currentWorkout.exercises.length > 0 ? (
         <div className="active-exercise-list">
           {currentWorkout.exercises.map((exercise) => (
             <LegacyActiveExerciseCard
+              collapsed={collapsedExerciseIds.has(exercise.draft_exercise_id)}
               disabled={disabled}
               exercise={exercise}
               key={exercise.draft_exercise_id}
               onAddSet={onAddSet}
+              onAddQuickSet={addQuickSet}
               onDeleteExercise={onDeleteExercise}
               onDeleteSet={onDeleteSet}
+              onToggle={() => toggleExercise(exercise.draft_exercise_id)}
+              onUpdateSet={onUpdateSet}
             />
           ))}
         </div>
@@ -481,7 +663,7 @@ export default function LegacyActiveWorkoutView({
         <button
           className="active-finish-button"
           disabled={disabled}
-          onClick={() => void onFinish()}
+          onClick={requestFinish}
           type="button"
         >
           Finish workout
@@ -495,6 +677,66 @@ export default function LegacyActiveWorkoutView({
           Cancel workout
         </button>
       </div>
+
+      <nav className="active-mobile-action-bar" aria-label="Workout quick actions">
+        <a className="ghost-button" href="#active-exercise-picker">
+          + Exercise
+        </a>
+        <button
+          className="ghost-button"
+          disabled={disabled || !lastExercise}
+          onClick={addBottomSet}
+          type="button"
+        >
+          + Set
+        </button>
+        <button
+          className="active-finish-button"
+          disabled={disabled}
+          onClick={requestFinish}
+          type="button"
+        >
+          Finish
+        </button>
+      </nav>
+
+      {finishConfirmOpen && (
+        <div className="active-finish-confirm-backdrop" role="presentation">
+          <section
+            aria-labelledby="finish-workout-title"
+            aria-modal="true"
+            className="active-finish-confirm"
+            role="dialog"
+          >
+            <h2 id="finish-workout-title">Finish this workout?</h2>
+            <p>
+              You logged {currentWorkout.total_sets} sets across{" "}
+              {currentWorkout.exercises.length} exercises.
+            </p>
+            <div className="active-finish-confirm-actions">
+              <button
+                className="ghost-button"
+                disabled={disabled}
+                onClick={() => setFinishConfirmOpen(false)}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="active-finish-button"
+                disabled={disabled}
+                onClick={() => {
+                  setFinishConfirmOpen(false);
+                  void onFinish();
+                }}
+                type="button"
+              >
+                Finish workout
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </section>
   );
 }
@@ -630,17 +872,31 @@ function ActiveWorkoutAnalysis({
 }
 
 function LegacyActiveExerciseCard({
+  collapsed,
   disabled,
   exercise,
   onAddSet,
+  onAddQuickSet,
   onDeleteExercise,
   onDeleteSet,
+  onToggle,
+  onUpdateSet,
 }: {
+  collapsed: boolean;
   disabled: boolean;
   exercise: CurrentWorkoutExercise;
   onAddSet: (exerciseId: number, weight: number, reps: number) => Promise<void> | void;
+  onAddQuickSet: (
+    exercise: CurrentWorkoutExercise,
+    mode: "same" | "previous" | "warmup",
+  ) => void;
   onDeleteExercise: (exerciseId: number) => Promise<void> | void;
   onDeleteSet: (setId: number) => Promise<void> | void;
+  onToggle: () => void;
+  onUpdateSet: (
+    setId: number,
+    payload: { weight?: number; reps?: number },
+  ) => Promise<void> | void;
 }) {
   const defaultWeight = Number(exercise.default_weight || 0);
   const defaultReps = Number(exercise.default_reps || 10);
@@ -655,6 +911,7 @@ function LegacyActiveExerciseCard({
     ...exercise.sets.map((setEntry) => setEntry.weight),
   ]);
   const repsOptions = buildRepsOptions(defaultReps);
+  const lastSet = exercise.sets[exercise.sets.length - 1] ?? null;
 
   useEffect(() => {
     setAddWeight(String(defaultWeight));
@@ -669,110 +926,267 @@ function LegacyActiveExerciseCard({
     void onDeleteExercise(exercise.draft_exercise_id);
   }
 
+  function deleteLastSet() {
+    if (!lastSet) {
+      return;
+    }
+
+    if (
+      (lastSet.weight > 0 || lastSet.reps > 0) &&
+      !window.confirm(`Delete set ${lastSet.set_number} from ${exercise.exercise_name}?`)
+    ) {
+      return;
+    }
+
+    void onDeleteSet(lastSet.id);
+  }
+
   return (
     <article className="active-exercise-card">
       <div className="active-exercise-header">
         <div>
           <h2>{exercise.exercise_name}</h2>
           <p>
-            {exercise.total_sets} sets · {exercise.total_reps} reps ·{" "}
+            {profileLabel(exercise.profile_key)} · {exercise.total_sets} sets ·{" "}
             {exercise.total_volume.toFixed(1)} kg
             {strengthSummary.bestE1rm !== null && (
               <> · e1RM {formatNumber(strengthSummary.bestE1rm)} kg</>
             )}
           </p>
+          <p className="active-exercise-hint">
+            Last: {formatSetSummary(lastSet)} · Previous:{" "}
+            {formatSetSummary({ weight: defaultWeight, reps: defaultReps })}
+          </p>
         </div>
-        <button
-          aria-label={`Remove ${exercise.exercise_name}`}
-          className="icon-delete-button active-exercise-delete-button"
+        <div className="active-exercise-header-actions">
+          <button
+            className="ghost-button compact-action"
+            disabled={disabled}
+            onClick={onToggle}
+            type="button"
+          >
+            {collapsed ? "Expand" : "Collapse"}
+          </button>
+          <button
+            aria-label={`Remove ${exercise.exercise_name}`}
+            className="icon-delete-button active-exercise-delete-button"
+            disabled={disabled}
+            onClick={deleteExercise}
+            title={`Remove ${exercise.exercise_name}`}
+            type="button"
+          >
+            ×
+          </button>
+        </div>
+      </div>
+
+      {!collapsed && (
+        <>
+          {exercise.sets.length > 0 ? (
+            <div className="active-set-list">
+              {exercise.sets.map((setEntry) => (
+                <ActiveSetRow
+                  disabled={disabled}
+                  key={setEntry.id}
+                  onDeleteSet={onDeleteSet}
+                  onUpdateSet={onUpdateSet}
+                  setEntry={setEntry}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="muted">No sets yet. Use + Previous or enter a set below.</p>
+          )}
+
+          <div className="active-fast-actions" aria-label={`${exercise.exercise_name} quick set actions`}>
+            <button
+              className="ghost-button compact-action"
+              disabled={disabled}
+              onClick={() => onAddQuickSet(exercise, "same")}
+              type="button"
+            >
+              + Same
+            </button>
+            <button
+              className="ghost-button compact-action"
+              disabled={disabled}
+              onClick={() => onAddQuickSet(exercise, "previous")}
+              type="button"
+            >
+              + Previous
+            </button>
+            <button
+              className="ghost-button compact-action"
+              disabled={disabled}
+              onClick={() => onAddQuickSet(exercise, "warmup")}
+              type="button"
+            >
+              + Warm-up
+            </button>
+            <button
+              className="ghost-button compact-action danger-text"
+              disabled={disabled || !lastSet}
+              onClick={deleteLastSet}
+              type="button"
+            >
+              Delete last
+            </button>
+          </div>
+
+          <div className="active-set-add-row">
+            <label>
+              Weight kg
+              <select
+                aria-label={`${exercise.exercise_name} weight`}
+                disabled={disabled}
+                onChange={(event) => setAddWeight(event.target.value)}
+                value={addWeight}
+              >
+                {weightOptions.map((option) => (
+                  <option key={option} value={formatSetOption(option)}>
+                    {formatSetOption(option)} kg
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Reps
+              <select
+                aria-label={`${exercise.exercise_name} repetitions`}
+                disabled={disabled}
+                onChange={(event) => setAddReps(event.target.value)}
+                value={addReps}
+              >
+                {repsOptions.map((option) => (
+                  <option key={option} value={formatSetOption(option)}>
+                    {formatSetOption(option)} reps
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              className="primary-button"
+              disabled={disabled}
+              onClick={() =>
+                void onAddSet(
+                  exercise.draft_exercise_id,
+                  Number(addWeight),
+                  Number(addReps),
+                )
+              }
+              type="button"
+            >
+              Add set
+            </button>
+          </div>
+        </>
+      )}
+    </article>
+  );
+}
+
+function ActiveSetRow({
+  disabled,
+  onDeleteSet,
+  onUpdateSet,
+  setEntry,
+}: {
+  disabled: boolean;
+  onDeleteSet: (setId: number) => Promise<void> | void;
+  onUpdateSet: (
+    setId: number,
+    payload: { weight?: number; reps?: number },
+  ) => Promise<void> | void;
+  setEntry: SetEntry;
+}) {
+  const [weight, setWeight] = useState(String(setEntry.weight));
+  const [reps, setReps] = useState(String(setEntry.reps));
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    setWeight(String(setEntry.weight));
+    setReps(String(setEntry.reps));
+    setDirty(false);
+  }, [setEntry.weight, setEntry.reps]);
+
+  function save() {
+    const nextWeight = Number(weight);
+    const nextReps = Number(reps);
+    if (!Number.isFinite(nextWeight) || !Number.isFinite(nextReps) || nextReps < 1) {
+      return;
+    }
+
+    void onUpdateSet(setEntry.id, {
+      weight: nextWeight,
+      reps: Math.round(nextReps),
+    });
+  }
+
+  function deleteSet() {
+    if (
+      (setEntry.weight > 0 || setEntry.reps > 0) &&
+      !window.confirm(`Delete set ${setEntry.set_number}?`)
+    ) {
+      return;
+    }
+
+    void onDeleteSet(setEntry.id);
+  }
+
+  return (
+    <div className="active-set-row">
+      <div className="active-set-number">
+        <strong>Set {setEntry.set_number}</strong>
+        <span>{setVolume({ weight: Number(weight), reps: Number(reps) }).toFixed(1)} kg</span>
+      </div>
+      <label>
+        Weight kg
+        <input
           disabled={disabled}
-          onClick={deleteExercise}
-          title={`Remove ${exercise.exercise_name}`}
+          inputMode="decimal"
+          min="0"
+          onChange={(event) => {
+            setWeight(event.target.value);
+            setDirty(true);
+          }}
+          type="number"
+          value={weight}
+        />
+      </label>
+      <label>
+        Reps
+        <input
+          disabled={disabled}
+          inputMode="numeric"
+          min="1"
+          onChange={(event) => {
+            setReps(event.target.value);
+            setDirty(true);
+          }}
+          type="number"
+          value={reps}
+        />
+      </label>
+      <div className="active-set-row-actions">
+        <button
+          className="primary-button compact-action"
+          disabled={disabled || !dirty}
+          onClick={save}
           type="button"
+        >
+          Save
+        </button>
+        <button
+          className="icon-delete-button active-set-delete-button"
+          disabled={disabled}
+          onClick={deleteSet}
+          type="button"
+          aria-label={`Delete set ${setEntry.set_number}`}
         >
           ×
         </button>
       </div>
-
-      {exercise.sets.length > 0 ? (
-        <div className="active-set-table-scroll">
-          <table className="active-set-table">
-            <thead>
-              <tr>
-                <th>Set</th>
-                <th>Kg</th>
-                <th>Reps</th>
-                <th aria-label="Actions" />
-              </tr>
-            </thead>
-            <tbody>
-              {exercise.sets.map((setEntry) => (
-                <tr key={setEntry.id}>
-                  <td>{setEntry.set_number}</td>
-                  <td>{formatSetOption(setEntry.weight)}</td>
-                  <td>{setEntry.reps}</td>
-                  <td>
-                    <button
-                      aria-label={`Remove set ${setEntry.set_number}`}
-                      className="icon-delete-button active-set-delete-button"
-                      disabled={disabled}
-                      onClick={() => void onDeleteSet(setEntry.id)}
-                      title={`Remove set ${setEntry.set_number}`}
-                      type="button"
-                    >
-                      ×
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <p className="muted">No sets yet.</p>
-      )}
-
-      <div className="active-set-add-row">
-        <select
-          aria-label={`${exercise.exercise_name} weight`}
-          disabled={disabled}
-          onChange={(event) => setAddWeight(event.target.value)}
-          value={addWeight}
-        >
-          {weightOptions.map((option) => (
-            <option key={option} value={formatSetOption(option)}>
-              {formatSetOption(option)} kg
-            </option>
-          ))}
-        </select>
-        <select
-          aria-label={`${exercise.exercise_name} repetitions`}
-          disabled={disabled}
-          onChange={(event) => setAddReps(event.target.value)}
-          value={addReps}
-        >
-          {repsOptions.map((option) => (
-            <option key={option} value={formatSetOption(option)}>
-              {formatSetOption(option)} reps
-            </option>
-          ))}
-        </select>
-        <button
-          className="primary-button"
-          disabled={disabled}
-          onClick={() =>
-            void onAddSet(
-              exercise.draft_exercise_id,
-              Number(addWeight),
-              Number(addReps),
-            )
-          }
-          type="button"
-        >
-          +
-        </button>
-      </div>
-    </article>
+    </div>
   );
 }
 
