@@ -289,6 +289,8 @@ class ExercisesApiTests(unittest.TestCase):
         self.assertEqual(response["exercises"][0]["profile_key"], "deadlift")
         self.assertTrue(response["exercises"][0]["is_active"])
         self.assertIn(100.0, response["exercises"][0]["weights"])
+        self.assertEqual(response["exercises"][0]["default_reps"], 10)
+        self.assertEqual(response["exercises"][0]["max_reps"], 50)
         for exercise in response["exercises"]:
             self.assertTrue(
                 exercise["weights"],
@@ -304,11 +306,35 @@ class ExercisesApiTests(unittest.TestCase):
         self.assertEqual(response["exercise"]["name"], "Incline Row")
         self.assertEqual(response["exercise"]["weights"], [15.0, 17.75])
         self.assertEqual(response["exercise"]["profile_key"], "accessory")
+        self.assertEqual(response["exercise"]["default_reps"], 10)
 
         with self.assertRaises(HTTPException) as exc:
             create_exercise_endpoint(ExerciseCreateRequest(name="Incline Row"))
 
         self.assertEqual(exc.exception.status_code, 409)
+
+    def test_update_exercise_can_change_set_option_settings(self) -> None:
+        exercise_id = self.exercise_id("Crunches")
+
+        response = update_exercise_endpoint(
+            exercise_id,
+            ExerciseUpdateRequest(
+                default_weight=0,
+                min_weight=0,
+                max_weight=0,
+                weight_step=1,
+                default_reps=70,
+                min_reps=1,
+                max_reps=200,
+                reps_step=1,
+            ),
+        )
+
+        exercise = response["exercise"]
+        self.assertEqual(exercise["default_weight"], 0)
+        self.assertEqual(exercise["max_weight"], 0)
+        self.assertEqual(exercise["default_reps"], 70)
+        self.assertEqual(exercise["max_reps"], 200)
 
     def test_create_exercise_can_infer_profile_from_name(self) -> None:
         response = create_exercise_endpoint(

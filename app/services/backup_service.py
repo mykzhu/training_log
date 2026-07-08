@@ -26,7 +26,24 @@ from app.services.default_analysis_profiles import (
 
 logger = logging.getLogger("training_log")
 
-BACKUP_SCHEMA_VERSION = 6
+BACKUP_SCHEMA_VERSION = 7
+EXERCISE_BACKUP_COLUMNS_V1_V6: tuple[str, ...] = (
+    "id",
+    "name",
+    "is_active",
+    "sort_order",
+    "profile_key",
+)
+EXERCISE_OPTION_SETTING_COLUMNS: tuple[str, ...] = (
+    "default_weight",
+    "min_weight",
+    "max_weight",
+    "weight_step",
+    "default_reps",
+    "min_reps",
+    "max_reps",
+    "reps_step",
+)
 ANALYSIS_PROFILE_BACKUP_COLUMNS: tuple[str, ...] = (
     "key",
     "label",
@@ -39,7 +56,10 @@ ANALYSIS_PROFILE_BACKUP_COLUMNS: tuple[str, ...] = (
     "sort_order",
 )
 BASE_BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
-    "exercises": ("id", "name", "is_active", "sort_order", "profile_key"),
+    "exercises": (
+        *EXERCISE_BACKUP_COLUMNS_V1_V6,
+        *EXERCISE_OPTION_SETTING_COLUMNS,
+    ),
     "exercise_weight_options": ("id", "exercise_id", "weight", "sort_order"),
     "workouts": (
         "id",
@@ -92,12 +112,32 @@ BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
 }
 SCHEMA_V5_BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
     "analysis_profiles": ANALYSIS_PROFILE_BACKUP_COLUMNS,
-    **BASE_BACKUP_TABLE_COLUMNS,
+    **{
+        **BASE_BACKUP_TABLE_COLUMNS,
+        "exercises": EXERCISE_BACKUP_COLUMNS_V1_V6,
+    },
     "garmin_daily_metrics": GARMIN_BACKUP_TABLE_COLUMNS_V4_V5,
 }
 SCHEMA_V4_BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
-    **BASE_BACKUP_TABLE_COLUMNS,
+    **{
+        **BASE_BACKUP_TABLE_COLUMNS,
+        "exercises": EXERCISE_BACKUP_COLUMNS_V1_V6,
+    },
     "garmin_daily_metrics": GARMIN_BACKUP_TABLE_COLUMNS_V4_V5,
+}
+SCHEMA_V3_BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
+    **{
+        **BASE_BACKUP_TABLE_COLUMNS,
+        "exercises": EXERCISE_BACKUP_COLUMNS_V1_V6,
+    },
+}
+SCHEMA_V6_BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
+    "analysis_profiles": ANALYSIS_PROFILE_BACKUP_COLUMNS,
+    **{
+        **BASE_BACKUP_TABLE_COLUMNS,
+        "exercises": EXERCISE_BACKUP_COLUMNS_V1_V6,
+    },
+    "garmin_daily_metrics": GARMIN_BACKUP_TABLE_COLUMNS,
 }
 BACKUP_TABLES = tuple(BACKUP_TABLE_COLUMNS)
 BACKUP_SEQUENCE_TABLES = tuple(BASE_BACKUP_TABLE_COLUMNS)
@@ -185,9 +225,9 @@ def validate_backup_payload(payload: Any) -> dict[str, list[dict[str, Any]]]:
         raise ValueError("Backup file must contain a JSON object.")
 
     schema_version = payload.get("schema_version")
-    if schema_version not in (1, 2, 3, 4, 5, BACKUP_SCHEMA_VERSION):
+    if schema_version not in (1, 2, 3, 4, 5, 6, BACKUP_SCHEMA_VERSION):
         raise ValueError(
-            "Unsupported backup schema version. Expected 1, 2, 3, 4, 5 or "
+            "Unsupported backup schema version. Expected 1, 2, 3, 4, 5, 6 or "
             f"{BACKUP_SCHEMA_VERSION}."
         )
 
@@ -199,12 +239,14 @@ def validate_backup_payload(payload: Any) -> dict[str, list[dict[str, Any]]]:
 
     if schema_version == BACKUP_SCHEMA_VERSION:
         table_columns = BACKUP_TABLE_COLUMNS
+    elif schema_version == 6:
+        table_columns = SCHEMA_V6_BACKUP_TABLE_COLUMNS
     elif schema_version == 5:
         table_columns = SCHEMA_V5_BACKUP_TABLE_COLUMNS
     elif schema_version == 4:
         table_columns = SCHEMA_V4_BACKUP_TABLE_COLUMNS
     elif schema_version == 3:
-        table_columns = BASE_BACKUP_TABLE_COLUMNS
+        table_columns = SCHEMA_V3_BACKUP_TABLE_COLUMNS
     else:
         table_columns = LEGACY_BACKUP_TABLE_COLUMNS
 
@@ -244,6 +286,17 @@ def validate_backup_payload(payload: Any) -> dict[str, list[dict[str, Any]]]:
             row["profile_key"] = profile_key_for_exercise_name(str(row["name"]))
 
         validated["exercise_weight_options"] = []
+
+    if schema_version < BACKUP_SCHEMA_VERSION:
+        for row in validated["exercises"]:
+            row.setdefault("default_weight", 0)
+            row.setdefault("min_weight", 0)
+            row.setdefault("max_weight", 200)
+            row.setdefault("weight_step", 2.5)
+            row.setdefault("default_reps", 10)
+            row.setdefault("min_reps", 1)
+            row.setdefault("max_reps", 50)
+            row.setdefault("reps_step", 1)
 
     if schema_version < 5:
         validated["analysis_profiles"] = default_backup_profile_rows()
@@ -410,6 +463,38 @@ def validate_exercises(
         if profile_key not in profile_keys:
             raise ValueError(f"Row {index} in exercises has an invalid profile.")
         row["profile_key"] = profile_key
+
+        min_weight = coerce_float(row["min_weight"], f"Row {index} in exercises min_weight")
+        max_weight = coerce_float(row["max_weight"], f"Row {index} in exercises max_weight")
+        weight_step = coerce_float(row["weight_step"], f"Row {index} in exercises weight_step")
+        default_weight = coerce_float(
+            row["default_weight"],
+            f"Row {index} in exercises default_weight",
+        )
+        if min_weight < 0 or max_weight < min_weight or weight_step <= 0:
+            raise ValueError(f"Row {index} in exercises has invalid weight settings.")
+        if default_weight < min_weight or default_weight > max_weight:
+            raise ValueError(f"Row {index} in exercises has invalid default weight.")
+        row["min_weight"] = min_weight
+        row["max_weight"] = max_weight
+        row["weight_step"] = weight_step
+        row["default_weight"] = default_weight
+
+        min_reps = coerce_int(row["min_reps"], f"Row {index} in exercises min_reps")
+        max_reps = coerce_int(row["max_reps"], f"Row {index} in exercises max_reps")
+        reps_step = coerce_int(row["reps_step"], f"Row {index} in exercises reps_step")
+        default_reps = coerce_int(
+            row["default_reps"],
+            f"Row {index} in exercises default_reps",
+        )
+        if min_reps < 1 or max_reps < min_reps or reps_step <= 0:
+            raise ValueError(f"Row {index} in exercises has invalid rep settings.")
+        if default_reps < min_reps or default_reps > max_reps:
+            raise ValueError(f"Row {index} in exercises has invalid default reps.")
+        row["min_reps"] = min_reps
+        row["max_reps"] = max_reps
+        row["reps_step"] = reps_step
+        row["default_reps"] = default_reps
 
 
 def validate_exercise_weight_options(
@@ -635,7 +720,7 @@ def validate_workout_graph(tables: dict[str, list[dict[str, Any]]]) -> None:
         weight = coerce_float(row["weight"], f"Row {index} in set_entries weight")
         if set_number <= 0:
             raise ValueError(f"Row {index} in set_entries has invalid set number.")
-        if reps <= 0 or reps > 100:
+        if reps <= 0 or reps > 1000:
             raise ValueError(f"Row {index} in set_entries has invalid reps.")
         if weight < 0:
             raise ValueError(f"Row {index} in set_entries has invalid weight.")
@@ -714,7 +799,7 @@ def restore_backup_payload(payload: Any) -> None:
                 conn.execute(insert_sql, tuple(row[column] for column in columns))
 
         reset_sqlite_sequences(conn)
-        if schema_version in (3, 4, 5, BACKUP_SCHEMA_VERSION):
+        if schema_version in (3, 4, 5, 6, BACKUP_SCHEMA_VERSION):
             set_metadata(conn, EXERCISE_SETTINGS_WEIGHT_MIGRATION_KEY, "1")
         else:
             initialize_exercise_settings(conn, force_weight_migration=True)

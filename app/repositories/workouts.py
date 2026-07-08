@@ -2,7 +2,12 @@ import sqlite3
 from typing import Any
 
 from app.db import get_db
-from app.repositories.exercises import get_weight_options_by_exercise_ids
+from app.repositories.exercises import (
+    get_float_options,
+    get_int_options,
+    get_weight_options_by_exercise_ids,
+    value_or_default,
+)
 
 MAX_NUMBERING_RETRIES = 2
 
@@ -587,7 +592,15 @@ def get_workout_details_batch(
                 we.position,
                 e.id AS exercise_id,
                 e.name AS exercise_name,
-                e.profile_key
+                e.profile_key,
+                e.default_weight,
+                e.min_weight,
+                e.max_weight,
+                e.weight_step,
+                e.default_reps,
+                e.min_reps,
+                e.max_reps,
+                e.reps_step
             FROM workout_exercises we
             JOIN exercises e ON e.id = we.exercise_id
             WHERE we.workout_id IN ({placeholders})
@@ -636,8 +649,8 @@ def get_workout_details_batch(
                 default_weight = float(last_set["weight"])
                 default_reps = int(last_set["reps"])
             else:
-                default_weight = 0.0
-                default_reps = 10
+                default_weight = float(value_or_default(row["default_weight"], 0))
+                default_reps = int(value_or_default(row["default_reps"], 10))
 
             item = {
                 "workout_id": workout_id,
@@ -651,6 +664,12 @@ def get_workout_details_batch(
                 "total_reps": total_reps,
                 "default_weight": default_weight,
                 "default_reps": default_reps,
+                "min_weight": float(value_or_default(row["min_weight"], 0)),
+                "max_weight": float(value_or_default(row["max_weight"], 200)),
+                "weight_step": float(value_or_default(row["weight_step"], 2.5)),
+                "min_reps": int(value_or_default(row["min_reps"], 1)),
+                "max_reps": int(value_or_default(row["max_reps"], 50)),
+                "reps_step": int(value_or_default(row["reps_step"], 1)),
             }
             details_by_workout.setdefault(workout_id, []).append(item)
             if not sets:
@@ -676,10 +695,44 @@ def get_workout_details_batch(
         [int(item["exercise_id"]) for item in all_details]
     )
     for item in all_details:
-        item["configured_weights"] = weights_by_exercise.get(
+        configured_weights = weights_by_exercise.get(
             int(item["exercise_id"]),
             [],
         )
+        set_weights = [
+            float(set_entry["weight"])
+            for set_entry in item["sets"]
+        ]
+        set_reps = [
+            int(set_entry["reps"])
+            for set_entry in item["sets"]
+        ]
+        item["configured_weights"] = configured_weights
+        item["weight_options"] = get_float_options(
+            min_value=float(item.get("min_weight", 0)),
+            max_value=float(item.get("max_weight", 200)),
+            step=float(item.get("weight_step", 2.5)),
+            extra_values=[
+                *configured_weights,
+                *set_weights,
+                float(item["default_weight"]),
+            ],
+        )
+        item["reps_options"] = get_int_options(
+            min_value=int(item.get("min_reps", 1)),
+            max_value=int(item.get("max_reps", 50)),
+            step=int(item.get("reps_step", 1)),
+            extra_values=[
+                *set_reps,
+                int(item["default_reps"]),
+            ],
+        )
+        item.pop("min_weight", None)
+        item.pop("max_weight", None)
+        item.pop("weight_step", None)
+        item.pop("min_reps", None)
+        item.pop("max_reps", None)
+        item.pop("reps_step", None)
         item.pop("workout_id", None)
 
     return details_by_workout

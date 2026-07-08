@@ -34,12 +34,28 @@ class ExerciseCreateRequest(AppBaseModel):
     is_active: bool = True
     profile_key: str | None = Field(default=None, min_length=1, max_length=80)
     weights: list[float] = Field(default_factory=list)
+    default_weight: float | None = Field(default=None, ge=0)
+    min_weight: float | None = Field(default=None, ge=0)
+    max_weight: float | None = Field(default=None, ge=0)
+    weight_step: float | None = Field(default=None, gt=0)
+    default_reps: int | None = Field(default=None, ge=1, le=1000)
+    min_reps: int | None = Field(default=None, ge=1, le=1000)
+    max_reps: int | None = Field(default=None, ge=1, le=1000)
+    reps_step: int | None = Field(default=None, ge=1, le=1000)
 
 
 class ExerciseUpdateRequest(AppBaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     is_active: bool | None = None
     profile_key: str | None = Field(default=None, min_length=1, max_length=80)
+    default_weight: float | None = Field(default=None, ge=0)
+    min_weight: float | None = Field(default=None, ge=0)
+    max_weight: float | None = Field(default=None, ge=0)
+    weight_step: float | None = Field(default=None, gt=0)
+    default_reps: int | None = Field(default=None, ge=1, le=1000)
+    min_reps: int | None = Field(default=None, ge=1, le=1000)
+    max_reps: int | None = Field(default=None, ge=1, le=1000)
+    reps_step: int | None = Field(default=None, ge=1, le=1000)
 
 
 class ExerciseWeightsUpdateRequest(AppBaseModel):
@@ -70,12 +86,12 @@ class ExerciseProfileUpdateRequest(AppBaseModel):
 
 class AddSetRequest(AppBaseModel):
     weight: float = Field(ge=0)
-    reps: int = Field(ge=1, le=100)
+    reps: int = Field(ge=1, le=1000)
 
 
 class UpdateSetRequest(AppBaseModel):
     weight: float | None = Field(default=None, ge=0)
-    reps: int | None = Field(default=None, ge=1, le=100)
+    reps: int | None = Field(default=None, ge=1, le=1000)
 
 
 class SetEntryResponse(AppBaseModel):
@@ -126,6 +142,8 @@ class WorkoutExerciseResponse(AppBaseModel):
     default_weight: float
     default_reps: int
     configured_weights: list[float]
+    weight_options: list[float]
+    reps_options: list[int]
 
 
 class CurrentWorkoutExerciseResponse(AppBaseModel):
@@ -141,6 +159,8 @@ class CurrentWorkoutExerciseResponse(AppBaseModel):
     default_weight: float
     default_reps: int
     configured_weights: list[float]
+    weight_options: list[float]
+    reps_options: list[int]
 
 
 class WorkoutAnalysisExerciseResponse(FlexibleResponse):
@@ -196,6 +216,14 @@ class ExerciseResponse(AppBaseModel):
     is_active: bool
     sort_order: int
     profile_key: str
+    default_weight: float
+    min_weight: float
+    max_weight: float
+    weight_step: float
+    default_reps: int
+    min_reps: int
+    max_reps: int
+    reps_step: int
     weights: list[float]
 
 

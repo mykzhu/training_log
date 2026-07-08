@@ -324,6 +324,8 @@ class WorkoutsApiTests(unittest.TestCase):
         self.assertEqual(response["exercises"][0]["total_sets"], 2)
         self.assertEqual(response["exercises"][0]["sets"][0]["weight"], 100.0)
         self.assertIn(100.0, response["exercises"][0]["configured_weights"])
+        self.assertIn(100.0, response["exercises"][0]["weight_options"])
+        self.assertIn(50, response["exercises"][0]["reps_options"])
         self.assertIn("load_label", response["load_metrics"])
         self.assertIn("load_score", response["load_metrics"])
         self.assertIn("back_stress_score", response["load_metrics"])

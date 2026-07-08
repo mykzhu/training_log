@@ -97,6 +97,16 @@ def create_exercise_endpoint(
             is_active=payload.is_active,
             profile_key=payload.profile_key,
             weights=payload.weights,
+            option_settings={
+                "default_weight": payload.default_weight,
+                "min_weight": payload.min_weight,
+                "max_weight": payload.max_weight,
+                "weight_step": payload.weight_step,
+                "default_reps": payload.default_reps,
+                "min_reps": payload.min_reps,
+                "max_reps": payload.max_reps,
+                "reps_step": payload.reps_step,
+            },
         )
     except ActiveExerciseWeightError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -134,6 +144,22 @@ def update_exercise_endpoint(
     if get_exercise(exercise_id) is None:
         raise HTTPException(status_code=404, detail="Exercise not found.")
 
+    option_field_names = {
+        "default_weight",
+        "min_weight",
+        "max_weight",
+        "weight_step",
+        "default_reps",
+        "min_reps",
+        "max_reps",
+        "reps_step",
+    }
+    option_settings = {
+        field_name: getattr(payload, field_name)
+        for field_name in option_field_names
+        if field_name in changed_fields
+    }
+
     try:
         exercise = update_exercise(
             exercise_id,
@@ -144,6 +170,7 @@ def update_exercise_endpoint(
                 if "profile_key" in changed_fields
                 else None
             ),
+            option_settings=option_settings if option_settings else None,
         )
     except ActiveExerciseWeightError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc

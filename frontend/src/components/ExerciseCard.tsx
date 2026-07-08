@@ -48,10 +48,14 @@ export default function ExerciseCard({
       : exercise.workout_exercise_id;
   const isLegacyEdit = variant === "legacy-edit";
   const weightOptions = buildWeightOptions(defaultWeight, [
+    ...(exercise.weight_options ?? []),
     ...(exercise.configured_weights ?? []),
     ...exercise.sets.map((setEntry) => setEntry.weight),
   ]);
-  const repsOptions = buildRepsOptions(defaultReps);
+  const repsOptions = buildRepsOptions(defaultReps, [
+    ...(exercise.reps_options ?? []),
+    ...exercise.sets.map((setEntry) => setEntry.reps),
+  ]);
 
   useEffect(() => {
     setAddWeight(String(defaultWeight));

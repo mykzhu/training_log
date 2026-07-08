@@ -20,6 +20,8 @@ export type CurrentWorkoutExercise = {
   default_weight: number;
   default_reps: number;
   configured_weights: number[];
+  weight_options: number[];
+  reps_options: number[];
 };
 
 export type WorkoutExercise = {
@@ -35,6 +37,8 @@ export type WorkoutExercise = {
   default_weight: number;
   default_reps: number;
   configured_weights: number[];
+  weight_options: number[];
+  reps_options: number[];
 };
 
 export type LoadMetrics = {
@@ -397,6 +401,14 @@ export type Exercise = {
   is_active: boolean;
   sort_order: number;
   profile_key: string;
+  default_weight: number;
+  min_weight: number;
+  max_weight: number;
+  weight_step: number;
+  default_reps: number;
+  min_reps: number;
+  max_reps: number;
+  reps_step: number;
   weights: number[];
 };
 
@@ -405,12 +417,28 @@ export type ExerciseCreatePayload = {
   is_active?: boolean;
   profile_key?: string;
   weights?: number[];
+  default_weight?: number;
+  min_weight?: number;
+  max_weight?: number;
+  weight_step?: number;
+  default_reps?: number;
+  min_reps?: number;
+  max_reps?: number;
+  reps_step?: number;
 };
 
 export type ExerciseUpdatePayload = {
   name?: string;
   is_active?: boolean;
   profile_key?: string;
+  default_weight?: number;
+  min_weight?: number;
+  max_weight?: number;
+  weight_step?: number;
+  default_reps?: number;
+  min_reps?: number;
+  max_reps?: number;
+  reps_step?: number;
 };
 
 export type ExerciseProfile = {

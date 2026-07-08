@@ -605,9 +605,11 @@ export default function HistoryPage({
           total_sets: 0,
           total_reps: 0,
           total_volume: 0,
-          default_weight: exercise.weights[0] ?? 0,
-          default_reps: 10,
+          default_weight: exercise.default_weight,
+          default_reps: exercise.default_reps,
           configured_weights: exercise.weights,
+          weight_options: exercise.weights,
+          reps_options: [exercise.default_reps],
         },
       ],
     }));

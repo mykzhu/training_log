@@ -69,6 +69,8 @@ def serialize_workout_exercise(item: dict[str, Any]) -> dict[str, Any]:
         "default_weight": float(item["default_weight"]),
         "default_reps": int(item["default_reps"]),
         "configured_weights": item["configured_weights"],
+        "weight_options": item["weight_options"],
+        "reps_options": item["reps_options"],
     }
 
 

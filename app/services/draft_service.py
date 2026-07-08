@@ -4,7 +4,12 @@ from threading import RLock
 from typing import Any
 
 from app.db import get_db
-from app.repositories.exercises import get_weight_options_by_exercise_ids
+from app.repositories.exercises import (
+    get_float_options,
+    get_int_options,
+    get_option_settings_by_exercise_ids,
+    get_weight_options_by_exercise_ids,
+)
 from app.repositories import drafts as draft_repository
 from app.repositories.workouts import get_previous_set_for_exercise
 
@@ -346,6 +351,12 @@ def get_draft_workout_details(draft: dict[str, Any]) -> list[dict[str, Any]]:
             for item in draft["workout_exercises"]
         ]
     )
+    settings_by_exercise = get_option_settings_by_exercise_ids(
+        [
+            int(item["exercise_id"])
+            for item in draft["workout_exercises"]
+        ]
+    )
 
     for item in sorted(draft["workout_exercises"], key=lambda x: (x["position"], x["id"])):
         sets = item["sets"]
@@ -366,8 +377,17 @@ def get_draft_workout_details(draft: dict[str, Any]) -> list[dict[str, Any]]:
                 default_weight = float(previous_set["weight"])
                 default_reps = int(previous_set["reps"])
             else:
-                default_weight = 0.0
-                default_reps = 10
+                settings = settings_by_exercise.get(int(item["exercise_id"]), {})
+                default_weight = float(settings.get("default_weight", 0))
+                default_reps = int(settings.get("default_reps", 10))
+
+        settings = settings_by_exercise.get(int(item["exercise_id"]), {})
+        configured_weights = weights_by_exercise.get(
+            int(item["exercise_id"]),
+            [],
+        )
+        set_weights = [float(set_entry["weight"]) for set_entry in sets]
+        set_reps = [int(set_entry["reps"]) for set_entry in sets]
 
         result.append(
             {
@@ -381,9 +401,25 @@ def get_draft_workout_details(draft: dict[str, Any]) -> list[dict[str, Any]]:
                 "total_reps": total_reps,
                 "default_weight": default_weight,
                 "default_reps": default_reps,
-                "configured_weights": weights_by_exercise.get(
-                    int(item["exercise_id"]),
-                    [],
+                "configured_weights": configured_weights,
+                "weight_options": get_float_options(
+                    min_value=float(settings.get("min_weight", 0)),
+                    max_value=float(settings.get("max_weight", 200)),
+                    step=float(settings.get("weight_step", 2.5)),
+                    extra_values=[
+                        *configured_weights,
+                        *set_weights,
+                        default_weight,
+                    ],
+                ),
+                "reps_options": get_int_options(
+                    min_value=int(settings.get("min_reps", 1)),
+                    max_value=int(settings.get("max_reps", 50)),
+                    step=int(settings.get("reps_step", 1)),
+                    extra_values=[
+                        *set_reps,
+                        default_reps,
+                    ],
                 ),
             }
         )

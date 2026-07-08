@@ -97,6 +97,8 @@ def build_current_workout_response(
                 "default_weight": item["default_weight"],
                 "default_reps": item["default_reps"],
                 "configured_weights": item["configured_weights"],
+                "weight_options": item["weight_options"],
+                "reps_options": item["reps_options"],
             }
             for item in workout_exercises
         ],

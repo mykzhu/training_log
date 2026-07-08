@@ -120,6 +120,8 @@ class CurrentWorkoutApiTests(unittest.TestCase):
         )
         draft_exercise_id = response["exercises"][0]["draft_exercise_id"]
         self.assertIn(100.0, response["exercises"][0]["configured_weights"])
+        self.assertIn(100.0, response["exercises"][0]["weight_options"])
+        self.assertIn(50, response["exercises"][0]["reps_options"])
 
         response = add_current_workout_set(
             draft_exercise_id,

@@ -18,7 +18,7 @@
       "AddSetRequest": {
         "properties": {
           "reps": {
-            "maximum": 100.0,
+            "maximum": 1000.0,
             "minimum": 1.0,
             "title": "Reps",
             "type": "integer"
@@ -110,6 +110,13 @@
             "title": "Profile Key",
             "type": "string"
           },
+          "reps_options": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Reps Options",
+            "type": "array"
+          },
           "sets": {
             "items": {
               "$ref": "#/components/schemas/CurrentWorkoutSetEntryResponse"
@@ -128,6 +135,13 @@
           "total_volume": {
             "title": "Total Volume",
             "type": "number"
+          },
+          "weight_options": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Weight Options",
+            "type": "array"
           }
         },
         "required": [
@@ -142,7 +156,9 @@
           "total_volume",
           "default_weight",
           "default_reps",
-          "configured_weights"
+          "configured_weights",
+          "weight_options",
+          "reps_options"
         ],
         "title": "CurrentWorkoutExerciseResponse",
         "type": "object"
@@ -265,10 +281,43 @@
       },
       "ExerciseCreateRequest": {
         "properties": {
+          "default_reps": {
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Default Reps",
+            "type": "integer"
+          },
+          "default_weight": {
+            "minimum": 0.0,
+            "title": "Default Weight",
+            "type": "number"
+          },
           "is_active": {
             "default": true,
             "title": "Is Active",
             "type": "boolean"
+          },
+          "max_reps": {
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Max Reps",
+            "type": "integer"
+          },
+          "max_weight": {
+            "minimum": 0.0,
+            "title": "Max Weight",
+            "type": "number"
+          },
+          "min_reps": {
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Min Reps",
+            "type": "integer"
+          },
+          "min_weight": {
+            "minimum": 0.0,
+            "title": "Min Weight",
+            "type": "number"
           },
           "name": {
             "maxLength": 120,
@@ -281,6 +330,17 @@
             "minLength": 1,
             "title": "Profile Key",
             "type": "string"
+          },
+          "reps_step": {
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Reps Step",
+            "type": "integer"
+          },
+          "weight_step": {
+            "exclusiveMinimum": 0.0,
+            "title": "Weight Step",
+            "type": "number"
           },
           "weights": {
             "items": {
@@ -509,6 +569,14 @@
       },
       "ExerciseResponse": {
         "properties": {
+          "default_reps": {
+            "title": "Default Reps",
+            "type": "integer"
+          },
+          "default_weight": {
+            "title": "Default Weight",
+            "type": "number"
+          },
           "id": {
             "title": "Id",
             "type": "integer"
@@ -516,6 +584,22 @@
           "is_active": {
             "title": "Is Active",
             "type": "boolean"
+          },
+          "max_reps": {
+            "title": "Max Reps",
+            "type": "integer"
+          },
+          "max_weight": {
+            "title": "Max Weight",
+            "type": "number"
+          },
+          "min_reps": {
+            "title": "Min Reps",
+            "type": "integer"
+          },
+          "min_weight": {
+            "title": "Min Weight",
+            "type": "number"
           },
           "name": {
             "title": "Name",
@@ -525,9 +609,17 @@
             "title": "Profile Key",
             "type": "string"
           },
+          "reps_step": {
+            "title": "Reps Step",
+            "type": "integer"
+          },
           "sort_order": {
             "title": "Sort Order",
             "type": "integer"
+          },
+          "weight_step": {
+            "title": "Weight Step",
+            "type": "number"
           },
           "weights": {
             "items": {
@@ -543,6 +635,14 @@
           "is_active",
           "sort_order",
           "profile_key",
+          "default_weight",
+          "min_weight",
+          "max_weight",
+          "weight_step",
+          "default_reps",
+          "min_reps",
+          "max_reps",
+          "reps_step",
           "weights"
         ],
         "title": "ExerciseResponse",
@@ -622,9 +722,42 @@
       },
       "ExerciseUpdateRequest": {
         "properties": {
+          "default_reps": {
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Default Reps",
+            "type": "integer"
+          },
+          "default_weight": {
+            "minimum": 0.0,
+            "title": "Default Weight",
+            "type": "number"
+          },
           "is_active": {
             "title": "Is Active",
             "type": "boolean"
+          },
+          "max_reps": {
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Max Reps",
+            "type": "integer"
+          },
+          "max_weight": {
+            "minimum": 0.0,
+            "title": "Max Weight",
+            "type": "number"
+          },
+          "min_reps": {
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Min Reps",
+            "type": "integer"
+          },
+          "min_weight": {
+            "minimum": 0.0,
+            "title": "Min Weight",
+            "type": "number"
           },
           "name": {
             "maxLength": 120,
@@ -637,6 +770,17 @@
             "minLength": 1,
             "title": "Profile Key",
             "type": "string"
+          },
+          "reps_step": {
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Reps Step",
+            "type": "integer"
+          },
+          "weight_step": {
+            "exclusiveMinimum": 0.0,
+            "title": "Weight Step",
+            "type": "number"
           }
         },
         "title": "ExerciseUpdateRequest",
@@ -1759,7 +1903,7 @@
       "UpdateSetRequest": {
         "properties": {
           "reps": {
-            "maximum": 100.0,
+            "maximum": 1000.0,
             "minimum": 1.0,
             "title": "Reps",
             "type": "integer"
@@ -2001,6 +2145,13 @@
             "title": "Profile Key",
             "type": "string"
           },
+          "reps_options": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Reps Options",
+            "type": "array"
+          },
           "sets": {
             "items": {
               "$ref": "#/components/schemas/SetEntryResponse"
@@ -2020,6 +2171,13 @@
             "title": "Total Volume",
             "type": "number"
           },
+          "weight_options": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Weight Options",
+            "type": "array"
+          },
           "workout_exercise_id": {
             "title": "Workout Exercise Id",
             "type": "integer"
@@ -2037,7 +2195,9 @@
           "total_volume",
           "default_weight",
           "default_reps",
-          "configured_weights"
+          "configured_weights",
+          "weight_options",
+          "reps_options"
         ],
         "title": "WorkoutExerciseResponse",
         "type": "object"

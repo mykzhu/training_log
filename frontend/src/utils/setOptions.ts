@@ -12,9 +12,12 @@ export function buildWeightOptions(currentWeight: number, extraWeights: number[]
   return uniqueSortedNumbers(values.filter((value) => Number.isFinite(value)));
 }
 
-export function buildRepsOptions(currentReps: number) {
-  return uniqueSortedNumbers([
-    currentReps,
-    ...Array.from({ length: 50 }, (_, index) => index + 1),
-  ]);
+export function buildRepsOptions(currentReps: number, extraReps: number[] = []) {
+  return uniqueSortedNumbers(
+    [
+      currentReps,
+      ...extraReps,
+      ...Array.from({ length: 50 }, (_, index) => index + 1),
+    ].filter((value) => Number.isFinite(value) && value > 0),
+  );
 }

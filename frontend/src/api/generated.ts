@@ -29,10 +29,12 @@ export type CurrentWorkoutExerciseResponse = {
   exercise_name: string;
   position: number;
   profile_key: string;
+  reps_options: Array<number>;
   sets: Array<CurrentWorkoutSetEntryResponse>;
   total_reps: number;
   total_sets: number;
   total_volume: number;
+  weight_options: Array<number>;
 };
 
 export type CurrentWorkoutResponse = {
@@ -65,9 +67,17 @@ export type DeleteWorkoutResponse = {
 };
 
 export type ExerciseCreateRequest = {
+  default_reps?: number | null;
+  default_weight?: number | null;
   is_active?: boolean | null;
+  max_reps?: number | null;
+  max_weight?: number | null;
+  min_reps?: number | null;
+  min_weight?: number | null;
   name: string;
   profile_key?: string | null;
+  reps_step?: number | null;
+  weight_step?: number | null;
   weights?: Array<number> | null;
 };
 
@@ -121,11 +131,19 @@ export type ExerciseProfilesResponse = {
 };
 
 export type ExerciseResponse = {
+  default_reps: number;
+  default_weight: number;
   id: number;
   is_active: boolean;
+  max_reps: number;
+  max_weight: number;
+  min_reps: number;
+  min_weight: number;
   name: string;
   profile_key: string;
+  reps_step: number;
   sort_order: number;
+  weight_step: number;
   weights: Array<number>;
 };
 
@@ -143,9 +161,17 @@ export type ExerciseStatsResponseModel = {
 };
 
 export type ExerciseUpdateRequest = {
+  default_reps?: number | null;
+  default_weight?: number | null;
   is_active?: boolean | null;
+  max_reps?: number | null;
+  max_weight?: number | null;
+  min_reps?: number | null;
+  min_weight?: number | null;
   name?: string | null;
   profile_key?: string | null;
+  reps_step?: number | null;
+  weight_step?: number | null;
 };
 
 export type ExerciseWeightsResponse = {
@@ -476,10 +502,12 @@ export type WorkoutExerciseResponse = {
   exercise_name: string;
   position: number;
   profile_key: string;
+  reps_options: Array<number>;
   sets: Array<SetEntryResponse>;
   total_reps: number;
   total_sets: number;
   total_volume: number;
+  weight_options: Array<number>;
   workout_exercise_id: number;
 };
 

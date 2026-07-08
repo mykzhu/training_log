@@ -114,18 +114,20 @@ class BackupServiceTests(unittest.TestCase):
                 ),
             )
 
-    def test_build_and_restore_backup_payload_round_trips_schema_v6(self) -> None:
+    def test_build_and_restore_backup_payload_round_trips_schema_v7(self) -> None:
         workout_id = self.insert_workout()
         self.insert_garmin_metric()
 
         payload = build_backup_payload()
-        self.assertEqual(payload["schema_version"], 6)
+        self.assertEqual(payload["schema_version"], 7)
         self.assertIn("exercise_weight_options", payload["tables"])
         self.assertIn("analysis_profiles", payload["tables"])
         self.assertEqual(len(payload["tables"]["workouts"]), 1)
         self.assertEqual(len(payload["tables"]["workout_exercises"]), 1)
         self.assertEqual(len(payload["tables"]["set_entries"]), 1)
         self.assertEqual(payload["tables"]["exercises"][0]["is_active"], 1)
+        self.assertIn("default_reps", payload["tables"]["exercises"][0])
+        self.assertIn("max_reps", payload["tables"]["exercises"][0])
         self.assertEqual(len(payload["tables"]["garmin_daily_metrics"]), 1)
         self.assertNotIn(
             "raw_diagnostics",

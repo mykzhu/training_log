@@ -707,6 +707,12 @@ a.compact-button {
   gap: 8px;
 }
 
+.settings-options-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .weight-chip-list {
   display: flex;
   flex-wrap: wrap;
@@ -2448,6 +2454,10 @@ button.load-calendar-cell:focus-visible {
     grid-template-columns: 1fr 1fr auto;
   }
 
+  .settings-options-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .add-exercise {
     grid-template-columns: 1fr auto auto;
   }
@@ -2511,6 +2521,7 @@ button.load-calendar-cell:focus-visible {
   .controls-grid,
   .add-exercise,
   .settings-add,
+  .settings-options-grid,
   .settings-row,
   .garmin-login,
   .garmin-form,

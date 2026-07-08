@@ -26,6 +26,17 @@ import type {
 } from "../api/types";
 import { formatSetOption, uniqueSortedNumbers } from "../utils/setOptions";
 
+type ExerciseOptionSettingsDraft = {
+  default_weight: number;
+  min_weight: number;
+  max_weight: number;
+  weight_step: number;
+  default_reps: number;
+  min_reps: number;
+  max_reps: number;
+  reps_step: number;
+};
+
 function normalizeWeights(weights: number[]) {
   return uniqueSortedNumbers(
     weights
@@ -36,6 +47,23 @@ function normalizeWeights(weights: number[]) {
 
 function weightsKey(weights: number[]) {
   return JSON.stringify(normalizeWeights(weights));
+}
+
+function optionSettingsDraft(exercise: Exercise): ExerciseOptionSettingsDraft {
+  return {
+    default_weight: exercise.default_weight,
+    min_weight: exercise.min_weight,
+    max_weight: exercise.max_weight,
+    weight_step: exercise.weight_step,
+    default_reps: exercise.default_reps,
+    min_reps: exercise.min_reps,
+    max_reps: exercise.max_reps,
+    reps_step: exercise.reps_step,
+  };
+}
+
+function optionSettingsKey(settings: ExerciseOptionSettingsDraft) {
+  return JSON.stringify(settings);
 }
 
 function replaceExerciseInList(exercises: Exercise[], updated: Exercise) {
@@ -107,6 +135,9 @@ export default function SettingsPage() {
   const [nameDrafts, setNameDrafts] = useState<Record<number, string>>({});
   const [profileDrafts, setProfileDrafts] = useState<Record<number, string>>({});
   const [weightDrafts, setWeightDrafts] = useState<Record<number, number[]>>({});
+  const [optionSettingsDrafts, setOptionSettingsDrafts] = useState<
+    Record<number, ExerciseOptionSettingsDraft>
+  >({});
   const [newWeightDrafts, setNewWeightDrafts] = useState<Record<number, string>>({});
   const [newExerciseName, setNewExerciseName] = useState("");
   const [newExerciseProfile, setNewExerciseProfile] = useState("");
@@ -176,6 +207,14 @@ export default function SettingsPage() {
         responseExercises.map((exercise) => [exercise.id, exercise.weights]),
       ),
     );
+    setOptionSettingsDrafts(
+      Object.fromEntries(
+        responseExercises.map((exercise) => [
+          exercise.id,
+          optionSettingsDraft(exercise),
+        ]),
+      ),
+    );
   }
 
   async function load() {
@@ -237,11 +276,20 @@ export default function SettingsPage() {
     );
   }
 
+  function isOptionSettingsDirty(exercise: Exercise) {
+    return (
+      optionSettingsKey(
+        optionSettingsDrafts[exercise.id] ?? optionSettingsDraft(exercise),
+      ) !== optionSettingsKey(optionSettingsDraft(exercise))
+    );
+  }
+
   function isExerciseDirty(exercise: Exercise) {
     return (
       isNameDirty(exercise) ||
       isProfileDirty(exercise) ||
-      isWeightDirty(exercise)
+      isWeightDirty(exercise) ||
+      isOptionSettingsDirty(exercise)
     );
   }
 
@@ -303,6 +351,10 @@ export default function SettingsPage() {
           ...current,
           [response.exercise.id]: response.exercise.weights,
         }));
+        setOptionSettingsDrafts((current) => ({
+          ...current,
+          [response.exercise.id]: optionSettingsDraft(response.exercise),
+        }));
         setNewExerciseName("");
         setNewExerciseProfile("");
         setNewExerciseWeight("");
@@ -334,8 +386,48 @@ export default function SettingsPage() {
           ...current,
           [exercise.id]: response.exercise.profile_key,
         }));
+        setOptionSettingsDrafts((current) => ({
+          ...current,
+          [exercise.id]: optionSettingsDraft(response.exercise),
+        }));
       },
       "Exercise saved",
+    );
+  }
+
+  function updateOptionDraft(
+    exerciseId: number,
+    field: keyof ExerciseOptionSettingsDraft,
+    value: number,
+  ) {
+    const exercise = exercises.find((candidate) => candidate.id === exerciseId);
+    if (!exercise) {
+      return;
+    }
+
+    setOptionSettingsDrafts((current) => ({
+      ...current,
+      [exerciseId]: {
+        ...(current[exerciseId] ?? optionSettingsDraft(exercise)),
+        [field]: value,
+      },
+    }));
+  }
+
+  async function saveOptionSettings(exercise: Exercise) {
+    const draft = optionSettingsDrafts[exercise.id] ?? optionSettingsDraft(exercise);
+
+    await runAction(
+      `options:${exercise.id}`,
+      async () => {
+        const response = await updateExercise(exercise.id, draft);
+        setExercises((current) => replaceExerciseInList(current, response.exercise));
+        setOptionSettingsDrafts((current) => ({
+          ...current,
+          [exercise.id]: optionSettingsDraft(response.exercise),
+        }));
+      },
+      "Exercise options saved",
     );
   }
 
@@ -886,12 +978,16 @@ export default function SettingsPage() {
         <div className="settings-list">
           {exercises.map((exercise, index) => {
             const weights = weightDrafts[exercise.id] ?? [];
+            const optionSettings =
+              optionSettingsDrafts[exercise.id] ?? optionSettingsDraft(exercise);
             const detailsChanged =
               isNameDirty(exercise) || isProfileDirty(exercise);
             const weightChanged = isWeightDirty(exercise);
+            const optionSettingsChanged = isOptionSettingsDirty(exercise);
             const detailsPending = pendingAction === `details:${exercise.id}`;
             const activePending = pendingAction === `active:${exercise.id}`;
             const weightsPending = pendingAction === `weights:${exercise.id}`;
+            const optionsPending = pendingAction === `options:${exercise.id}`;
             const profileLabel =
               profileLabels[profileDrafts[exercise.id] ?? exercise.profile_key] ??
               "Accessory";
@@ -1062,6 +1158,156 @@ export default function SettingsPage() {
                       Save weights
                     </button>
                   </div>
+                </section>
+
+                <section className="settings-weights">
+                  <h3>Set defaults and ranges</h3>
+                  <div className="settings-options-grid">
+                    <label>
+                      Default kg
+                      <input
+                        disabled={optionsPending}
+                        min="0"
+                        onChange={(event) =>
+                          updateOptionDraft(
+                            exercise.id,
+                            "default_weight",
+                            Number(event.target.value),
+                          )
+                        }
+                        step="0.25"
+                        type="number"
+                        value={optionSettings.default_weight}
+                      />
+                    </label>
+                    <label>
+                      Min kg
+                      <input
+                        disabled={optionsPending}
+                        min="0"
+                        onChange={(event) =>
+                          updateOptionDraft(
+                            exercise.id,
+                            "min_weight",
+                            Number(event.target.value),
+                          )
+                        }
+                        step="0.25"
+                        type="number"
+                        value={optionSettings.min_weight}
+                      />
+                    </label>
+                    <label>
+                      Max kg
+                      <input
+                        disabled={optionsPending}
+                        min="0"
+                        onChange={(event) =>
+                          updateOptionDraft(
+                            exercise.id,
+                            "max_weight",
+                            Number(event.target.value),
+                          )
+                        }
+                        step="0.25"
+                        type="number"
+                        value={optionSettings.max_weight}
+                      />
+                    </label>
+                    <label>
+                      Kg step
+                      <input
+                        disabled={optionsPending}
+                        min="0.25"
+                        onChange={(event) =>
+                          updateOptionDraft(
+                            exercise.id,
+                            "weight_step",
+                            Number(event.target.value),
+                          )
+                        }
+                        step="0.25"
+                        type="number"
+                        value={optionSettings.weight_step}
+                      />
+                    </label>
+                    <label>
+                      Default reps
+                      <input
+                        disabled={optionsPending}
+                        min="1"
+                        onChange={(event) =>
+                          updateOptionDraft(
+                            exercise.id,
+                            "default_reps",
+                            Number(event.target.value),
+                          )
+                        }
+                        step="1"
+                        type="number"
+                        value={optionSettings.default_reps}
+                      />
+                    </label>
+                    <label>
+                      Min reps
+                      <input
+                        disabled={optionsPending}
+                        min="1"
+                        onChange={(event) =>
+                          updateOptionDraft(
+                            exercise.id,
+                            "min_reps",
+                            Number(event.target.value),
+                          )
+                        }
+                        step="1"
+                        type="number"
+                        value={optionSettings.min_reps}
+                      />
+                    </label>
+                    <label>
+                      Max reps
+                      <input
+                        disabled={optionsPending}
+                        min="1"
+                        onChange={(event) =>
+                          updateOptionDraft(
+                            exercise.id,
+                            "max_reps",
+                            Number(event.target.value),
+                          )
+                        }
+                        step="1"
+                        type="number"
+                        value={optionSettings.max_reps}
+                      />
+                    </label>
+                    <label>
+                      Reps step
+                      <input
+                        disabled={optionsPending}
+                        min="1"
+                        onChange={(event) =>
+                          updateOptionDraft(
+                            exercise.id,
+                            "reps_step",
+                            Number(event.target.value),
+                          )
+                        }
+                        step="1"
+                        type="number"
+                        value={optionSettings.reps_step}
+                      />
+                    </label>
+                  </div>
+                  <button
+                    className="secondary-button"
+                    disabled={optionsPending || !optionSettingsChanged}
+                    onClick={() => saveOptionSettings(exercise)}
+                    type="button"
+                  >
+                    Save set options
+                  </button>
                 </section>
               </article>
             );
