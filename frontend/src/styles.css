@@ -698,6 +698,50 @@ a.compact-button {
   font-size: 13px;
 }
 
+.collapsible-settings-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.collapsible-settings-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: var(--card2);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.collapsible-settings-toggle:hover:not(:disabled) {
+  border-color: var(--blue);
+}
+
+.collapsible-settings-toggle-icon {
+  min-width: 1ch;
+  text-align: center;
+}
+
+.collapsible-settings-body {
+  display: grid;
+  gap: 12px;
+}
+
+.collapsible-settings-body[hidden] {
+  display: none;
+}
+
 .settings-order {
   justify-content: flex-start;
 }
@@ -4033,6 +4077,10 @@ button.load-calendar-cell:focus-visible {
   line-height: 1.15;
 }
 
+.analysis-profile-card-body {
+  padding-top: 2px;
+}
+
 .profile-factor-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -4069,8 +4117,18 @@ button.load-calendar-cell:focus-visible {
 
 @media (max-width: 420px) {
   .profile-factor-grid,
+  .settings-card-header,
   .analysis-profile-card-header {
     display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .collapsible-settings-meta {
+    justify-content: flex-start;
+    white-space: normal;
+  }
+
+  .collapsible-settings-toggle-text {
+    display: none;
   }
 }

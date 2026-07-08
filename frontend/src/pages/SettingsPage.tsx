@@ -138,6 +138,9 @@ export default function SettingsPage() {
   const [optionSettingsDrafts, setOptionSettingsDrafts] = useState<
     Record<number, ExerciseOptionSettingsDraft>
   >({});
+  const [expandedExerciseIds, setExpandedExerciseIds] = useState<Set<number>>(
+    () => new Set(),
+  );
   const [newWeightDrafts, setNewWeightDrafts] = useState<Record<number, string>>({});
   const [newExerciseName, setNewExerciseName] = useState("");
   const [newExerciseProfile, setNewExerciseProfile] = useState("");
@@ -429,6 +432,18 @@ export default function SettingsPage() {
       },
       "Exercise options saved",
     );
+  }
+
+  function toggleExerciseExpanded(exerciseId: number) {
+    setExpandedExerciseIds((current) => {
+      const next = new Set(current);
+      if (next.has(exerciseId)) {
+        next.delete(exerciseId);
+      } else {
+        next.add(exerciseId);
+      }
+      return next;
+    });
   }
 
   async function toggleActive(exercise: Exercise) {
@@ -991,28 +1006,55 @@ export default function SettingsPage() {
             const profileLabel =
               profileLabels[profileDrafts[exercise.id] ?? exercise.profile_key] ??
               "Accessory";
+            const isExpanded = expandedExerciseIds.has(exercise.id);
+            const bodyId = `exercise-settings-details-${exercise.id}`;
 
             return (
-              <article className="settings-card" key={exercise.id}>
+              <article
+                className={`settings-card collapsible-settings-card ${isExpanded ? "is-expanded" : ""}`}
+                key={exercise.id}
+              >
                 <div className="settings-card-header">
                   <div>
                     <h2>{exercise.name}</h2>
                     <p className="muted">{profileLabel}</p>
                   </div>
-                  <button
-                    className={
-                      exercise.is_active
-                        ? "secondary-button compact-action"
-                        : "ghost-button compact-action"
-                    }
-                    disabled={activePending || isBusy || (weights.length === 0 && !exercise.is_active)}
-                    onClick={() => toggleActive(exercise)}
-                    type="button"
-                  >
-                    {exercise.is_active ? "Active" : "Inactive"}
-                  </button>
+                  <div className="collapsible-settings-meta">
+                    <button
+                      className={
+                        exercise.is_active
+                          ? "secondary-button compact-action"
+                          : "ghost-button compact-action"
+                      }
+                      disabled={activePending || isBusy || (weights.length === 0 && !exercise.is_active)}
+                      onClick={() => toggleActive(exercise)}
+                      type="button"
+                    >
+                      {exercise.is_active ? "Active" : "Inactive"}
+                    </button>
+                    <button
+                      aria-controls={bodyId}
+                      aria-expanded={isExpanded}
+                      aria-label={`${isExpanded ? "Collapse" : "Expand"} ${exercise.name} settings`}
+                      className="collapsible-settings-toggle"
+                      onClick={() => toggleExerciseExpanded(exercise.id)}
+                      type="button"
+                    >
+                      <span className="collapsible-settings-toggle-text">
+                        {isExpanded ? "Hide" : "Show"}
+                      </span>
+                      <span aria-hidden="true" className="collapsible-settings-toggle-icon">
+                        {isExpanded ? "^" : "v"}
+                      </span>
+                    </button>
+                  </div>
                 </div>
 
+                <div
+                  className="collapsible-settings-body exercise-settings-body"
+                  hidden={!isExpanded}
+                  id={bodyId}
+                >
                 <div className="settings-row">
                   <label>
                     Name
@@ -1309,6 +1351,7 @@ export default function SettingsPage() {
                     Save set options
                   </button>
                 </section>
+                </div>
               </article>
             );
           })}

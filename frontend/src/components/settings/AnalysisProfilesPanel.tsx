@@ -98,6 +98,9 @@ export default function AnalysisProfilesPanel({
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [expandedProfileKeys, setExpandedProfileKeys] = useState<Set<string>>(
+    () => new Set(),
+  );
 
   useEffect(() => {
     setDrafts(
@@ -201,6 +204,18 @@ export default function AnalysisProfilesPanel({
     );
   }
 
+  function toggleProfileExpanded(profileKey: string) {
+    setExpandedProfileKeys((current) => {
+      const next = new Set(current);
+      if (next.has(profileKey)) {
+        next.delete(profileKey);
+      } else {
+        next.add(profileKey);
+      }
+      return next;
+    });
+  }
+
   const customProfileCount = profiles.filter(
     (profile) => !profile.is_builtin,
   ).length;
@@ -302,9 +317,14 @@ export default function AnalysisProfilesPanel({
           const draft = drafts[profile.key] ?? profileToDraft(profile);
           const profilePending = pendingAction === `profile:${profile.key}`;
           const deactivateDisabled = profile.key === "accessory" || profile.exercise_count > 0;
+          const isExpanded = expandedProfileKeys.has(profile.key);
+          const bodyId = `analysis-profile-details-${profile.key}`;
 
           return (
-            <article className="analysis-profile-card" key={profile.key}>
+            <article
+              className={`analysis-profile-card collapsible-settings-card ${isExpanded ? "is-expanded" : ""}`}
+              key={profile.key}
+            >
               <div className="analysis-profile-card-header">
                 <div>
                   <h3>{profile.label}</h3>
@@ -314,101 +334,124 @@ export default function AnalysisProfilesPanel({
                     <span>{profile.is_active ? "active" : "inactive"}</span>
                   </div>
                 </div>
-                <span className="status-badge">Used by {profile.exercise_count}</span>
+                <div className="collapsible-settings-meta">
+                  <span className="status-badge">Used by {profile.exercise_count}</span>
+                  <button
+                    aria-controls={bodyId}
+                    aria-expanded={isExpanded}
+                    aria-label={`${isExpanded ? "Collapse" : "Expand"} ${profile.label} analysis type`}
+                    className="collapsible-settings-toggle"
+                    onClick={() => toggleProfileExpanded(profile.key)}
+                    type="button"
+                  >
+                    <span className="collapsible-settings-toggle-text">
+                      {isExpanded ? "Hide" : "Show"}
+                    </span>
+                    <span aria-hidden="true" className="collapsible-settings-toggle-icon">
+                      {isExpanded ? "^" : "v"}
+                    </span>
+                  </button>
+                </div>
               </div>
 
-              <label>
-                Label
-                <input
-                  disabled={profilePending}
-                  onChange={(event) => setDrafts((current) => ({
-                    ...current,
-                    [profile.key]: { ...draft, label: event.target.value },
-                  }))}
-                  value={draft.label}
-                />
-              </label>
-              <label>
-                Category
-                <input
-                  disabled={profilePending}
-                  onChange={(event) => setDrafts((current) => ({
-                    ...current,
-                    [profile.key]: { ...draft, category: event.target.value },
-                  }))}
-                  value={draft.category}
-                />
-              </label>
-              <div className="profile-factor-grid">
-                <label>
-                  Load
-                  <input
-                    disabled={profilePending}
-                    inputMode="decimal"
-                    max="5"
-                    min="0"
-                    onChange={(event) => setDrafts((current) => ({
-                      ...current,
-                      [profile.key]: { ...draft, exercise_factor: event.target.value },
-                    }))}
-                    step="0.05"
-                    type="number"
-                    value={draft.exercise_factor}
-                  />
-                </label>
-                <label>
-                  Compound
-                  <input
-                    disabled={profilePending}
-                    inputMode="decimal"
-                    max="5"
-                    min="0"
-                    onChange={(event) => setDrafts((current) => ({
-                      ...current,
-                      [profile.key]: { ...draft, compound_factor: event.target.value },
-                    }))}
-                    step="0.05"
-                    type="number"
-                    value={draft.compound_factor}
-                  />
-                </label>
-                <label>
-                  Back
-                  <input
-                    disabled={profilePending}
-                    inputMode="decimal"
-                    max="5"
-                    min="0"
-                    onChange={(event) => setDrafts((current) => ({
-                      ...current,
-                      [profile.key]: { ...draft, back_factor: event.target.value },
-                    }))}
-                    step="0.05"
-                    type="number"
-                    value={draft.back_factor}
-                  />
-                </label>
-              </div>
-              <label className="profile-active-toggle">
-                <input
-                  checked={draft.is_active}
-                  disabled={profilePending || deactivateDisabled}
-                  onChange={(event) => setDrafts((current) => ({
-                    ...current,
-                    [profile.key]: { ...draft, is_active: event.target.checked },
-                  }))}
-                  type="checkbox"
-                />
-                Active
-              </label>
-              <button
-                className="secondary-button"
-                disabled={profilePending || !profileChanged(profile) || !isDraftValid(draft)}
-                onClick={() => saveProfile(profile)}
-                type="button"
+              <div
+                className="collapsible-settings-body analysis-profile-card-body"
+                hidden={!isExpanded}
+                id={bodyId}
               >
-                Save
-              </button>
+                <label>
+                  Label
+                  <input
+                    disabled={profilePending}
+                    onChange={(event) => setDrafts((current) => ({
+                      ...current,
+                      [profile.key]: { ...draft, label: event.target.value },
+                    }))}
+                    value={draft.label}
+                  />
+                </label>
+                <label>
+                  Category
+                  <input
+                    disabled={profilePending}
+                    onChange={(event) => setDrafts((current) => ({
+                      ...current,
+                      [profile.key]: { ...draft, category: event.target.value },
+                    }))}
+                    value={draft.category}
+                  />
+                </label>
+                <div className="profile-factor-grid">
+                  <label>
+                    Load
+                    <input
+                      disabled={profilePending}
+                      inputMode="decimal"
+                      max="5"
+                      min="0"
+                      onChange={(event) => setDrafts((current) => ({
+                        ...current,
+                        [profile.key]: { ...draft, exercise_factor: event.target.value },
+                      }))}
+                      step="0.05"
+                      type="number"
+                      value={draft.exercise_factor}
+                    />
+                  </label>
+                  <label>
+                    Compound
+                    <input
+                      disabled={profilePending}
+                      inputMode="decimal"
+                      max="5"
+                      min="0"
+                      onChange={(event) => setDrafts((current) => ({
+                        ...current,
+                        [profile.key]: { ...draft, compound_factor: event.target.value },
+                      }))}
+                      step="0.05"
+                      type="number"
+                      value={draft.compound_factor}
+                    />
+                  </label>
+                  <label>
+                    Back
+                    <input
+                      disabled={profilePending}
+                      inputMode="decimal"
+                      max="5"
+                      min="0"
+                      onChange={(event) => setDrafts((current) => ({
+                        ...current,
+                        [profile.key]: { ...draft, back_factor: event.target.value },
+                      }))}
+                      step="0.05"
+                      type="number"
+                      value={draft.back_factor}
+                    />
+                  </label>
+                </div>
+                <label className="profile-active-toggle">
+                  <input
+                    checked={draft.is_active}
+                    disabled={profilePending || deactivateDisabled}
+                    onChange={(event) => setDrafts((current) => ({
+                      ...current,
+                      [profile.key]: { ...draft, is_active: event.target.checked },
+                    }))}
+                    type="checkbox"
+                  />
+                  Active
+                </label>
+                <button
+                  className="secondary-button"
+                  disabled={profilePending || !profileChanged(profile) || !isDraftValid(draft)}
+                  onClick={() => saveProfile(profile)}
+                  type="button"
+                >
+                  Save
+                </button>
+              </div>
             </article>
           );
         })}
