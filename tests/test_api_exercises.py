@@ -336,6 +336,18 @@ class ExercisesApiTests(unittest.TestCase):
         self.assertEqual(exercise["default_reps"], 70)
         self.assertEqual(exercise["max_reps"], 200)
 
+    def test_update_exercise_expands_reps_range_to_save_high_default(self) -> None:
+        exercise_id = self.exercise_id("Crunches")
+
+        response = update_exercise_endpoint(
+            exercise_id,
+            ExerciseUpdateRequest(default_reps=70),
+        )
+
+        exercise = response["exercise"]
+        self.assertEqual(exercise["default_reps"], 70)
+        self.assertEqual(exercise["max_reps"], 70)
+
     def test_create_exercise_can_infer_profile_from_name(self) -> None:
         response = create_exercise_endpoint(
             ExerciseCreateRequest(name="Trap Bar Deadlift", weights=[40])

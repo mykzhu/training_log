@@ -26,6 +26,7 @@ import ReadonlyWorkoutDetail, {
 } from "../components/ReadonlyWorkoutDetail";
 import StatCard from "../components/StatCard";
 import { rpeOptionLabel } from "../utils/rpeLabels";
+import { buildSteppedRepsOptions } from "../utils/setOptions";
 import "../edit-workout-legacy.css";
 
 function toDateTimeLocal(value: string) {
@@ -609,7 +610,12 @@ export default function HistoryPage({
           default_reps: exercise.default_reps,
           configured_weights: exercise.weights,
           weight_options: exercise.weights,
-          reps_options: [exercise.default_reps],
+          reps_options: buildSteppedRepsOptions(
+            exercise.min_reps,
+            exercise.max_reps,
+            exercise.reps_step,
+            [exercise.default_reps],
+          ),
         },
       ],
     }));

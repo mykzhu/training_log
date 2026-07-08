@@ -88,6 +88,7 @@ def get_float_options(
     while value <= end + 0.0001:
         options.add(round(value, 4))
         value += increment
+    options.add(round(end, 4))
 
     for extra_value in extra_values or []:
         value = float(extra_value)
@@ -114,7 +115,12 @@ def get_int_options(
     if end < start:
         end = start
 
-    options = set(range(start, end + 1, increment))
+    options = {start}
+    first_step_value = increment
+    if first_step_value < start:
+        first_step_value = ((start + increment - 1) // increment) * increment
+    options.update(range(first_step_value, end + 1, increment))
+    options.add(end)
     for extra_value in extra_values or []:
         value = int(extra_value)
         if value > 0:
@@ -159,14 +165,18 @@ def normalize_exercise_option_settings(
         normalized_min_weight = 0
     if not math.isfinite(normalized_max_weight):
         normalized_max_weight = normalized_min_weight
-    if normalized_max_weight < normalized_min_weight:
-        normalized_max_weight = normalized_min_weight
     if not math.isfinite(normalized_weight_step) or normalized_weight_step <= 0:
         normalized_weight_step = 2.5
-    normalized_default_weight = min(
-        max(normalized_default_weight, normalized_min_weight),
-        normalized_max_weight,
-    )
+    if not math.isfinite(normalized_default_weight):
+        normalized_default_weight = EXERCISE_OPTION_SETTING_DEFAULTS["default_weight"]
+    if normalized_default_weight < 0:
+        normalized_default_weight = 0
+    if normalized_default_weight < normalized_min_weight:
+        normalized_min_weight = normalized_default_weight
+    if normalized_max_weight < normalized_min_weight:
+        normalized_max_weight = normalized_min_weight
+    if normalized_default_weight > normalized_max_weight:
+        normalized_max_weight = normalized_default_weight
 
     normalized_min_reps = int(
         EXERCISE_OPTION_SETTING_DEFAULTS["min_reps"]
@@ -191,14 +201,16 @@ def normalize_exercise_option_settings(
 
     if normalized_min_reps < 1:
         normalized_min_reps = 1
-    if normalized_max_reps < normalized_min_reps:
-        normalized_max_reps = normalized_min_reps
     if normalized_reps_step <= 0:
         normalized_reps_step = 1
-    normalized_default_reps = min(
-        max(normalized_default_reps, normalized_min_reps),
-        normalized_max_reps,
-    )
+    if normalized_default_reps < 1:
+        normalized_default_reps = 1
+    if normalized_default_reps < normalized_min_reps:
+        normalized_min_reps = normalized_default_reps
+    if normalized_max_reps < normalized_min_reps:
+        normalized_max_reps = normalized_min_reps
+    if normalized_default_reps > normalized_max_reps:
+        normalized_max_reps = normalized_default_reps
 
     return {
         "default_weight": round(normalized_default_weight, 4),

@@ -52,10 +52,11 @@ export default function ExerciseCard({
     ...(exercise.configured_weights ?? []),
     ...exercise.sets.map((setEntry) => setEntry.weight),
   ]);
+  const configuredRepsOptions = exercise.reps_options ?? [];
   const repsOptions = buildRepsOptions(defaultReps, [
-    ...(exercise.reps_options ?? []),
+    ...configuredRepsOptions,
     ...exercise.sets.map((setEntry) => setEntry.reps),
-  ]);
+  ], configuredRepsOptions.length === 0);
 
   useEffect(() => {
     setAddWeight(String(defaultWeight));

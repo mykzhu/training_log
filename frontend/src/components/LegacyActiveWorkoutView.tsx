@@ -651,10 +651,15 @@ function LegacyActiveExerciseCard({
     [exercise],
   );
   const weightOptions = buildWeightOptions(defaultWeight, [
+    ...(exercise.weight_options ?? []),
     ...(exercise.configured_weights ?? []),
     ...exercise.sets.map((setEntry) => setEntry.weight),
   ]);
-  const repsOptions = buildRepsOptions(defaultReps);
+  const configuredRepsOptions = exercise.reps_options ?? [];
+  const repsOptions = buildRepsOptions(defaultReps, [
+    ...configuredRepsOptions,
+    ...exercise.sets.map((setEntry) => setEntry.reps),
+  ], configuredRepsOptions.length === 0);
 
   useEffect(() => {
     setAddWeight(String(defaultWeight));

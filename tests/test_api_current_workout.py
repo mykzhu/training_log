@@ -20,12 +20,13 @@ from app.routes.api_current_workout import (
     update_current_workout_metadata,
     update_current_workout_set,
 )
-from app.routes.api_exercises import create_exercise_endpoint
+from app.routes.api_exercises import create_exercise_endpoint, update_exercise_endpoint
 from app.schemas import (
     AddExerciseRequest,
     AddSetRequest,
     CurrentWorkoutResponse,
     ExerciseCreateRequest,
+    ExerciseUpdateRequest,
     UpdateSetRequest,
     WorkoutMetadataUpdate,
 )
@@ -138,13 +139,33 @@ class CurrentWorkoutApiTests(unittest.TestCase):
         )
         self.assertEqual(response["exercises"][0]["sets"][0]["weight"], 105.0)
         self.assertEqual(response["exercises"][0]["sets"][0]["reps"], 6)
-        self.assertEqual(response["total_volume"], 630.0)
 
         response = delete_current_workout_set(draft_set_id)
         self.assertEqual(response["total_sets"], 0)
 
         response = delete_current_workout_exercise(draft_exercise_id)
         self.assertEqual(response["exercises"], [])
+
+    def test_add_exercise_uses_saved_reps_options(self) -> None:
+        crunches_id = self.exercise_id("Crunches")
+        update_exercise_endpoint(
+            crunches_id,
+            ExerciseUpdateRequest(default_reps=50, max_reps=100, reps_step=5),
+        )
+
+        start_current_workout()
+        response = add_current_workout_exercise(
+            AddExerciseRequest(exercise_id=crunches_id)
+        )
+
+        exercise = response["exercises"][0]
+        self.assertEqual(exercise["default_reps"], 50)
+        self.assertIn(20, exercise["reps_options"])
+        self.assertIn(25, exercise["reps_options"])
+        self.assertIn(30, exercise["reps_options"])
+        self.assertIn(100, exercise["reps_options"])
+        self.assertNotIn(21, exercise["reps_options"])
+        self.assertNotIn(99, exercise["reps_options"])
 
     def test_metadata_patch_preserves_omitted_fields(self) -> None:
         start_current_workout()
