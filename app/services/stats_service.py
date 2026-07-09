@@ -800,7 +800,7 @@ def build_scatter_points(workouts: list[dict[str, Any]]) -> dict[str, Any]:
     valid_items = [
         workout
         for workout in workouts
-        if workout["total_volume"] > 0
+        if workout["load_score"] > 0
         and workout["lower_back_pain"] is not None
     ]
 
@@ -808,23 +808,28 @@ def build_scatter_points(workouts: list[dict[str, Any]]) -> dict[str, Any]:
         return {
             "points": [],
             "max_volume": None,
+            "max_load": None,
         }
 
+    max_load = max(float(item["load_score"]) for item in valid_items)
+    if max_load <= 0:
+        max_load = 1.0
     max_volume = max(float(item["total_volume"]) for item in valid_items)
-    if max_volume <= 0:
-        max_volume = 1.0
 
     points = []
 
     for workout in valid_items:
+        load = float(workout["load_score"])
         volume = float(workout["total_volume"])
         back = float(workout["lower_back_pain"])
 
         points.append(
             {
-                "x": min(100, max(0, volume / max_volume * 100)),
+                "x": min(100, max(0, load / max_load * 100)),
                 "y": 100 - min(100, max(0, back / 10 * 100)),
+                "load": load,
                 "volume": volume,
+                "total_volume_kg": float(workout["total_volume_kg"]),
                 "back": back,
                 "date": workout["date"],
                 "workout_id": workout["id"],
@@ -834,6 +839,7 @@ def build_scatter_points(workouts: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "points": points,
         "max_volume": max_volume,
+        "max_load": max_load,
     }
 
 
@@ -863,6 +869,10 @@ def build_stats2_charts(stats: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "volume": build_line_chart_series(workouts, "total_volume"),
+        "volume_kg": build_line_chart_series(workouts, "total_volume_kg"),
+        "bodyweight_reps": build_line_chart_series(workouts, "bodyweight_reps"),
+        "duration_seconds": build_line_chart_series(workouts, "duration_seconds"),
+        "distance_m": build_line_chart_series(workouts, "distance_m"),
         "intensity": build_line_chart_series(workouts, "avg_intensity"),
         "rpe": build_line_chart_series(workouts, "session_rpe", max_value=10),
         "back": build_line_chart_series(workouts, "lower_back_pain", max_value=10),
@@ -876,6 +886,14 @@ def build_stats2_charts(stats: dict[str, Any]) -> dict[str, Any]:
         "sparkbars": {
             "volume": build_sparkbar(
                 [workout["total_volume"] for workout in workouts],
+                width=14,
+            ),
+            "volume_kg": build_sparkbar(
+                [workout["total_volume_kg"] for workout in workouts],
+                width=14,
+            ),
+            "bodyweight_reps": build_sparkbar(
+                [workout["bodyweight_reps"] for workout in workouts],
                 width=14,
             ),
             "intensity": build_sparkbar(
@@ -964,12 +982,25 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
         details = details_by_workout.get(current_workout_id, [])
 
         total_volume = sum(item["total_volume"] for item in details)
+        total_volume_kg = sum(item["total_volume_kg"] for item in details)
+        bodyweight_reps = sum(item["bodyweight_reps"] for item in details)
+        duration_seconds = sum(item["duration_seconds"] for item in details)
+        distance_m = sum(item["distance_m"] for item in details)
+        weighted_reps = sum(
+            int(set_row["reps"])
+            for item in details
+            for set_row in item["sets"]
+            if float(set_row["weight"]) > 0
+        )
         total_reps = sum(item["total_reps"] for item in details)
         total_sets = sum(len(item["sets"]) for item in details)
 
         avg_intensity = None
         if total_reps:
             avg_intensity = total_volume / total_reps
+        avg_kg_per_rep = None
+        if weighted_reps:
+            avg_kg_per_rep = total_volume_kg / weighted_reps
 
         load_metrics = calculate_workout_load_metrics(
             workout_exercises=details,
@@ -989,9 +1020,15 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
                 "date": workout["created_at"][:10],
                 "created_at": workout["created_at"],
                 "total_volume": total_volume,
+                "total_volume_kg": total_volume_kg,
+                "bodyweight_reps": bodyweight_reps,
+                "duration_seconds": duration_seconds,
+                "distance_m": distance_m,
+                "weighted_reps": weighted_reps,
                 "total_reps": total_reps,
                 "total_sets": total_sets,
                 "avg_intensity": avg_intensity,
+                "avg_kg_per_rep": avg_kg_per_rep,
                 "session_rpe": workout["session_rpe"],
                 "lower_back_pain": workout["lower_back_pain"],
                 "load_score": load_metrics["load_score"],
@@ -1014,6 +1051,11 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
                     "exercise_id": exercise_id,
                     "name": exercise_name,
                     "total_volume": 0.0,
+                    "total_volume_kg": 0.0,
+                    "bodyweight_reps": 0,
+                    "duration_seconds": 0,
+                    "distance_m": 0,
+                    "weighted_reps": 0,
                     "total_reps": 0,
                     "total_sets": 0,
                     "best_e1rm": None,
@@ -1022,6 +1064,15 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
 
             stats = exercise_stats[exercise_id]
             stats["total_volume"] += item["total_volume"]
+            stats["total_volume_kg"] += item["total_volume_kg"]
+            stats["bodyweight_reps"] += item["bodyweight_reps"]
+            stats["duration_seconds"] += item["duration_seconds"]
+            stats["distance_m"] += item["distance_m"]
+            stats["weighted_reps"] += sum(
+                int(set_row["reps"])
+                for set_row in item["sets"]
+                if float(set_row["weight"]) > 0
+            )
             stats["total_reps"] += item["total_reps"]
             stats["total_sets"] += len(item["sets"])
 
@@ -1044,6 +1095,10 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
                     "sets": 0,
                     "reps": 0,
                     "volume": 0.0,
+                    "volume_kg": 0.0,
+                    "bodyweight_reps": 0,
+                    "duration_seconds": 0,
+                    "distance_m": 0,
                     "workout_ids": set(),
                 },
             )
@@ -1051,6 +1106,10 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
             week_bucket["sets"] += len(item["sets"])
             week_bucket["reps"] += int(item["total_reps"])
             week_bucket["volume"] += float(item["total_volume"])
+            week_bucket["volume_kg"] += float(item["total_volume_kg"])
+            week_bucket["bodyweight_reps"] += int(item["bodyweight_reps"])
+            week_bucket["duration_seconds"] += int(item["duration_seconds"])
+            week_bucket["distance_m"] += int(item["distance_m"])
             week_bucket["workout_ids"].add(current_workout_id)
 
             for set_row in item["sets"]:
@@ -1189,6 +1248,11 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
                 )
 
     total_volume = sum(item["total_volume"] for item in workout_items)
+    total_volume_kg = sum(item["total_volume_kg"] for item in workout_items)
+    bodyweight_reps = sum(item["bodyweight_reps"] for item in workout_items)
+    duration_seconds = sum(item["duration_seconds"] for item in workout_items)
+    distance_m = sum(item["distance_m"] for item in workout_items)
+    weighted_reps = sum(item["weighted_reps"] for item in workout_items)
     total_reps = sum(item["total_reps"] for item in workout_items)
     total_sets = sum(item["total_sets"] for item in workout_items)
 
@@ -1243,6 +1307,10 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
                         "sets": 0,
                         "reps": 0,
                         "volume": 0.0,
+                        "volume_kg": 0.0,
+                        "bodyweight_reps": 0,
+                        "duration_seconds": 0,
+                        "distance_m": 0,
                         "workouts": 0,
                     }
                 )
@@ -1254,6 +1322,10 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
                     "sets": int(bucket["sets"]),
                     "reps": int(bucket["reps"]),
                     "volume": float(bucket["volume"]),
+                    "volume_kg": float(bucket["volume_kg"]),
+                    "bodyweight_reps": int(bucket["bodyweight_reps"]),
+                    "duration_seconds": int(bucket["duration_seconds"]),
+                    "distance_m": int(bucket["distance_m"]),
                     "workouts": len(bucket["workout_ids"]),
                 }
             )
@@ -1303,9 +1375,19 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
         "summary": {
             "workout_count": len(workout_items),
             "total_volume": total_volume,
+            "total_volume_kg": total_volume_kg,
+            "bodyweight_reps": bodyweight_reps,
+            "duration_seconds": duration_seconds,
+            "distance_m": distance_m,
+            "weighted_reps": weighted_reps,
             "total_reps": total_reps,
             "total_sets": total_sets,
             "avg_intensity": total_volume / total_reps if total_reps else None,
+            "avg_kg_per_rep": (
+                total_volume_kg / weighted_reps
+                if weighted_reps
+                else None
+            ),
             "avg_rpe": sum(rpe_values) / len(rpe_values) if rpe_values else None,
             "avg_back_pain": sum(back_values) / len(back_values) if back_values else None,
             "total_load_score": total_load_score,

@@ -152,6 +152,10 @@ class StatsApiTests(unittest.TestCase):
         )
         self.assertEqual(response["stats"]["summary"]["workout_count"], 2)
         self.assertEqual(response["stats"]["summary"]["total_volume"], 1050.0)
+        self.assertEqual(response["stats"]["summary"]["total_volume_kg"], 1050.0)
+        self.assertEqual(response["stats"]["summary"]["bodyweight_reps"], 0)
+        self.assertEqual(response["stats"]["summary"]["weighted_reps"], 10)
+        self.assertEqual(response["stats"]["summary"]["avg_kg_per_rep"], 105.0)
         self.assertEqual(response["stats"]["summary"]["total_reps"], 10)
         self.assertEqual(response["stats"]["summary"]["total_sets"], 2)
         self.assertEqual(response["stats"]["summary"]["avg_rpe"], 6.0)
@@ -159,7 +163,11 @@ class StatsApiTests(unittest.TestCase):
         deadlift_stats = response["stats"]["exercise_stats"][0]
         self.assertEqual(deadlift_stats["exercise_id"], self.exercise_id("Deadlift"))
         self.assertEqual(deadlift_stats["name"], "Deadlift")
+        self.assertEqual(deadlift_stats["total_volume_kg"], 1050.0)
+        self.assertEqual(deadlift_stats["bodyweight_reps"], 0)
         self.assertIn("volume", response["charts"])
+        self.assertIn("volume_kg", response["charts"])
+        self.assertIn("bodyweight_reps", response["charts"])
         self.assertIn("load", response["charts"])
         self.assertIn("sparkbars", response["charts"])
         self.assertIn("training_load", response)
@@ -168,6 +176,55 @@ class StatsApiTests(unittest.TestCase):
             response["stats"]["training_load"],
         )
         self.assertIn("series", response["training_load"])
+
+    def test_bodyweight_only_workout_contributes_to_stats_load_and_scatter(self) -> None:
+        workout_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            session_rpe=6,
+            lower_back_pain=1,
+            exercises=[
+                {
+                    "name": "Crunches",
+                    "sets": [
+                        {"weight": 0, "reps": 50},
+                        {"weight": 0, "reps": 50},
+                    ],
+                },
+            ],
+        )
+
+        response = get_stats(limit="all")
+        workout = response["stats"]["workouts"][0]
+        summary = response["stats"]["summary"]
+        crunches = response["stats"]["exercise_stats"][0]
+        scatter = response["charts"]["scatter"]
+
+        self.assertEqual(workout["id"], workout_id)
+        self.assertEqual(workout["total_volume"], 0.0)
+        self.assertEqual(workout["total_volume_kg"], 0.0)
+        self.assertEqual(workout["bodyweight_reps"], 100)
+        self.assertEqual(workout["weighted_reps"], 0)
+        self.assertIsNone(workout["avg_kg_per_rep"])
+        self.assertGreater(workout["load_score"], 0)
+
+        self.assertEqual(summary["total_volume"], 0.0)
+        self.assertEqual(summary["total_volume_kg"], 0.0)
+        self.assertEqual(summary["bodyweight_reps"], 100)
+        self.assertEqual(summary["weighted_reps"], 0)
+        self.assertIsNone(summary["avg_kg_per_rep"])
+        self.assertGreater(summary["total_load_score"], 0)
+
+        self.assertEqual(crunches["name"], "Crunches")
+        self.assertEqual(crunches["total_volume_kg"], 0.0)
+        self.assertEqual(crunches["bodyweight_reps"], 100)
+        self.assertEqual(crunches["weighted_reps"], 0)
+
+        self.assertEqual(scatter["max_volume"], 0.0)
+        self.assertGreater(scatter["max_load"], 0)
+        self.assertEqual(len(scatter["points"]), 1)
+        self.assertEqual(scatter["points"][0]["workout_id"], workout_id)
+        self.assertGreater(scatter["points"][0]["load"], 0)
+        self.assertEqual(scatter["points"][0]["total_volume_kg"], 0.0)
 
     def test_get_stats_orders_by_created_at_ascending_then_id_ascending(self) -> None:
         newer_id = self.insert_workout(

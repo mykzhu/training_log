@@ -502,9 +502,15 @@ export type StatsWorkout = {
   date: string;
   created_at: string;
   total_volume: number;
+  total_volume_kg: number;
+  bodyweight_reps: number;
+  duration_seconds: number;
+  distance_m: number;
+  weighted_reps: number;
   total_reps: number;
   total_sets: number;
   avg_intensity: number | null;
+  avg_kg_per_rep: number | null;
   session_rpe: number | null;
   lower_back_pain: number | null;
   load_score: number;
@@ -518,6 +524,11 @@ export type ExerciseStats = {
   exercise_id: number;
   name: string;
   total_volume: number;
+  total_volume_kg: number;
+  bodyweight_reps: number;
+  duration_seconds: number;
+  distance_m: number;
+  weighted_reps: number;
   total_reps: number;
   total_sets: number;
   best_e1rm: number | null;
@@ -567,9 +578,15 @@ export type ExerciseRepProgress = {
 export type StatsSummary = {
   workout_count: number;
   total_volume: number;
+  total_volume_kg: number;
+  bodyweight_reps: number;
+  duration_seconds: number;
+  distance_m: number;
+  weighted_reps: number;
   total_reps: number;
   total_sets: number;
   avg_intensity: number | null;
+  avg_kg_per_rep: number | null;
   avg_rpe: number | null;
   avg_back_pain: number | null;
   total_load_score: number;
@@ -583,6 +600,8 @@ export type StatsSummary = {
 
 export type StatsSparkbars = {
   volume: string;
+  volume_kg: string;
+  bodyweight_reps: string;
   intensity: string;
   rpe: string;
   back: string;
@@ -647,6 +666,10 @@ export type ExerciseWeeklyWorkloadPoint = {
   sets: number;
   reps: number;
   volume: number;
+  volume_kg: number;
+  bodyweight_reps: number;
+  duration_seconds: number;
+  distance_m: number;
   workouts: number;
 };
 
