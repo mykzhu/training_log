@@ -10,6 +10,7 @@ from app.db import get_db, init_db
 from app.repositories import garmin as garmin_repository
 from app.services.garmin_client import GarminClientAdapter
 from app.services import garmin_service as garmin_service_module
+from app.services.garmin_insights import metric_completeness
 from app.services.garmin_service import GarminService
 
 
@@ -648,6 +649,39 @@ class GarminServiceTests(unittest.TestCase):
             "partial_sync",
         )
         self.assertIn("partial", response["insights"]["overall_message"].lower())
+
+    def test_metric_completeness_marks_today_partial_and_historical_complete(self) -> None:
+        today_metric = {
+            "date": "2026-06-26",
+            "resting_heart_rate": 60,
+            "hrv_ms": None,
+            "stress_avg": 25,
+            "body_battery_start": 52,
+            "body_battery_end": 40,
+            "steps": 97,
+            "synced_at": "2026-06-26T09:25:50",
+        }
+        historical_metric = {
+            "date": "2026-06-25",
+            "resting_heart_rate": 58,
+            "hrv_ms": 45.0,
+            "stress_avg": 25,
+            "body_battery_start": 70,
+            "body_battery_end": 38,
+            "steps": 8000,
+            "synced_at": "2026-06-25T23:20:00",
+        }
+
+        today = metric_completeness(today_metric, today=date(2026, 6, 26))
+        historical = metric_completeness(
+            historical_metric,
+            today=date(2026, 6, 26),
+        )
+
+        self.assertFalse(today["is_complete"])
+        self.assertEqual(today["completeness_status"], "partial_sync")
+        self.assertTrue(historical["is_complete"])
+        self.assertEqual(historical["completeness_status"], "complete")
 
     def test_recovery_snapshot_reports_historical_only_status(self) -> None:
         self.seed_metric("2026-06-25")

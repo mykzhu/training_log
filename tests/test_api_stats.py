@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from datetime import date
+import json
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -134,6 +135,17 @@ class StatsApiTests(unittest.TestCase):
 
         return first_id, second_id
 
+    def flattened_response_keys(self, value: Any) -> set[str]:
+        keys: set[str] = set()
+        if isinstance(value, dict):
+            for key, nested_value in value.items():
+                keys.add(str(key))
+                keys.update(self.flattened_response_keys(nested_value))
+        elif isinstance(value, list):
+            for item in value:
+                keys.update(self.flattened_response_keys(item))
+        return keys
+
     def test_stats_route_is_registered(self) -> None:
         routes = {
             (route.path, tuple(sorted(route.methods)))
@@ -228,6 +240,56 @@ class StatsApiTests(unittest.TestCase):
         self.assertEqual(scatter["points"][0]["workout_id"], workout_id)
         self.assertGreater(scatter["points"][0]["load"], 0)
         self.assertEqual(scatter["points"][0]["total_volume_kg"], 0.0)
+
+    def test_stats_response_has_kg_volume_and_load_first_fields(self) -> None:
+        self.seed_stats_workouts()
+
+        response = get_stats(limit="all")
+        workout = response["stats"]["workouts"][0]
+        summary = response["stats"]["summary"]
+        scatter = response["charts"]["scatter"]
+
+        self.assertIn("total_volume_kg", workout)
+        self.assertIn("weighted_reps", workout)
+        self.assertIn("load_score", workout)
+        self.assertIn("back_stress_score", workout)
+        self.assertIn("total_volume_kg", summary)
+        self.assertIn("total_load_score", summary)
+        self.assertIn("total_back_stress_score", summary)
+        self.assertIn("load", scatter["points"][0])
+        self.assertIn("total_volume_kg", scatter["points"][0])
+
+    def test_stats_response_does_not_expose_set_timestamp_analytics(self) -> None:
+        self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            session_rpe=5,
+            lower_back_pain=2,
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [
+                        {"weight": 100, "reps": 5},
+                        {"weight": 100, "reps": 5},
+                    ],
+                },
+            ],
+        )
+
+        response = get_stats(limit="all")
+        serialized = json.dumps(response).lower()
+        keys = {key.lower() for key in self.flattened_response_keys(response)}
+        forbidden_key_fragments = (
+            "rest_seconds",
+            "avg_rest",
+            "density",
+            "set_gap",
+            "tempo",
+        )
+
+        for fragment in forbidden_key_fragments:
+            with self.subTest(fragment=fragment):
+                self.assertFalse(any(fragment in key for key in keys))
+                self.assertNotIn(fragment, serialized)
 
     def test_stats_data_quality_notes_cover_bodyweight_and_zero_kg_weighted_sets(self) -> None:
         self.insert_workout(

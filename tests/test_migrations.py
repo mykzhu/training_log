@@ -5,6 +5,7 @@ from pathlib import Path
 
 from app import config
 from app.db import get_db, init_db
+from app.migrations import v010_exercise_measurement_type
 from app.migrations.runner import run_migrations
 
 
@@ -150,6 +151,53 @@ class MigrationTests(unittest.TestCase):
         self.assertEqual(exercise["measurement_type"], "weighted_reps")
         self.assertEqual(exercise["reps_unit"], "reps")
         self.assertEqual(deadlift_count, 0)
+
+    def test_v010_seeds_existing_crunch_and_carry_measurement_types(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        try:
+            conn.execute(
+                """
+                CREATE TABLE exercises (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL UNIQUE
+                )
+                """
+            )
+            conn.executemany(
+                "INSERT INTO exercises (name) VALUES (?)",
+                [
+                    ("Crunches",),
+                    ("Suitcase carry",),
+                    ("Bench Press",),
+                ],
+            )
+
+            v010_exercise_measurement_type.up(conn)
+
+            rows = {
+                row["name"]: row
+                for row in conn.execute(
+                    """
+                    SELECT name, measurement_type, reps_unit
+                    FROM exercises
+                    """
+                ).fetchall()
+            }
+            columns = {
+                row["name"] for row in conn.execute("PRAGMA table_info(exercises)")
+            }
+        finally:
+            conn.close()
+
+        self.assertIn("measurement_type", columns)
+        self.assertIn("reps_unit", columns)
+        self.assertEqual(rows["Crunches"]["measurement_type"], "bodyweight_reps")
+        self.assertEqual(rows["Crunches"]["reps_unit"], "reps")
+        self.assertEqual(rows["Suitcase carry"]["measurement_type"], "loaded_carry_time")
+        self.assertEqual(rows["Suitcase carry"]["reps_unit"], "sec")
+        self.assertEqual(rows["Bench Press"]["measurement_type"], "weighted_reps")
+        self.assertEqual(rows["Bench Press"]["reps_unit"], "reps")
 
     def test_migration_runner_records_only_successful_migrations(self) -> None:
         conn = sqlite3.connect(":memory:")

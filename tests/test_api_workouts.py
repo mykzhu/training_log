@@ -9,6 +9,7 @@ from app import config
 from app.db import get_db, init_db
 import app.main as main
 import app.routes.api_workouts as api_workouts_module
+from app.repositories.exercises import create_exercise
 from app.repositories.workouts import NumberingConflictError
 from app.routes.api_workouts import (
     add_workout_exercise_endpoint,
@@ -335,6 +336,60 @@ class WorkoutsApiTests(unittest.TestCase):
             response["analysis"]["exercises"][0]["exercise_name"],
             "Deadlift",
         )
+
+    def test_workout_detail_reports_measurement_specific_set_metrics(self) -> None:
+        create_exercise(
+            "Suitcase carry",
+            is_active=False,
+            weights=[24],
+        )
+        workout_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            session_rpe=5,
+            lower_back_pain=2,
+            exercises=[
+                {
+                    "name": "Crunches",
+                    "sets": [{"weight": 0, "reps": 40}],
+                },
+                {
+                    "name": "Bench Press",
+                    "sets": [{"weight": 70, "reps": 8}],
+                },
+                {
+                    "name": "Suitcase carry",
+                    "sets": [{"weight": 24, "reps": 45}],
+                },
+            ],
+        )
+
+        response = get_workout_detail(workout_id)
+        details = {
+            item["exercise_name"]: item
+            for item in response["exercises"]
+        }
+
+        crunches = details["Crunches"]
+        self.assertEqual(crunches["measurement_type"], "bodyweight_reps")
+        self.assertEqual(crunches["total_volume_kg"], 0.0)
+        self.assertEqual(crunches["bodyweight_reps"], 40)
+        self.assertEqual(crunches["duration_seconds"], 0)
+        self.assertEqual(crunches["distance_m"], 0)
+
+        bench = details["Bench Press"]
+        self.assertEqual(bench["measurement_type"], "weighted_reps")
+        self.assertEqual(bench["total_volume_kg"], 560.0)
+        self.assertEqual(bench["bodyweight_reps"], 0)
+        self.assertEqual(bench["duration_seconds"], 0)
+        self.assertEqual(bench["distance_m"], 0)
+
+        carry = details["Suitcase carry"]
+        self.assertEqual(carry["measurement_type"], "loaded_carry_time")
+        self.assertEqual(carry["reps_unit"], "sec")
+        self.assertEqual(carry["total_volume_kg"], 1080.0)
+        self.assertEqual(carry["bodyweight_reps"], 0)
+        self.assertEqual(carry["duration_seconds"], 45)
+        self.assertEqual(carry["distance_m"], 0)
 
     def test_get_workout_detail_returns_404_for_missing_workout(self) -> None:
         with self.assertRaises(HTTPException) as exc:

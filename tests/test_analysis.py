@@ -153,6 +153,63 @@ class AnalysisServiceTests(unittest.TestCase):
         self.assertTrue(math.isclose(metrics["intensity_score"], 93.33333333))
         self.assertTrue(math.isclose(breakdown["intensity_score"], 93.33333333))
 
+    def test_bodyweight_reps_contribute_to_load_and_back_stress(self) -> None:
+        metrics = calculate_workout_load_metrics(
+            workout_exercises=[
+                {
+                    "exercise_id": 11,
+                    "exercise_name": "Crunches",
+                    "profile_key": "crunches",
+                    "sets": [
+                        {"weight": 0, "reps": 50},
+                        {"weight": 0, "reps": 50},
+                    ],
+                },
+            ],
+            session_rpe=5,
+            profiles_by_key={
+                "crunches": {
+                    "category": "core",
+                    "exercise_factor": 0.7,
+                    "compound_factor": 0.2,
+                    "back_factor": 0.3,
+                },
+                "accessory": DEFAULT_LOAD_PROFILE,
+            },
+        )
+
+        self.assertEqual(metrics["scored_sets"], 2)
+        self.assertGreater(metrics["load_score"], 0)
+        self.assertGreater(metrics["back_stress_score"], 0)
+        self.assertIsNone(metrics["intensity_score"])
+
+    def test_zero_weight_weighted_set_scores_without_intensity_or_crash(self) -> None:
+        metrics = calculate_workout_load_metrics(
+            workout_exercises=[
+                {
+                    "exercise_id": 1,
+                    "exercise_name": "Deadlift",
+                    "profile_key": "deadlift",
+                    "sets": [{"weight": 0, "reps": 5}],
+                },
+            ],
+            best_e1rm_by_exercise={1: 120.0},
+            profiles_by_key={
+                "deadlift": {
+                    "category": "heavy compound",
+                    "exercise_factor": 1.8,
+                    "compound_factor": 1.0,
+                    "back_factor": 1.5,
+                },
+                "accessory": DEFAULT_LOAD_PROFILE,
+            },
+        )
+
+        self.assertEqual(metrics["scored_sets"], 1)
+        self.assertGreater(metrics["load_score"], 0)
+        self.assertGreater(metrics["back_stress_score"], 0)
+        self.assertIsNone(metrics["intensity_score"])
+
 
 if __name__ == "__main__":
     unittest.main()
