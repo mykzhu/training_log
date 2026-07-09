@@ -109,11 +109,12 @@ type StrengthWorkloadChartPoint = {
   sets: number;
   reps: number;
   volume: number;
+  bodyweight_reps: number;
   workouts: number;
   hasPr: boolean;
 };
 
-type WeeklyWorkloadMetric = "sets" | "reps" | "volume";
+type WeeklyWorkloadMetric = "sets" | "reps" | "volume" | "bodyweight_reps";
 
 type WeeklyWorkloadChartPoint =
   ExerciseWeeklyWorkloadPoint & {
@@ -160,7 +161,11 @@ function weeklyMetricLabel(
     return "Repetitions";
   }
 
-  return "Volume";
+  if (metric === "bodyweight_reps") {
+    return "Bodyweight reps";
+  }
+
+  return "Kg volume";
 }
 
 function formatWeeklyMetric(
@@ -193,6 +198,7 @@ type ChartPoint = {
   id: number;
   date: string;
   volume: number;
+  bodyweightReps: number;
   reps: number;
   sets: number;
   volumePerRep: number | null;
@@ -283,10 +289,11 @@ function buildWorkoutData(workouts: StatsWorkout[]): ChartPoint[] {
   return workouts.map((workout) => ({
     id: workout.id,
     date: workout.date,
-    volume: workout.total_volume,
+    volume: workout.total_volume_kg,
+    bodyweightReps: workout.bodyweight_reps,
     reps: workout.total_reps,
     sets: workout.total_sets,
-    volumePerRep: workout.avg_intensity,
+    volumePerRep: workout.avg_kg_per_rep,
     relativeIntensity: workout.intensity_score,
     load: workout.load_score,
     compound: workout.compound_score,
@@ -351,11 +358,11 @@ function buildStatsInsights(
   if (volumeChange !== null) {
     const magnitude = Math.abs(volumeChange);
     insights.push({
-      title: "Volume trend",
+      title: "Kg volume trend",
       body:
         magnitude < 8
-          ? "Recent workout volume is broadly stable."
-          : `Recent workout volume is ${formatSignedPercent(volumeChange)} vs the previous period.`,
+          ? "Recent workout kg volume is broadly stable."
+          : `Recent workout kg volume is ${formatSignedPercent(volumeChange)} vs the previous period.`,
       detail: "Compares the latest workouts with the same number of earlier workouts.",
       tone:
         magnitude < 8
@@ -462,14 +469,16 @@ function buildStatsInsights(
 
 function chartTooltipFormatter(value: unknown, name: unknown): [ReactNode, string] {
   const labels: Record<string, string> = {
-    volume: "Volume",
+    volume: "Kg volume",
+    bodyweightReps: "Bodyweight reps",
     load: "Load",
     compound: "Compound",
     backStress: "Back stress",
     intensity: "Intensity",
     rpe: "RPE",
     backPain: "Back pain",
-    total_volume: "Volume",
+    total_volume: "Kg volume",
+    bodyweight_reps: "Bodyweight reps",
     best_e1rm: "Best e1RM",
   };
   const key = String(name);
@@ -546,8 +555,12 @@ function VolumeTrendTooltip({
     <div className="strength-progress-tooltip">
       <strong>{formatChartDateTooltip(point.date)}</strong>
       <div>
-        <span>Total volume</span>
+        <span>Kg volume</span>
         <b>{formatNumber(point.volume, 0)} kg</b>
+      </div>
+      <div>
+        <span>Bodyweight reps</span>
+        <b>{formatNumber(point.bodyweightReps, 0)}</b>
       </div>
       <div>
         <span>Working sets</span>
@@ -743,8 +756,12 @@ function WeeklyWorkloadTooltip({
       </div>
 
       <div>
-        <span>Volume</span>
+        <span>Kg volume</span>
         <b>{formatNumber(point.volume, 0)} kg</b>
+      </div>
+      <div>
+        <span>Bodyweight reps</span>
+        <b>{formatNumber(point.bodyweight_reps, 0)}</b>
       </div>
     </div>
   );
@@ -839,7 +856,7 @@ function StrengthWorkloadTooltip({
           </div>
 
           <div>
-            <span>Volume</span>
+            <span>Kg volume</span>
             <b>
               {formatNumber(point.volume, 0)} kg
             </b>
@@ -1097,6 +1114,22 @@ export default function StatsPage() {
     );
   }, [workoutData]);
 
+  const topBodyweightRepsPoint = useMemo(() => {
+    const validPoints = workoutData.filter(
+      (point) => point.bodyweightReps > 0,
+    );
+
+    if (validPoints.length === 0) {
+      return null;
+    }
+
+    return validPoints.reduce((highest, workout) =>
+      workout.bodyweightReps > highest.bodyweightReps
+        ? workout
+        : highest,
+    );
+  }, [workoutData]);
+
   const relativeIntensityDomain = useMemo<[number, number]>(() => {
     const values = workoutData
       .map((point) => point.relativeIntensity)
@@ -1126,8 +1159,17 @@ export default function StatsPage() {
 
   const topExercises = useMemo(
     () => [...(stats?.stats.exercise_stats ?? [])]
-      .sort((a, b) => b.total_volume - a.total_volume)
+      .sort((a, b) => b.total_volume_kg - a.total_volume_kg)
       .slice(0, 8),
+    [stats],
+  );
+
+  const topBodyweightExercises = useMemo(
+    () =>
+      [...(stats?.stats.exercise_stats ?? [])]
+        .filter((exercise) => exercise.bodyweight_reps > 0)
+        .sort((a, b) => b.bodyweight_reps - a.bodyweight_reps)
+        .slice(0, 8),
     [stats],
   );
 
@@ -1230,6 +1272,8 @@ export default function StatsPage() {
       ? chartColors.blue
       : weeklyWorkloadMetric === "reps"
         ? chartColors.green
+        : weeklyWorkloadMetric === "bodyweight_reps"
+          ? chartColors.purple
         : chartColors.orange;
 
   const weeklyChartWidth = Math.max(
@@ -1634,6 +1678,7 @@ const strengthWorkloadData =
             sets: week.sets,
             reps: week.reps,
             volume: week.volume,
+            bodyweight_reps: week.bodyweight_reps,
             workouts: week.workouts,
             hasPr: strength?.hasPr ?? false,
           };
@@ -1732,6 +1777,8 @@ const strengthWorkloadData =
       ? chartColors.blue
       : comparisonWorkloadMetric === "reps"
         ? chartColors.green
+        : comparisonWorkloadMetric === "bodyweight_reps"
+          ? chartColors.purple
         : chartColors.orange;
 
   const strengthWorkloadChartWidth = Math.max(
@@ -2084,8 +2131,8 @@ const strengthWorkloadData =
           <div className="stats-chart-grid">
             <ChartCard
               wide
-              subtitle="Total training volume by workout"
-              title="Volume trend"
+              subtitle="Weight x reps by workout"
+              title="Kg volume trend"
             >
               <ResponsiveContainer height={240} width="100%">
                 <AreaChart
@@ -2195,8 +2242,86 @@ const strengthWorkloadData =
 
             <ChartCard
               wide
-              subtitle="Average recorded weight moved per repetition"
-              title="Volume per rep"
+              subtitle="Bodyweight and reps-only work by workout"
+              title="Bodyweight reps"
+            >
+              {topBodyweightRepsPoint ? (
+                <ResponsiveContainer height={220} width="100%">
+                  <LineChart
+                    className="clickable-chart"
+                    data={workoutData}
+                    margin={{ top: 18, right: 18, left: 0, bottom: 0 }}
+                    onClick={openWorkoutFromChart}
+                  >
+                    <CartesianGrid
+                      stroke={chartColors.grid}
+                      strokeDasharray="3 3"
+                    />
+                    <XAxis
+                      dataKey="date"
+                      {...dateXAxisProps(workoutData.length)}
+                    />
+                    <YAxis
+                      allowDecimals={false}
+                      domain={[
+                        0,
+                        (dataMax: number) => Math.max(1, dataMax * 1.1),
+                      ]}
+                      stroke={chartColors.muted}
+                      tick={{ fontSize: 12 }}
+                    />
+                    <Tooltip
+                      {...commonTooltipProps()}
+                      formatter={(value: unknown) => [
+                        formatNumber(Number(value), 0),
+                        "Bodyweight reps",
+                      ]}
+                    />
+                    <Line
+                      activeDot={{ r: 5 }}
+                      dataKey="bodyweightReps"
+                      dot={{ r: 3 }}
+                      stroke={chartColors.purple}
+                      strokeWidth={2}
+                      type="monotone"
+                    />
+                    <ReferenceDot
+                      fill={chartColors.orange}
+                      r={5}
+                      stroke={chartColors.card}
+                      strokeWidth={2}
+                      x={topBodyweightRepsPoint.date}
+                      y={topBodyweightRepsPoint.bodyweightReps}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="chart-empty-state">
+                  No bodyweight-rep work in this range.
+                </div>
+              )}
+
+              <ChartInsight
+                question="Where did non-weighted repetition work happen?"
+                explanation="Bodyweight reps count exercises configured as bodyweight or reps-only, such as Crunches."
+              >
+                <div className="chart-insight-details">
+                  <span>
+                    These reps are intentionally separate from kg volume, because
+                    weight × reps would make them appear as zero workload.
+                  </span>
+                  <span>
+                    Overall load still includes the work through the app load model,
+                    so use this chart as a visibility check rather than a load score.
+                  </span>
+                </div>
+              </ChartInsight>
+            </ChartCard>
+
+            <ChartCard
+              wide
+              subtitle="Average kg moved per weighted repetition"
+              title="Kg per weighted rep"
             >
               <ResponsiveContainer height={240} width="100%">
                 <LineChart
@@ -2229,7 +2354,7 @@ const strengthWorkloadData =
                     {...commonTooltipProps()}
                     formatter={(value: unknown) => [
                       `${formatNumber(Number(value), 1)} kg/rep`,
-                      "Volume per rep",
+                      "Kg per weighted rep",
                     ]}
                   />
 
@@ -2274,7 +2399,7 @@ const strengthWorkloadData =
 
               <ChartInsight
                 question="Was the session generally heavier or lighter?"
-                explanation="Volume per rep shows the average recorded weight moved per repetition."
+                explanation="Kg per weighted rep shows the average recorded weight moved per weighted repetition."
               >
                 <div className="chart-insight-scale">
                   <div>
@@ -2295,7 +2420,7 @@ const strengthWorkloadData =
 
                 <p className="chart-insight-footnote">
                   Compare workouts with a similar exercise mix. A workout may have high
-                  total volume but low volume per rep when it contains many lighter
+                  kg volume but low kg per weighted rep when it contains many lighter
                   repetitions.
                 </p>
               </ChartInsight>
@@ -2533,7 +2658,7 @@ const strengthWorkloadData =
                   </span>
 
                   <span>
-                    High back stress can occur even when total workout volume is moderate,
+                    High back stress can occur even when kg volume is moderate,
                     especially when back-loaded exercises are performed near previous
                     strength levels.
                   </span>
@@ -2688,8 +2813,8 @@ const strengthWorkloadData =
             </ChartCard>
 
             <ChartCard
-              subtitle="Top exercises by accumulated volume"
-              title="Exercise volume"
+              subtitle="Top exercises by accumulated weight x reps"
+              title="Exercise kg volume"
             >
               <ResponsiveContainer height={260} width="100%">
                 <BarChart
@@ -2709,13 +2834,50 @@ const strengthWorkloadData =
                   />
                   <Tooltip {...commonTooltipProps()} />
                   <Bar
-                    dataKey="total_volume"
+                    dataKey="total_volume_kg"
                     fill={chartColors.blue}
                     onClick={(data: unknown) => openExerciseFromBar(data)}
                     radius={[0, 8, 8, 0]}
                   />
                 </BarChart>
               </ResponsiveContainer>
+            </ChartCard>
+
+            <ChartCard
+              subtitle="Top bodyweight and reps-only exercises"
+              title="Exercise bodyweight reps"
+            >
+              {topBodyweightExercises.length > 0 ? (
+                <ResponsiveContainer height={260} width="100%">
+                  <BarChart
+                    className="clickable-bar-chart"
+                    data={topBodyweightExercises}
+                    layout="vertical"
+                    margin={{ left: 18 }}
+                  >
+                    <CartesianGrid stroke={chartColors.grid} strokeDasharray="3 3" />
+                    <XAxis stroke={chartColors.muted} tick={{ fontSize: 12 }} type="number" />
+                    <YAxis
+                      dataKey="name"
+                      stroke={chartColors.muted}
+                      tick={{ fontSize: 12 }}
+                      type="category"
+                      width={116}
+                    />
+                    <Tooltip {...commonTooltipProps()} />
+                    <Bar
+                      dataKey="bodyweight_reps"
+                      fill={chartColors.purple}
+                      onClick={(data: unknown) => openExerciseFromBar(data)}
+                      radius={[0, 8, 8, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="chart-empty-state">
+                  No bodyweight-rep exercises in this range.
+                </div>
+              )}
             </ChartCard>
 
             <StatsBestStrengthTable
@@ -3180,7 +3342,8 @@ const strengthWorkloadData =
                           [
                             ["sets", "Sets"],
                             ["reps", "Reps"],
-                            ["volume", "Volume"],
+                            ["volume", "Kg"],
+                            ["bodyweight_reps", "Bodyweight"],
                           ] as Array<
                             [WeeklyWorkloadMetric, string]
                           >
@@ -3322,7 +3485,7 @@ const strengthWorkloadData =
                       </span>
 
                       <span>
-                        Volume combines weight and repetitions,
+                        Kg volume combines weight and repetitions,
                         but can change substantially when the
                         exercise or rep range changes.
                       </span>
@@ -3337,7 +3500,7 @@ const strengthWorkloadData =
                         Compare this chart with the strength
                         trend above. Rising strength with stable
                         workload is generally a stronger signal
-                        than volume rising by itself.
+                        than kg volume rising by itself.
                       </span>
                     </div>
 
@@ -3401,7 +3564,8 @@ const strengthWorkloadData =
                           [
                             ["sets", "Sets"],
                             ["reps", "Reps"],
-                            ["volume", "Volume"],
+                            ["volume", "Kg"],
+                            ["bodyweight_reps", "Bodyweight"],
                           ] as Array<
                             [WeeklyWorkloadMetric, string]
                           >

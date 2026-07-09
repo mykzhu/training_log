@@ -727,8 +727,18 @@ export default function StatsOverview({
           />
 
           <SummaryMetric
-            label="kg volume / rep"
-            value={formatNumber(summary.avg_intensity, 1)}
+            label="kg volume"
+            value={formatKg(summary.total_volume_kg)}
+          />
+
+          <SummaryMetric
+            label="bodyweight reps"
+            value={formatNumber(summary.bodyweight_reps)}
+          />
+
+          <SummaryMetric
+            label="kg / weighted rep"
+            value={formatNumber(summary.avg_kg_per_rep, 1)}
           />
 
           <SummaryMetric
