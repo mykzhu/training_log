@@ -4,6 +4,31 @@ All notable changes to this project.
 
 ## Unreleased
 
+## 1.7.0 - 2026-07-09
+
+### Added
+
+* Added exercise measurement metadata so weighted lifts, bodyweight reps, and loaded carries can be displayed and analyzed correctly.
+* Added measurement controls to Settings for exercise type and rep unit.
+* Added kg-volume, bodyweight-rep, duration, load-score, and back-stress derived metrics to workout details and Stats.
+* Added load-first Stats charts, including training load versus back feedback and back-stress by exercise.
+* Added data-quality notes for bodyweight work, zero-kg weighted sets, missing feedback, and incomplete Garmin data.
+* Added a compact Log tab for line-by-line application logs.
+* Added delete flows for workouts, exercises, analysis profiles, and Garmin metrics where supported.
+
+### Changed
+
+* Renamed visible volume analytics to kg volume where bodyweight work is excluded.
+* Garmin readiness now marks partial current-day metrics separately from complete historical metrics.
+* Backup schema version is now 8 and includes exercise measurement settings while restoring older backups without those fields.
+* Set timestamps remain audit-only and are not used for rest-time, density, or tempo analytics.
+
+### Fixed
+
+* Fixed analytics for Crunches and other bodyweight-rep exercises so they contribute to load and back-stress without fake kg volume.
+* Fixed exercise stats display for bodyweight and loaded-carry exercises.
+* Removed the duplicate Log page title and reduced log row bulk.
+
 ## 1.6.0 - 2026-07-09
 
 ### Added
