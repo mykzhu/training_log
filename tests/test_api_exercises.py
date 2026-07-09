@@ -196,6 +196,60 @@ class ExercisesApiTests(unittest.TestCase):
             [first_id, second_id],
         )
 
+    def test_bodyweight_exercise_stats_use_reps_instead_of_volume_pr(self) -> None:
+        crunches_id = self.exercise_id("Crunches")
+        first_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            exercises=[
+                {
+                    "name": "Crunches",
+                    "sets": [
+                        {"weight": 0, "reps": 50},
+                        {"weight": 0, "reps": 50},
+                    ],
+                },
+            ],
+        )
+        second_id = self.insert_workout(
+            created_at="2026-06-08T10:00:00",
+            exercises=[
+                {
+                    "name": "Crunches",
+                    "sets": [
+                        {"weight": 0, "reps": 60},
+                        {"weight": 0, "reps": 60},
+                    ],
+                },
+            ],
+        )
+
+        response = get_exercise_stats_endpoint(crunches_id, limit="all")
+
+        self.assertEqual(response["exercise"]["measurement_type"], "bodyweight_reps")
+        self.assertEqual(response["exercise"]["reps_unit"], "reps")
+        self.assertEqual(response["source_workout_ids"], [first_id, second_id])
+        self.assertEqual(response["summary"]["total_volume"], 0.0)
+        self.assertEqual(response["summary"]["total_volume_kg"], 0.0)
+        self.assertEqual(response["summary"]["bodyweight_reps"], 220)
+        self.assertEqual(response["summary"]["total_reps"], 220)
+        self.assertEqual(response["summary"]["weighted_reps"], 0)
+        self.assertIsNone(response["summary"]["avg_kg_per_rep"])
+        self.assertIsNone(response["summary"]["best_e1rm"])
+
+        latest = response["history"][1]
+        self.assertEqual(latest["workout_id"], second_id)
+        self.assertEqual(latest["total_volume_kg"], 0.0)
+        self.assertEqual(latest["bodyweight_reps"], 120)
+        self.assertEqual(latest["measurement_type"], "bodyweight_reps")
+        self.assertEqual(latest["reps_unit"], "reps")
+        self.assertIn("Rep PR", latest["pr_flags"])
+        self.assertIn("Total reps PR", latest["pr_flags"])
+        self.assertNotIn("Volume PR", latest["pr_flags"])
+        self.assertEqual(
+            [marker["value"] for marker in response["trend"]["bodyweight_reps"]["markers"]],
+            [100, 120],
+        )
+
     def test_exercise_stats_keep_inactive_exercise_history(self) -> None:
         deadlift_id = self.exercise_id("Deadlift")
         workout_id = self.insert_workout(

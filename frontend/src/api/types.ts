@@ -719,9 +719,17 @@ export type ExerciseStatsHistoryEntry = {
   workout_exercise_ids: number[];
   sets: ExerciseStatsSet[];
   total_volume: number;
+  total_volume_kg: number;
   total_reps: number;
   total_sets: number;
+  bodyweight_reps: number;
+  duration_seconds: number;
+  distance_m: number;
+  weighted_reps: number;
+  avg_kg_per_rep: number | null;
   avg_intensity: number | null;
+  measurement_type: ExerciseMeasurementType;
+  reps_unit: string;
   best_weight: number | null;
   best_reps: number | null;
   best_e1rm: number | null;
@@ -733,8 +741,14 @@ export type ExerciseStatsHistoryEntry = {
 export type ExerciseStatsSummary = {
   workout_count: number;
   total_volume: number;
+  total_volume_kg: number;
   total_reps: number;
   total_sets: number;
+  bodyweight_reps: number;
+  duration_seconds: number;
+  distance_m: number;
+  weighted_reps: number;
+  avg_kg_per_rep: number | null;
   avg_intensity: number | null;
   best_weight: number | null;
   best_reps: number | null;
@@ -766,6 +780,8 @@ export type ExerciseStatsResponse = {
     is_active: boolean;
     sort_order: number;
     profile_key: string;
+    measurement_type: ExerciseMeasurementType;
+    reps_unit: string;
   };
   profile: ExerciseProfile;
   summary: ExerciseStatsSummary;
@@ -778,6 +794,10 @@ export type ExerciseStatsResponse = {
   }>;
   trend: {
     volume: ExerciseStatsTrendSeries;
+    volume_kg: ExerciseStatsTrendSeries;
+    bodyweight_reps: ExerciseStatsTrendSeries;
+    duration_seconds: ExerciseStatsTrendSeries;
+    distance_m: ExerciseStatsTrendSeries;
     best_e1rm: ExerciseStatsTrendSeries;
     reps: ExerciseStatsTrendSeries;
   };

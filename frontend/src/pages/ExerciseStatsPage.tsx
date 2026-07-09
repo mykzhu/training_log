@@ -43,12 +43,18 @@ const statsLimitOptions: Array<{ value: StatsLimit; label: string }> = [
 type TrendPoint = {
   id: number;
   date: string;
-  volume: number;
+  work: number;
   bestE1rm: number | null;
   rollingBest: number | null;
   reps: number;
   sets: number;
 };
+
+type PrimaryMetricKind =
+  | "volume_kg"
+  | "bodyweight_reps"
+  | "duration_seconds"
+  | "distance_m";
 
 type ChartClickState = {
   activePayload?: Array<{
@@ -86,7 +92,92 @@ function formatKg(value: number | null | undefined, digits = 0) {
   return `${formatNumber(value, digits)} kg`;
 }
 
-function formatSet(set: ExerciseStatsSet) {
+function formatReps(value: number | null | undefined, unit = "reps") {
+  return `${formatNumber(value)} ${unit}`;
+}
+
+function primaryMetricKind(measurementType: string): PrimaryMetricKind {
+  if (measurementType === "bodyweight_reps" || measurementType === "reps_only") {
+    return "bodyweight_reps";
+  }
+
+  if (measurementType === "loaded_carry_time") {
+    return "duration_seconds";
+  }
+
+  if (measurementType === "loaded_carry_distance") {
+    return "distance_m";
+  }
+
+  return "volume_kg";
+}
+
+function primaryMetricLabel(kind: PrimaryMetricKind) {
+  if (kind === "bodyweight_reps") {
+    return "Bodyweight reps";
+  }
+
+  if (kind === "duration_seconds") {
+    return "Duration";
+  }
+
+  if (kind === "distance_m") {
+    return "Distance";
+  }
+
+  return "Kg volume";
+}
+
+function formatPrimaryMetric(
+  kind: PrimaryMetricKind,
+  value: number | null | undefined,
+) {
+  if (kind === "volume_kg") {
+    return formatKg(value);
+  }
+
+  if (kind === "duration_seconds") {
+    return `${formatNumber(value)} sec`;
+  }
+
+  if (kind === "distance_m") {
+    return `${formatNumber(value)} m`;
+  }
+
+  return `${formatNumber(value)} reps`;
+}
+
+function primaryMetricValue(
+  entry: ExerciseStatsHistoryEntry,
+  kind: PrimaryMetricKind,
+) {
+  if (kind === "bodyweight_reps") {
+    return entry.bodyweight_reps;
+  }
+
+  if (kind === "duration_seconds") {
+    return entry.duration_seconds;
+  }
+
+  if (kind === "distance_m") {
+    return entry.distance_m;
+  }
+
+  return entry.total_volume_kg;
+}
+
+function formatSet(set: ExerciseStatsSet, measurementType = "weighted_reps", unit = "reps") {
+  if (measurementType === "bodyweight_reps" || measurementType === "reps_only") {
+    return formatReps(set.reps, unit);
+  }
+
+  if (
+    measurementType === "loaded_carry_time" ||
+    measurementType === "loaded_carry_distance"
+  ) {
+    return `${formatNumber(set.weight, 1)} kg x ${formatReps(set.reps, unit)}`;
+  }
+
   return `${formatNumber(set.weight, 1)} kg x ${set.reps}`;
 }
 
@@ -110,7 +201,7 @@ function commonTooltipProps() {
     },
     formatter: (value: unknown, name: unknown): [ReactNode, string] => {
       const labels: Record<string, string> = {
-        volume: "Volume",
+        work: "Work",
         bestE1rm: "Best e1RM",
         rollingBest: "Rolling best",
         reps: "Reps",
@@ -144,7 +235,15 @@ function SummaryCard({
   );
 }
 
-function SetChips({ sets }: { sets: ExerciseStatsSet[] }) {
+function SetChips({
+  measurementType,
+  repsUnit,
+  sets,
+}: {
+  measurementType: string;
+  repsUnit: string;
+  sets: ExerciseStatsSet[];
+}) {
   if (sets.length === 0) {
     return <span className="muted">No sets</span>;
   }
@@ -153,7 +252,7 @@ function SetChips({ sets }: { sets: ExerciseStatsSet[] }) {
     <div className="exercise-set-list">
       {sets.map((set) => (
         <span className="exercise-set-chip" key={set.id}>
-          {formatSet(set)}
+          {formatSet(set, measurementType, repsUnit)}
         </span>
       ))}
     </div>
@@ -176,11 +275,14 @@ function PrFlags({ flags }: { flags: string[] }) {
   );
 }
 
-function buildTrendData(history: ExerciseStatsHistoryEntry[]): TrendPoint[] {
+function buildTrendData(
+  history: ExerciseStatsHistoryEntry[],
+  kind: PrimaryMetricKind,
+): TrendPoint[] {
   return history.map((entry) => ({
     id: entry.workout_id,
     date: entry.date,
-    volume: entry.total_volume,
+    work: primaryMetricValue(entry, kind),
     bestE1rm: entry.best_e1rm,
     rollingBest: entry.rolling_best_e1rm,
     reps: entry.total_reps,
@@ -221,9 +323,14 @@ export default function ExerciseStatsPage({ exerciseId }: { exerciseId: number }
     }
   }
 
+  const primaryKind = primaryMetricKind(
+    stats?.exercise.measurement_type ?? "weighted_reps",
+  );
+  const primaryLabel = primaryMetricLabel(primaryKind);
+  const isWeightedExercise = stats?.exercise.measurement_type === "weighted_reps";
   const trendData = useMemo(
-    () => buildTrendData(stats?.history ?? []),
-    [stats],
+    () => buildTrendData(stats?.history ?? [], primaryKind),
+    [primaryKind, stats],
   );
 
   return (
@@ -295,31 +402,65 @@ export default function ExerciseStatsPage({ exerciseId }: { exerciseId: number }
             <>
               <section className="dashboard-grid">
                 <SummaryCard
-                  label="Volume"
+                  label={primaryLabel}
                   subvalue={`${formatNumber(stats.summary.total_reps)} reps`}
-                  value={formatKg(stats.summary.total_volume)}
+                  value={formatPrimaryMetric(
+                    primaryKind,
+                    primaryKind === "bodyweight_reps"
+                      ? stats.summary.bodyweight_reps
+                      : primaryKind === "duration_seconds"
+                        ? stats.summary.duration_seconds
+                        : primaryKind === "distance_m"
+                          ? stats.summary.distance_m
+                          : stats.summary.total_volume_kg,
+                  )}
                 />
                 <SummaryCard
-                  label="Best e1RM"
+                  label={isWeightedExercise ? "Best e1RM" : "Best set"}
                   subvalue={
                     stats.summary.best_set
-                      ? `${formatSet(stats.summary.best_set)}`
+                      ? `${formatSet(
+                          stats.summary.best_set,
+                          stats.exercise.measurement_type,
+                          stats.exercise.reps_unit,
+                        )}`
                       : "No eligible set"
                   }
-                  value={formatKg(stats.summary.best_e1rm, 1)}
+                  value={
+                    isWeightedExercise
+                      ? formatKg(stats.summary.best_e1rm, 1)
+                      : formatReps(stats.summary.best_reps, stats.exercise.reps_unit)
+                  }
                 />
                 <SummaryCard
-                  label="Best weight"
-                  subvalue={`${formatNumber(stats.summary.best_reps)} max reps`}
-                  value={formatKg(stats.summary.best_weight, 1)}
+                  label={
+                    stats.summary.best_weight && stats.summary.best_weight > 0
+                      ? "Best weight"
+                      : "Sets"
+                  }
+                  subvalue={
+                    stats.summary.best_weight && stats.summary.best_weight > 0
+                      ? `${formatNumber(stats.summary.best_reps)} max reps`
+                      : `${stats.summary.workout_count} workouts`
+                  }
+                  value={
+                    stats.summary.best_weight && stats.summary.best_weight > 0
+                      ? formatKg(stats.summary.best_weight, 1)
+                      : formatNumber(stats.summary.total_sets)
+                  }
                 />
                 <SummaryCard
                   label="Latest"
                   subvalue={stats.latest?.date ?? "-"}
                   value={
-                    stats.latest?.best_e1rm === null
-                      ? formatKg(stats.latest?.total_volume)
-                      : formatKg(stats.latest?.best_e1rm, 1)
+                    isWeightedExercise && stats.latest?.best_e1rm !== null
+                      ? formatKg(stats.latest?.best_e1rm, 1)
+                      : formatPrimaryMetric(
+                          primaryKind,
+                          stats.latest
+                            ? primaryMetricValue(stats.latest, primaryKind)
+                            : undefined,
+                        )
                   }
                 />
               </section>
@@ -327,7 +468,11 @@ export default function ExerciseStatsPage({ exerciseId }: { exerciseId: number }
               <section className="chart-card chart-card-wide">
                 <div className="chart-heading">
                   <h2>Trend</h2>
-                  <p className="muted">Volume, e1RM, and rolling best by workout</p>
+                  <p className="muted">
+                    {isWeightedExercise
+                      ? "Kg volume, e1RM, and rolling best by workout"
+                      : `${primaryLabel} by workout`}
+                  </p>
                 </div>
 
                 <div className="chart-frame">
@@ -345,34 +490,38 @@ export default function ExerciseStatsPage({ exerciseId }: { exerciseId: number }
                       <Legend wrapperStyle={{ color: chartColors.muted }} />
                       <Line
                         activeDot={{ r: 5 }}
-                        dataKey="volume"
+                        dataKey="work"
                         dot={{ r: 3 }}
-                        name="Volume"
+                        name={primaryLabel}
                         stroke={chartColors.blue}
                         strokeWidth={2}
                         type="monotone"
                       />
-                      <Line
-                        activeDot={{ r: 5 }}
-                        connectNulls={false}
-                        dataKey="bestE1rm"
-                        dot={{ r: 3 }}
-                        name="Best e1RM"
-                        stroke={chartColors.green}
-                        strokeWidth={2}
-                        type="monotone"
-                      />
-                      <Line
-                        activeDot={{ r: 5 }}
-                        connectNulls={false}
-                        dataKey="rollingBest"
-                        dot={{ r: 3 }}
-                        name="Rolling best"
-                        stroke={chartColors.orange}
-                        strokeDasharray="5 5"
-                        strokeWidth={2}
-                        type="monotone"
-                      />
+                      {isWeightedExercise && (
+                        <>
+                          <Line
+                            activeDot={{ r: 5 }}
+                            connectNulls={false}
+                            dataKey="bestE1rm"
+                            dot={{ r: 3 }}
+                            name="Best e1RM"
+                            stroke={chartColors.green}
+                            strokeWidth={2}
+                            type="monotone"
+                          />
+                          <Line
+                            activeDot={{ r: 5 }}
+                            connectNulls={false}
+                            dataKey="rollingBest"
+                            dot={{ r: 3 }}
+                            name="Rolling best"
+                            stroke={chartColors.orange}
+                            strokeDasharray="5 5"
+                            strokeWidth={2}
+                            type="monotone"
+                          />
+                        </>
+                      )}
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -389,8 +538,8 @@ export default function ExerciseStatsPage({ exerciseId }: { exerciseId: number }
                     <thead>
                       <tr>
                         <th>Date</th>
-                        <th>Best e1RM</th>
-                        <th>Volume</th>
+                        <th>{isWeightedExercise ? "Best e1RM" : "Best set"}</th>
+                        <th>{primaryLabel}</th>
                         <th>Sets</th>
                         <th>PRs</th>
                       </tr>
@@ -408,11 +557,17 @@ export default function ExerciseStatsPage({ exerciseId }: { exerciseId: number }
                             </button>
                           </td>
                           <td className="strength-table-value">
-                            {formatKg(entry.best_e1rm, 1)}
+                            {isWeightedExercise
+                              ? formatKg(entry.best_e1rm, 1)
+                              : formatReps(entry.best_reps, entry.reps_unit)}
                           </td>
-                          <td>{formatKg(entry.total_volume)}</td>
+                          <td>{formatPrimaryMetric(primaryKind, primaryMetricValue(entry, primaryKind))}</td>
                           <td>
-                            <SetChips sets={entry.sets} />
+                            <SetChips
+                              measurementType={entry.measurement_type}
+                              repsUnit={entry.reps_unit}
+                              sets={entry.sets}
+                            />
                           </td>
                           <td>
                             <PrFlags flags={entry.pr_flags} />

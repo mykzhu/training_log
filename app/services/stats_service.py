@@ -3,6 +3,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from app.db import get_db
+from app.repositories.exercises import derive_set_metrics, normalize_measurement_settings
 from app.repositories.workouts import get_workout_details_batch
 from app.services.analysis_service import (
     calculate_workout_load_metrics as calculate_load_metrics,
@@ -1432,8 +1433,14 @@ def empty_exercise_summary() -> dict[str, Any]:
     return {
         "workout_count": 0,
         "total_volume": 0.0,
+        "total_volume_kg": 0.0,
         "total_reps": 0,
         "total_sets": 0,
+        "bodyweight_reps": 0,
+        "duration_seconds": 0,
+        "distance_m": 0,
+        "weighted_reps": 0,
+        "avg_kg_per_rep": None,
         "avg_intensity": None,
         "best_weight": None,
         "best_reps": None,
@@ -1449,6 +1456,7 @@ def build_exercise_pr_baselines(
     exercise_id: int,
     selected_workout_ids: set[int],
     max_workout: Any | None,
+    measurement_type: str = "weighted_reps",
 ) -> dict[int, dict[str, Any]]:
     if max_workout is None or not selected_workout_ids:
         return {}
@@ -1490,12 +1498,21 @@ def build_exercise_pr_baselines(
                 "max_reps": None,
                 "best_e1rm": None,
                 "total_volume": 0.0,
+                "bodyweight_reps": 0,
+                "duration_seconds": 0,
+                "distance_m": 0,
             },
         )
 
         weight = float(row["weight"])
         reps = int(row["reps"])
         workout["total_volume"] += weight * reps
+        if measurement_type in {"bodyweight_reps", "reps_only"}:
+            workout["bodyweight_reps"] += reps
+        elif measurement_type == "loaded_carry_time":
+            workout["duration_seconds"] += reps
+        elif measurement_type == "loaded_carry_distance":
+            workout["distance_m"] += reps
 
         if workout["max_weight"] is None or weight > workout["max_weight"]:
             workout["max_weight"] = weight
@@ -1513,6 +1530,9 @@ def build_exercise_pr_baselines(
         "max_reps": None,
         "best_e1rm": None,
         "best_volume": None,
+        "best_bodyweight_reps": None,
+        "best_duration_seconds": None,
+        "best_distance_m": None,
     }
     baselines: dict[int, dict[str, Any]] = {}
 
@@ -1542,6 +1562,30 @@ def build_exercise_pr_baselines(
         if prior_best["best_volume"] is None or total_volume > prior_best["best_volume"]:
             prior_best["best_volume"] = total_volume
 
+        bodyweight_reps = int(workout["bodyweight_reps"])
+        if bodyweight_reps > 0:
+            if (
+                prior_best["best_bodyweight_reps"] is None
+                or bodyweight_reps > prior_best["best_bodyweight_reps"]
+            ):
+                prior_best["best_bodyweight_reps"] = bodyweight_reps
+
+        duration_seconds = int(workout["duration_seconds"])
+        if duration_seconds > 0:
+            if (
+                prior_best["best_duration_seconds"] is None
+                or duration_seconds > prior_best["best_duration_seconds"]
+            ):
+                prior_best["best_duration_seconds"] = duration_seconds
+
+        distance_m = int(workout["distance_m"])
+        if distance_m > 0:
+            if (
+                prior_best["best_distance_m"] is None
+                or distance_m > prior_best["best_distance_m"]
+            ):
+                prior_best["best_distance_m"] = distance_m
+
     return baselines
 
 
@@ -1552,7 +1596,7 @@ def build_exercise_stats(
     with get_db() as conn:
         exercise = conn.execute(
             """
-            SELECT id, name, is_active, sort_order, profile_key
+            SELECT id, name, is_active, sort_order, profile_key, measurement_type, reps_unit
             FROM exercises
             WHERE id = ?
             """,
@@ -1561,6 +1605,14 @@ def build_exercise_stats(
 
         if exercise is None:
             return None
+
+        measurement = normalize_measurement_settings(
+            measurement_type=exercise["measurement_type"],
+            reps_unit=exercise["reps_unit"],
+            exercise_name=exercise["name"],
+        )
+        measurement_type = measurement["measurement_type"]
+        reps_unit = measurement["reps_unit"]
 
         if limit is None:
             workouts = conn.execute(
@@ -1609,6 +1661,7 @@ def build_exercise_stats(
         exercise_id=exercise_id,
         selected_workout_ids=selected_workout_ids,
         max_workout=workouts[-1] if workouts else None,
+        measurement_type=measurement_type,
     )
 
     profile_key = str(exercise["profile_key"] or "accessory")
@@ -1648,12 +1701,20 @@ def build_exercise_stats(
         ]
         set_payloads = [exercise_set_payload(set_row) for set_row in sets]
 
-        total_volume = sum(
-            float(set_row["weight"]) * int(set_row["reps"])
-            for set_row in sets
-        )
+        derived_metrics = derive_set_metrics(sets, measurement_type)
+        total_volume = float(derived_metrics["total_volume_kg"])
+        total_volume_kg = total_volume
         total_reps = sum(int(set_row["reps"]) for set_row in sets)
         total_sets = len(sets)
+        bodyweight_reps = int(derived_metrics["bodyweight_reps"])
+        duration_seconds = int(derived_metrics["duration_seconds"])
+        distance_m = int(derived_metrics["distance_m"])
+        weighted_reps = sum(
+            int(set_row["reps"])
+            for set_row in sets
+            if float(set_row["weight"]) > 0
+        )
+        avg_kg_per_rep = total_volume_kg / weighted_reps if weighted_reps else None
         best_weight = None
         best_reps = None
         best_e1rm = None
@@ -1694,8 +1755,13 @@ def build_exercise_stats(
                 }
 
         summary["total_volume"] += total_volume
+        summary["total_volume_kg"] += total_volume_kg
         summary["total_reps"] += total_reps
         summary["total_sets"] += total_sets
+        summary["bodyweight_reps"] += bodyweight_reps
+        summary["duration_seconds"] += duration_seconds
+        summary["distance_m"] += distance_m
+        summary["weighted_reps"] += weighted_reps
 
         if best_weight is not None:
             if summary["best_weight"] is None or best_weight > summary["best_weight"]:
@@ -1737,12 +1803,33 @@ def build_exercise_stats(
         ):
             pr_flags.append("e1RM PR")
 
-        if (
+        if measurement_type == "weighted_reps" and (
             total_volume > 0
             and prior.get("best_volume") is not None
             and total_volume > float(prior["best_volume"]) + 1e-9
         ):
             pr_flags.append("Volume PR")
+
+        if measurement_type in {"bodyweight_reps", "reps_only"} and (
+            bodyweight_reps > 0
+            and prior.get("best_bodyweight_reps") is not None
+            and bodyweight_reps > int(prior["best_bodyweight_reps"])
+        ):
+            pr_flags.append("Total reps PR")
+
+        if measurement_type == "loaded_carry_time" and (
+            duration_seconds > 0
+            and prior.get("best_duration_seconds") is not None
+            and duration_seconds > int(prior["best_duration_seconds"])
+        ):
+            pr_flags.append("Duration PR")
+
+        if measurement_type == "loaded_carry_distance" and (
+            distance_m > 0
+            and prior.get("best_distance_m") is not None
+            and distance_m > int(prior["best_distance_m"])
+        ):
+            pr_flags.append("Distance PR")
 
         rolling_best_e1rm = best_e1rm
         if previous_best_e1rm is not None:
@@ -1763,9 +1850,17 @@ def build_exercise_stats(
             ],
             "sets": set_payloads,
             "total_volume": total_volume,
+            "total_volume_kg": total_volume_kg,
             "total_reps": total_reps,
             "total_sets": total_sets,
+            "bodyweight_reps": bodyweight_reps,
+            "duration_seconds": duration_seconds,
+            "distance_m": distance_m,
+            "weighted_reps": weighted_reps,
+            "avg_kg_per_rep": avg_kg_per_rep,
             "avg_intensity": total_volume / total_reps if total_reps else None,
+            "measurement_type": measurement_type,
+            "reps_unit": reps_unit,
             "best_weight": best_weight,
             "best_reps": best_reps,
             "best_e1rm": best_e1rm,
@@ -1804,6 +1899,11 @@ def build_exercise_stats(
         if summary["total_reps"]
         else None
     )
+    summary["avg_kg_per_rep"] = (
+        summary["total_volume_kg"] / summary["weighted_reps"]
+        if summary["weighted_reps"]
+        else None
+    )
     summary["pr_count"] = pr_count
     summary["first_workout_at"] = history[0]["created_at"] if history else None
     summary["latest_workout_at"] = history[-1]["created_at"] if history else None
@@ -1816,6 +1916,8 @@ def build_exercise_stats(
             "is_active": bool(exercise["is_active"]),
             "sort_order": int(exercise["sort_order"]),
             "profile_key": profile_key,
+            "measurement_type": measurement_type,
+            "reps_unit": reps_unit,
         },
         "profile": profile,
         "summary": summary,
@@ -1824,6 +1926,10 @@ def build_exercise_stats(
         "per_workout_sets": per_workout_sets,
         "trend": {
             "volume": build_line_chart_series(history, "total_volume"),
+            "volume_kg": build_line_chart_series(history, "total_volume_kg"),
+            "bodyweight_reps": build_line_chart_series(history, "bodyweight_reps"),
+            "duration_seconds": build_line_chart_series(history, "duration_seconds"),
+            "distance_m": build_line_chart_series(history, "distance_m"),
             "best_e1rm": build_line_chart_series(history, "best_e1rm"),
             "reps": build_line_chart_series(history, "total_reps"),
         },
