@@ -536,6 +536,68 @@ class ExercisesApiTests(unittest.TestCase):
         self.assertNotIn("Deadlift", active_names)
         self.assertIn("Deadlift", all_names)
 
+    def test_exercise_response_marks_unused_exercise_deletable(self) -> None:
+        created = create_exercise_endpoint(
+            ExerciseCreateRequest(
+                name="Unused Exercise",
+                is_active=False,
+                weights=[],
+            )
+        )
+
+        exercise = created["exercise"]
+
+        self.assertEqual(exercise["usage"], {
+            "workout_count": 0,
+            "set_count": 0,
+            "draft_count": 0,
+        })
+        self.assertTrue(exercise["can_delete"])
+
+    def test_exercise_response_includes_historical_usage_counts(self) -> None:
+        deadlift_id = self.exercise_id("Deadlift")
+        self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [
+                        {"weight": 100, "reps": 5},
+                        {"weight": 110, "reps": 3},
+                    ],
+                },
+            ],
+        )
+
+        response = get_exercises(include_inactive=True)
+        deadlift = next(
+            exercise
+            for exercise in response["exercises"]
+            if exercise["id"] == deadlift_id
+        )
+
+        self.assertEqual(deadlift["usage"]["workout_count"], 1)
+        self.assertEqual(deadlift["usage"]["set_count"], 2)
+        self.assertEqual(deadlift["usage"]["draft_count"], 0)
+        self.assertFalse(deadlift["can_delete"])
+
+    def test_exercise_response_includes_active_draft_usage_counts(self) -> None:
+        deadlift_id = self.exercise_id("Deadlift")
+        start_active_workout_draft()
+        add_exercise_to_active_draft(deadlift_id, "Deadlift")
+
+        response = get_exercises(include_inactive=True)
+        deadlift = next(
+            exercise
+            for exercise in response["exercises"]
+            if exercise["id"] == deadlift_id
+        )
+
+        self.assertEqual(deadlift["usage"]["workout_count"], 0)
+        self.assertEqual(deadlift["usage"]["set_count"], 0)
+        self.assertEqual(deadlift["usage"]["draft_count"], 1)
+        self.assertFalse(deadlift["can_delete"])
+
     def test_delete_unused_exercise_succeeds_and_removes_weight_presets(self) -> None:
         created = create_exercise_endpoint(
             ExerciseCreateRequest(

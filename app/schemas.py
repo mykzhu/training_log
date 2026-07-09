@@ -226,6 +226,12 @@ class DeleteWorkoutResponse(AppBaseModel):
     workout_id: int
 
 
+class ExerciseUsageResponse(AppBaseModel):
+    workout_count: int
+    set_count: int
+    draft_count: int
+
+
 class ExerciseResponse(AppBaseModel):
     id: int
     name: str
@@ -243,6 +249,8 @@ class ExerciseResponse(AppBaseModel):
     max_reps: int
     reps_step: int
     weights: list[float]
+    usage: ExerciseUsageResponse | None = None
+    can_delete: bool | None = None
 
 
 class ExercisesResponse(AppBaseModel):

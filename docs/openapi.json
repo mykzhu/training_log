@@ -661,6 +661,10 @@
       },
       "ExerciseResponse": {
         "properties": {
+          "can_delete": {
+            "title": "Can Delete",
+            "type": "boolean"
+          },
           "default_reps": {
             "title": "Default Reps",
             "type": "integer"
@@ -716,6 +720,9 @@
           "sort_order": {
             "title": "Sort Order",
             "type": "integer"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/ExerciseUsageResponse"
           },
           "weight_step": {
             "title": "Weight Step",
@@ -898,6 +905,29 @@
           }
         },
         "title": "ExerciseUpdateRequest",
+        "type": "object"
+      },
+      "ExerciseUsageResponse": {
+        "properties": {
+          "draft_count": {
+            "title": "Draft Count",
+            "type": "integer"
+          },
+          "set_count": {
+            "title": "Set Count",
+            "type": "integer"
+          },
+          "workout_count": {
+            "title": "Workout Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "workout_count",
+          "set_count",
+          "draft_count"
+        ],
+        "title": "ExerciseUsageResponse",
         "type": "object"
       },
       "ExerciseWeightsResponse": {

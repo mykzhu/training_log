@@ -355,10 +355,76 @@ def get_weight_options_by_exercise_ids(
     return weights_by_exercise
 
 
+def default_usage_counts() -> dict[str, int]:
+    return {
+        "workout_count": 0,
+        "set_count": 0,
+        "draft_count": 0,
+    }
+
+
+def get_exercise_usage_counts_by_ids(
+    conn: sqlite3.Connection,
+    exercise_ids: list[int],
+) -> dict[int, dict[str, int]]:
+    unique_ids = sorted({int(exercise_id) for exercise_id in exercise_ids})
+    usage_by_id = {
+        exercise_id: default_usage_counts()
+        for exercise_id in unique_ids
+    }
+    if not unique_ids:
+        return usage_by_id
+
+    placeholders = ", ".join("?" for _ in unique_ids)
+    workout_rows = conn.execute(
+        f"""
+        SELECT exercise_id, COUNT(DISTINCT workout_id) AS workout_count
+        FROM workout_exercises
+        WHERE exercise_id IN ({placeholders})
+        GROUP BY exercise_id
+        """,
+        unique_ids,
+    ).fetchall()
+    for row in workout_rows:
+        usage_by_id[int(row["exercise_id"])]["workout_count"] = int(
+            row["workout_count"]
+        )
+
+    set_rows = conn.execute(
+        f"""
+        SELECT we.exercise_id, COUNT(*) AS set_count
+        FROM workout_exercises we
+        JOIN set_entries se ON se.workout_exercise_id = we.id
+        WHERE we.exercise_id IN ({placeholders})
+        GROUP BY we.exercise_id
+        """,
+        unique_ids,
+    ).fetchall()
+    for row in set_rows:
+        usage_by_id[int(row["exercise_id"])]["set_count"] = int(row["set_count"])
+
+    draft_rows = conn.execute(
+        f"""
+        SELECT exercise_id, COUNT(*) AS draft_count
+        FROM active_draft_exercises
+        WHERE exercise_id IN ({placeholders})
+        GROUP BY exercise_id
+        """,
+        unique_ids,
+    ).fetchall()
+    for row in draft_rows:
+        usage_by_id[int(row["exercise_id"])]["draft_count"] = int(
+            row["draft_count"]
+        )
+
+    return usage_by_id
+
+
 def hydrate_exercises(
     rows: list[sqlite3.Row],
     *,
     include_weights: bool = True,
+    usage_by_id: dict[int, dict[str, int]] | None = None,
 ) -> list[dict[str, Any]]:
     exercises = [
         {
@@ -381,6 +447,8 @@ def hydrate_exercises(
             "max_reps": int(value_or_default(row["max_reps"], 50)),
             "reps_step": int(value_or_default(row["reps_step"], 1)),
             "weights": [],
+            "usage": default_usage_counts(),
+            "can_delete": True,
         }
         for row in rows
     ]
@@ -391,6 +459,15 @@ def hydrate_exercises(
         )
         for exercise in exercises:
             exercise["weights"] = weights_by_exercise.get(exercise["id"], [])
+
+    usage_source = usage_by_id or {}
+    for exercise in exercises:
+        usage = usage_source.get(exercise["id"], default_usage_counts())
+        exercise["usage"] = usage
+        exercise["can_delete"] = (
+            usage["workout_count"] == 0
+            and usage["draft_count"] == 0
+        )
 
     return exercises
 
@@ -426,8 +503,16 @@ def list_exercises(
             ORDER BY sort_order ASC, name COLLATE NOCASE ASC, id ASC
             """
         ).fetchall()
+        usage_by_id = get_exercise_usage_counts_by_ids(
+            conn,
+            [int(row["id"]) for row in rows],
+        )
 
-    return hydrate_exercises(rows, include_weights=include_weights)
+    return hydrate_exercises(
+        rows,
+        include_weights=include_weights,
+        usage_by_id=usage_by_id,
+    )
 
 
 def get_exercise(
@@ -459,11 +544,20 @@ def get_exercise(
             """,
             (exercise_id,),
         ).fetchone()
+        usage_by_id = (
+            get_exercise_usage_counts_by_ids(conn, [exercise_id])
+            if row is not None
+            else {}
+        )
 
     if row is None:
         return None
 
-    return hydrate_exercises([row], include_weights=include_weights)[0]
+    return hydrate_exercises(
+        [row],
+        include_weights=include_weights,
+        usage_by_id=usage_by_id,
+    )[0]
 
 
 def get_exercise_by_name(name: str) -> dict[str, Any] | None:
@@ -493,11 +587,16 @@ def get_exercise_by_name(name: str) -> dict[str, Any] | None:
             """,
             (normalized_name,),
         ).fetchone()
+        usage_by_id = (
+            get_exercise_usage_counts_by_ids(conn, [int(row["id"])])
+            if row is not None
+            else {}
+        )
 
     if row is None:
         return None
 
-    return hydrate_exercises([row])[0]
+    return hydrate_exercises([row], usage_by_id=usage_by_id)[0]
 
 
 def next_sort_order(conn: sqlite3.Connection) -> int:
@@ -715,37 +814,10 @@ def get_exercise_usage_counts(
     conn: sqlite3.Connection,
     exercise_id: int,
 ) -> dict[str, int]:
-    workout_count = conn.execute(
-        """
-        SELECT COUNT(DISTINCT workout_id)
-        FROM workout_exercises
-        WHERE exercise_id = ?
-        """,
-        (exercise_id,),
-    ).fetchone()[0]
-    set_count = conn.execute(
-        """
-        SELECT COUNT(*)
-        FROM workout_exercises we
-        JOIN set_entries se ON se.workout_exercise_id = we.id
-        WHERE we.exercise_id = ?
-        """,
-        (exercise_id,),
-    ).fetchone()[0]
-    draft_count = conn.execute(
-        """
-        SELECT COUNT(*)
-        FROM active_draft_exercises
-        WHERE exercise_id = ?
-        """,
-        (exercise_id,),
-    ).fetchone()[0]
-
-    return {
-        "workout_count": int(workout_count),
-        "set_count": int(set_count),
-        "draft_count": int(draft_count),
-    }
+    return get_exercise_usage_counts_by_ids(conn, [exercise_id]).get(
+        exercise_id,
+        default_usage_counts(),
+    )
 
 
 def delete_exercise_by_id(exercise_id: int) -> dict[str, Any] | None:

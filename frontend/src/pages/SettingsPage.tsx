@@ -97,6 +97,22 @@ function replaceExerciseInList(exercises: Exercise[], updated: Exercise) {
   );
 }
 
+function formatExerciseUsage(exercise: Exercise) {
+  const usage = exercise.usage;
+  if (!usage) {
+    return "Usage unavailable";
+  }
+
+  const parts = [
+    `Used by ${usage.workout_count} workout${usage.workout_count === 1 ? "" : "s"}`,
+    `${usage.set_count} set${usage.set_count === 1 ? "" : "s"}`,
+  ];
+  if (usage.draft_count > 0) {
+    parts.push("active draft");
+  }
+  return parts.join(" | ");
+}
+
 function parseWeight(value: string) {
   const weight = Number(value);
   return Number.isFinite(weight) && weight >= 0 ? weight : null;
@@ -1485,15 +1501,42 @@ export default function SettingsPage() {
                 </section>
 
                 <section className="settings-danger-zone">
+                  {(() => {
+                    const usage = exercise.usage;
+                    const canDelete = exercise.can_delete !== false;
+
+                    return (
+                      <>
                   <div>
                     <h3>Danger zone</h3>
                     <p className="muted small">
                       Delete only exercises that have no workout history. Use
                       Inactive to hide exercises that already have logs.
                     </p>
+                    <p className="muted small">
+                      {formatExerciseUsage(exercise)}
+                    </p>
+                    {!canDelete ? (
+                      <p className="muted small">
+                        Cannot delete: used by {usage?.workout_count ?? 0} workout
+                        {(usage?.workout_count ?? 0) === 1 ? "" : "s"}
+                        {usage?.draft_count
+                          ? " and active draft"
+                          : ""}
+                        . Deactivate it instead.
+                      </p>
+                    ) : null}
                   </div>
 
-                  {confirmDeleteExerciseId === exercise.id ? (
+                  {!canDelete ? (
+                    <button
+                      className="danger-button compact-action"
+                      disabled
+                      type="button"
+                    >
+                      Delete
+                    </button>
+                  ) : confirmDeleteExerciseId === exercise.id ? (
                     <div className="danger-confirm-row">
                       <span>
                         Delete "{exercise.name}"? This removes its weight presets
@@ -1525,6 +1568,9 @@ export default function SettingsPage() {
                       Delete
                     </button>
                   )}
+                      </>
+                    );
+                  })()}
                 </section>
                 </div>
               </article>

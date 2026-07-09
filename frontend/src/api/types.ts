@@ -14,6 +14,12 @@ export type ExerciseMeasurementType =
   | "loaded_carry_distance"
   | "reps_only";
 
+export type ExerciseUsage = {
+  workout_count: number;
+  set_count: number;
+  draft_count: number;
+};
+
 export type CurrentWorkoutExercise = {
   draft_exercise_id: number;
   exercise_id: number;
@@ -466,6 +472,8 @@ export type Exercise = {
   max_reps: number;
   reps_step: number;
   weights: number[];
+  usage?: ExerciseUsage | null;
+  can_delete?: boolean | null;
 };
 
 export type ExerciseCreatePayload = {

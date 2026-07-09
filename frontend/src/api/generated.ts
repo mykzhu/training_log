@@ -152,6 +152,7 @@ export type ExerciseProfilesResponse = {
 };
 
 export type ExerciseResponse = {
+  can_delete?: boolean | null;
   default_reps: number;
   default_weight: number;
   id: number;
@@ -166,6 +167,7 @@ export type ExerciseResponse = {
   reps_step: number;
   reps_unit: string;
   sort_order: number;
+  usage?: ExerciseUsageResponse | null;
   weight_step: number;
   weights: Array<number>;
 };
@@ -197,6 +199,12 @@ export type ExerciseUpdateRequest = {
   reps_step?: number | null;
   reps_unit?: string | null;
   weight_step?: number | null;
+};
+
+export type ExerciseUsageResponse = {
+  draft_count: number;
+  set_count: number;
+  workout_count: number;
 };
 
 export type ExerciseWeightsResponse = {
@@ -630,6 +638,7 @@ export type ApiSchemas = {
   ExerciseResponse: ExerciseResponse;
   ExerciseStatsResponseModel: ExerciseStatsResponseModel;
   ExerciseUpdateRequest: ExerciseUpdateRequest;
+  ExerciseUsageResponse: ExerciseUsageResponse;
   ExerciseWeightsResponse: ExerciseWeightsResponse;
   ExerciseWeightsUpdateRequest: ExerciseWeightsUpdateRequest;
   ExercisesResponse: ExercisesResponse;
