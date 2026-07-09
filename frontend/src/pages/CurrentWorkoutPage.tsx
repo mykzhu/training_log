@@ -265,11 +265,12 @@ function metricClassForGarminStatus(status: string | undefined) {
   if (
     status === "insufficient_baseline" ||
     status === "historical_only" ||
-    status === "connected_not_synced"
+    status === "connected_not_synced" ||
+    status === "partial_today"
   ) {
     return "metric-yellow";
   }
-  if (status === "display_only") {
+  if (status === "display_only" || status === "partial_sync") {
     return "metric-orange";
   }
 
@@ -282,6 +283,8 @@ function metricClassForPresence(present: boolean) {
 
 function garminSnapshotStatusLabel(status: string | undefined) {
   const labels: Record<string, string> = {
+    partial_sync: "partial sync",
+    partial_today: "partial today",
     today_synced: "today synced",
     historical_only: "historical only",
     connected_not_synced: "connected, not synced",

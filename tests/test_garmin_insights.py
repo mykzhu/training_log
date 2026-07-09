@@ -76,7 +76,10 @@ class GarminInsightsUnificationTests(unittest.TestCase):
             body_battery_end=20,
         )
 
-        adjustment = build_garmin_readiness_adjustment("2026-06-26T10:00:00")
+        adjustment = build_garmin_readiness_adjustment(
+            "2026-06-26T10:00:00",
+            today=date(2026, 6, 26),
+        )
         stats = GarminService().stats("35", today=date(2026, 6, 26))
 
         self.assertEqual(

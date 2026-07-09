@@ -9,6 +9,8 @@ from app.services import date_service
 
 BASELINE_DAYS = 28
 MIN_BASELINE_SAMPLES = 7
+PARTIAL_SYNC_STEP_THRESHOLD = 500
+PARTIAL_SYNC_HOUR_CUTOFF = 12
 BASELINE_COLUMNS = (
     "resting_heart_rate",
     "hrv_ms",
@@ -28,6 +30,130 @@ class GarminInsightInputs:
     current_metric: dict[str, Any] | None
     previous_metric: dict[str, Any] | None
     baseline_metrics: list[dict[str, Any]]
+
+
+def synced_hour(metric: dict[str, Any]) -> int | None:
+    synced_at = metric.get("synced_at")
+    if synced_at is None:
+        return None
+    try:
+        return datetime.fromisoformat(str(synced_at)).hour
+    except ValueError:
+        return None
+
+
+def metric_completeness(
+    metric: dict[str, Any] | None,
+    *,
+    today: date,
+) -> dict[str, Any]:
+    if metric is None:
+        return {
+            "is_complete": False,
+            "completeness_status": "missing",
+            "completeness_message": "No Garmin row is available.",
+        }
+
+    metric_day = metric_date(metric.get("date"))
+    steps = metric.get("steps")
+    synced_date = metric_date(metric.get("synced_at"))
+    hour = synced_hour(metric)
+    low_early_steps = (
+        metric_day == today
+        and synced_date == metric_day
+        and isinstance(steps, int)
+        and steps < PARTIAL_SYNC_STEP_THRESHOLD
+        and hour is not None
+        and hour < PARTIAL_SYNC_HOUR_CUTOFF
+    )
+
+    if low_early_steps:
+        return {
+            "is_complete": False,
+            "completeness_status": "partial_sync",
+            "completeness_message": (
+                "This row was synced early with very low steps; daily totals may still change."
+            ),
+        }
+
+    if metric_day == today:
+        return {
+            "is_complete": False,
+            "completeness_status": "partial_today",
+            "completeness_message": (
+                "Today is still in progress; use yesterday for readiness context."
+            ),
+        }
+
+    if metric.get("hrv_ms") is None:
+        return {
+            "is_complete": False,
+            "completeness_status": "missing_hrv",
+            "completeness_message": "This historical Garmin row is missing HRV.",
+        }
+
+    required_fields = (
+        "resting_heart_rate",
+        "stress_avg",
+        "body_battery_start",
+    )
+    if any(metric.get(field) is None for field in required_fields):
+        return {
+            "is_complete": False,
+            "completeness_status": "missing_fields",
+            "completeness_message": "This Garmin row is missing readiness fields.",
+        }
+
+    return {
+        "is_complete": True,
+        "completeness_status": "complete",
+        "completeness_message": "Complete historical Garmin row.",
+    }
+
+
+def annotate_metric_completeness(
+    metric: dict[str, Any] | None,
+    *,
+    today: date,
+) -> dict[str, Any] | None:
+    if metric is None:
+        return None
+    return {
+        **metric,
+        **metric_completeness(metric, today=today),
+    }
+
+
+def annotate_metrics_completeness(
+    metrics: list[dict[str, Any]],
+    *,
+    today: date,
+) -> list[dict[str, Any]]:
+    return [
+        annotate_metric_completeness(metric, today=today) or metric
+        for metric in metrics
+    ]
+
+
+def latest_complete_metric_before(
+    metric_date_value: str,
+    *,
+    today: date,
+    limit: int = BASELINE_DAYS + 7,
+) -> dict[str, Any] | None:
+    current_day = metric_date(metric_date_value)
+    if current_day is None:
+        return None
+
+    metrics = garmin_repository.list_daily_metrics(
+        end_date=(current_day - timedelta(days=1)).isoformat(),
+        limit=limit,
+    )
+    for metric in metrics:
+        annotated = annotate_metric_completeness(metric, today=today)
+        if annotated and annotated["is_complete"]:
+            return annotated
+    return None
 
 
 def parse_as_of_date_with_source(as_of: str | None) -> tuple[date, str]:
@@ -258,8 +384,13 @@ def stats_freshness(
     latest_date = metric_date(latest_metric.get("date") if latest_metric else None)
     days_since = (today - latest_date).days if latest_date is not None else None
     if latest_date == today:
-        status = "fresh"
-        message = "Today synced"
+        completeness = metric_completeness(latest_metric, today=today)
+        if completeness["is_complete"]:
+            status = "fresh"
+            message = "Today synced"
+        else:
+            status = str(completeness["completeness_status"])
+            message = str(completeness["completeness_message"])
     elif latest_date is not None:
         status = "historical_only"
         message = "Historical only - not scored as today"

@@ -72,9 +72,9 @@ type ChartCardProps = {
 type MetricDomain = [number, number];
 
 type NumericStatsKey = {
-  [K in keyof GarminStatsPoint]: GarminStatsPoint[K] extends number | null
-    ? K
-    : never;
+  [K in keyof GarminStatsPoint]-?: Extract<GarminStatsPoint[K], number> extends never
+    ? never
+    : K;
 }[keyof GarminStatsPoint];
 
 function parseRange(value: string | null): GarminStatsRange {
@@ -179,6 +179,8 @@ function statusLabel(status: string | null | undefined) {
     normal: "Normal",
     not_connected: "Not connected",
     not_enough_data: "Not enough data",
+    partial_sync: "Partial sync",
+    partial_today: "Partial today",
     poor: "Poor",
     very_low: "Very low",
     watch: "Watch",
@@ -191,10 +193,10 @@ function metricClassForStatus(status: string | null | undefined) {
   if (status === "good" || status === "normal" || status === "fresh") {
     return "metric-green";
   }
-  if (status === "watch" || status === "low" || status === "display_only" || status === "not_enough_data") {
+  if (status === "watch" || status === "low" || status === "display_only" || status === "not_enough_data" || status === "partial_today") {
     return "metric-yellow";
   }
-  if (status === "historical_only" || status === "insufficient_baseline" || status === "very_low" || status === "high" || status === "not_connected") {
+  if (status === "historical_only" || status === "insufficient_baseline" || status === "very_low" || status === "high" || status === "not_connected" || status === "partial_sync") {
     return "metric-orange";
   }
   if (status === "poor" || status === "missing" || status === "no_data") {

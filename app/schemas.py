@@ -331,6 +331,9 @@ class GarminDailyMetricResponse(AppBaseModel):
     steps: int | None
     synced_at: str
     raw_diagnostics: dict[str, Any]
+    is_complete: bool | None = None
+    completeness_status: str | None = None
+    completeness_message: str | None = None
 
 
 class GarminStatusResponse(AppBaseModel):
@@ -425,6 +428,9 @@ class GarminStatsPointResponse(AppBaseModel):
     body_battery_start: int | None
     body_battery_end: int | None
     steps: int | None
+    is_complete: bool | None = None
+    completeness_status: str | None = None
+    completeness_message: str | None = None
 
 
 class GarminStatsCoverageResponse(AppBaseModel):
@@ -436,6 +442,9 @@ class GarminStatsCoverageResponse(AppBaseModel):
 class GarminStatsLatestMetricResponse(AppBaseModel):
     date: str
     synced_at: str
+    is_complete: bool | None = None
+    completeness_status: str | None = None
+    completeness_message: str | None = None
 
 
 class GarminStatsBaselinesResponse(AppBaseModel):
@@ -484,6 +493,11 @@ class GarminStatsInsightsResponse(AppBaseModel):
     previous_date: str
     baseline_start_date: str
     baseline_end_date: str
+    readiness_scoring_date: str | None = None
+    readiness_scoring_date_source: str | None = None
+    readiness_previous_date: str | None = None
+    current_metric_completeness: dict[str, Any] | None = None
+    scoring_metric_completeness: dict[str, Any] | None = None
     baseline_days: int
     minimum_baseline_samples: int
     freshness: GarminStatsFreshnessResponse

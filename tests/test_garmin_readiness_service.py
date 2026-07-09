@@ -84,10 +84,12 @@ class GarminReadinessServiceTests(unittest.TestCase):
 
         self.assertEqual(adjustment["current_date"], "2026-06-26")
         self.assertEqual(adjustment["previous_date"], "2026-06-25")
+        self.assertEqual(adjustment["readiness_scoring_date"], "2026-06-25")
+        self.assertEqual(adjustment["readiness_scoring_date_source"], "previous_completed")
         self.assertEqual(adjustment["local_date_source"], "configured_timezone_today")
         self.assertEqual(
-            self.rule_by_metric(adjustment, "resting_heart_rate")["status"],
-            "scored",
+            self.rule_by_metric(adjustment, "resting_heart_rate")["source_date"],
+            "2026-06-25",
         )
 
     def test_explicit_as_of_wins_over_configured_timezone_today(self) -> None:
@@ -205,6 +207,52 @@ class GarminReadinessServiceTests(unittest.TestCase):
         )
         self.assertEqual(adjustment["missing_rule_count"], 4)
         self.assertEqual(adjustment["score_delta"], -8)
+
+    def test_partial_today_metric_uses_previous_completed_day_for_readiness(self) -> None:
+        current_day = date(2026, 7, 9)
+        for offset in range(10, 38):
+            self.insert_metric((current_day - timedelta(days=offset)).isoformat())
+        self.insert_metric("2026-07-07", stress_avg=85)
+        self.insert_metric(
+            "2026-07-08",
+            resting_heart_rate=54,
+            hrv_ms=60.0,
+            stress_avg=25,
+            body_battery_start=92,
+        )
+        self.insert_metric(
+            "2026-07-09",
+            resting_heart_rate=75,
+            hrv_ms=None,
+            stress_avg=25,
+            body_battery_start=52,
+            body_battery_end=52,
+            steps=97,
+        )
+
+        with patch("app.services.date_service.app_today", return_value=current_day):
+            adjustment = build_garmin_readiness_adjustment("2026-07-09T10:00:00")
+
+        self.assertEqual(adjustment["current_date"], "2026-07-09")
+        self.assertEqual(adjustment["readiness_scoring_date"], "2026-07-08")
+        self.assertEqual(adjustment["readiness_scoring_date_source"], "previous_completed")
+        self.assertEqual(adjustment["current_metric_completeness"]["is_complete"], False)
+        self.assertEqual(
+            adjustment["current_metric_completeness"]["completeness_status"],
+            "partial_sync",
+        )
+        self.assertEqual(
+            self.rule_by_metric(adjustment, "hrv_ms")["source_date"],
+            "2026-07-08",
+        )
+        self.assertEqual(
+            self.rule_by_metric(adjustment, "current_stress_avg")["source_date"],
+            "2026-07-09",
+        )
+        self.assertEqual(
+            self.rule_by_metric(adjustment, "stress_avg")["source_date"],
+            "2026-07-07",
+        )
 
 
 if __name__ == "__main__":

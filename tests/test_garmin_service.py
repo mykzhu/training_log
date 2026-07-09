@@ -493,7 +493,7 @@ class GarminServiceTests(unittest.TestCase):
                 return signal
         raise AssertionError(f"Signal not found: {metric}")
 
-    def test_stats_insights_reports_fresh_poor_recovery_signals(self) -> None:
+    def test_stats_insights_treats_today_row_as_partial_display_context(self) -> None:
         for offset in range(1, 29):
             metric_date = (date(2026, 6, 26) - timedelta(days=offset)).isoformat()
             self.seed_metric(
@@ -524,21 +524,30 @@ class GarminServiceTests(unittest.TestCase):
         response = service.stats("35", today=date(2026, 6, 26))
         insights = response["insights"]
 
-        self.assertEqual(insights["freshness"]["status"], "fresh")
+        self.assertEqual(insights["freshness"]["status"], "partial_today")
         self.assertEqual(insights["overall_status"], "poor")
-        self.assertEqual(insights["readiness_impact"]["score_delta"], -20)
+        self.assertEqual(insights["readiness_impact"]["score_delta"], -6)
+        self.assertEqual(insights["readiness_scoring_date"], "2026-06-25")
+        self.assertEqual(
+            insights["readiness_scoring_date_source"],
+            "previous_completed",
+        )
         self.assertEqual(self.signal_by_metric(response, "hrv_ms")["status"], "poor")
         self.assertEqual(
+            self.signal_by_metric(response, "hrv_ms")["source_date"],
+            "2026-06-25",
+        )
+        self.assertEqual(
             self.signal_by_metric(response, "resting_heart_rate")["status"],
-            "poor",
+            "good",
         )
         self.assertEqual(
             self.signal_by_metric(response, "body_battery_start")["status"],
-            "poor",
+            "normal",
         )
         self.assertEqual(
             self.signal_by_metric(response, "stress_avg")["source_date"],
-            "2026-06-25",
+            "2026-06-24",
         )
         self.assertEqual(
             self.signal_by_metric(response, "current_stress_avg")["status"],
@@ -597,7 +606,7 @@ class GarminServiceTests(unittest.TestCase):
         response = service.stats("35", today=date(2026, 6, 26))
 
         self.assertEqual(response["metric_count"], 1)
-    def test_recovery_snapshot_reports_today_synced_status(self) -> None:
+    def test_recovery_snapshot_reports_partial_today_status(self) -> None:
         self.seed_metric("2026-06-25")
         self.seed_metric("2026-06-26", hrv_ms=None)
         service = GarminService(NoFetchGarminClient(connected=True))
@@ -607,12 +616,38 @@ class GarminServiceTests(unittest.TestCase):
         self.assertTrue(response["connected"])
         self.assertEqual(response["current_date"], "2026-06-26")
         self.assertEqual(response["previous_date"], "2026-06-25")
-        self.assertEqual(response["freshness_status"], "today_synced")
-        self.assertEqual(response["message"], "Today synced")
+        self.assertEqual(response["freshness_status"], "partial_today")
+        self.assertEqual(
+            response["message"],
+            "Today is still in progress; use yesterday for readiness context.",
+        )
         self.assertTrue(response["today_present"])
         self.assertTrue(response["yesterday_present"])
         self.assertEqual(response["latest_metric_date"], "2026-06-26")
+        self.assertFalse(response["today"]["is_complete"])
+        self.assertEqual(response["today"]["completeness_status"], "partial_today")
         self.assertIn("HRV", response["missing_today_metrics"])
+
+    def test_stats_marks_low_early_today_row_as_partial_sync(self) -> None:
+        self.seed_metric("2026-06-25")
+        self.seed_metric(
+            "2026-06-26",
+            hrv_ms=None,
+            steps=97,
+            synced_at="2026-06-26T09:25:50",
+        )
+        service = GarminService(ExplodingGarminClient())
+
+        response = service.stats("35", today=date(2026, 6, 26))
+
+        self.assertEqual(response["latest_metric"]["completeness_status"], "partial_sync")
+        self.assertEqual(response["series"][-1]["completeness_status"], "partial_sync")
+        self.assertEqual(response["insights"]["freshness"]["status"], "partial_sync")
+        self.assertEqual(
+            response["insights"]["current_metric_completeness"]["completeness_status"],
+            "partial_sync",
+        )
+        self.assertIn("partial", response["insights"]["overall_message"].lower())
 
     def test_recovery_snapshot_reports_historical_only_status(self) -> None:
         self.seed_metric("2026-06-25")

@@ -205,6 +205,9 @@ export type GarminDailyMetric = {
   steps: number | null;
   synced_at: string;
   raw_diagnostics: Record<string, unknown>;
+  is_complete?: boolean | null;
+  completeness_status?: string | null;
+  completeness_message?: string | null;
 };
 
 export type GarminStatus = {
@@ -280,6 +283,9 @@ export type GarminStatsPoint = {
   body_battery_start: number | null;
   body_battery_end: number | null;
   steps: number | null;
+  is_complete?: boolean | null;
+  completeness_status?: string | null;
+  completeness_message?: string | null;
 };
 
 
@@ -321,6 +327,11 @@ export type GarminStatsInsights = {
   previous_date: string;
   baseline_start_date: string;
   baseline_end_date: string;
+  readiness_scoring_date?: string | null;
+  readiness_scoring_date_source?: string | null;
+  readiness_previous_date?: string | null;
+  current_metric_completeness?: Record<string, unknown> | null;
+  scoring_metric_completeness?: Record<string, unknown> | null;
   baseline_days: number;
   minimum_baseline_samples: number;
   freshness: GarminStatsFreshness;
@@ -343,6 +354,9 @@ export type GarminStatsResponse = {
   latest_metric: {
     date: string;
     synced_at: string;
+    is_complete?: boolean | null;
+    completeness_status?: string | null;
+    completeness_message?: string | null;
   } | null;
   series: GarminStatsPoint[];
   baselines: {

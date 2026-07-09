@@ -11,6 +11,8 @@ from app.services.garmin_client import GarminClientAdapter
 from app.services.garmin_insights import (
     BASELINE_DAYS as GARMIN_STATS_BASELINE_DAYS,
     MIN_BASELINE_SAMPLES as GARMIN_STATS_MIN_BASELINE_SAMPLES,
+    annotate_metric_completeness,
+    annotate_metrics_completeness,
     baseline_metric_stats,
     build_garmin_insight_inputs,
     classify_body_battery_start,
@@ -84,6 +86,9 @@ def stats_point(metric: dict[str, Any]) -> dict[str, Any]:
     return {
         "date": metric.get("date"),
         **{column: metric.get(column) for column in garmin_repository.GARMIN_VALUE_COLUMNS},
+        "is_complete": metric.get("is_complete"),
+        "completeness_status": metric.get("completeness_status"),
+        "completeness_message": metric.get("completeness_message"),
     }
 
 
@@ -198,6 +203,8 @@ def stats_overall_message(
         return "No Garmin metrics are available for the scoring date."
     if freshness["status"] == "historical_only":
         return "Latest Garmin row is historical, so current-day recovery metrics are not scored as today."
+    if freshness["status"] in {"partial_today", "partial_sync"}:
+        return "Today's Garmin row is partial, so readiness uses the previous completed row."
 
     concerning = [
         signal["label"]
@@ -219,17 +226,28 @@ def build_garmin_stats_insights(
     latest_metric: dict[str, Any] | None,
 ) -> dict[str, Any]:
     inputs = build_garmin_insight_inputs(today=today)
-    adjustment = build_garmin_readiness_adjustment(f"{inputs.current_date}T00:00:00")
+    adjustment = build_garmin_readiness_adjustment(
+        f"{inputs.current_date}T00:00:00",
+        today=today,
+    )
     rules_by_metric = {rule["metric"]: rule for rule in adjustment["rules"]}
+    readiness_source_date = str(adjustment.get("readiness_scoring_date") or inputs.current_date)
+    readiness_metric = garmin_repository.get_daily_metric(readiness_source_date)
+    previous_readiness_date = str(adjustment.get("readiness_previous_date") or inputs.previous_date)
+    previous_readiness_metric = garmin_repository.get_daily_metric(previous_readiness_date)
+    baseline_metrics = garmin_repository.list_daily_metrics(
+        start_date=str(adjustment["baseline_start_date"]),
+        end_date=str(adjustment["baseline_end_date"]),
+    )
 
     signals = [
         build_metric_signal(
             metric_key="hrv_ms",
             label="HRV",
             unit="ms",
-            source_metric=inputs.current_metric,
-            source_date=inputs.current_date,
-            baseline_metrics=inputs.baseline_metrics,
+            source_metric=readiness_metric,
+            source_date=readiness_source_date,
+            baseline_metrics=baseline_metrics,
             direction="higher_is_better",
             used_for_readiness=True,
             score_delta=int(rules_by_metric.get("hrv_ms", {}).get("score_delta") or 0),
@@ -240,9 +258,9 @@ def build_garmin_stats_insights(
             metric_key="resting_heart_rate",
             label="Resting HR",
             unit="bpm",
-            source_metric=inputs.current_metric,
-            source_date=inputs.current_date,
-            baseline_metrics=inputs.baseline_metrics,
+            source_metric=readiness_metric,
+            source_date=readiness_source_date,
+            baseline_metrics=baseline_metrics,
             direction="lower_is_better",
             used_for_readiness=True,
             score_delta=int(rules_by_metric.get("resting_heart_rate", {}).get("score_delta") or 0),
@@ -253,9 +271,9 @@ def build_garmin_stats_insights(
             metric_key="body_battery_start",
             label="Body Battery start",
             unit="",
-            source_metric=inputs.current_metric,
-            source_date=inputs.current_date,
-            baseline_metrics=inputs.baseline_metrics,
+            source_metric=readiness_metric,
+            source_date=readiness_source_date,
+            baseline_metrics=baseline_metrics,
             direction="higher_is_better",
             used_for_readiness=True,
             score_delta=int(rules_by_metric.get("body_battery_start", {}).get("score_delta") or 0),
@@ -267,9 +285,9 @@ def build_garmin_stats_insights(
             metric_key="stress_avg",
             label="Previous-day stress",
             unit="",
-            source_metric=inputs.previous_metric,
-            source_date=inputs.previous_date,
-            baseline_metrics=inputs.baseline_metrics,
+            source_metric=previous_readiness_metric,
+            source_date=previous_readiness_date,
+            baseline_metrics=baseline_metrics,
             direction="lower_is_better",
             used_for_readiness=True,
             score_delta=int(rules_by_metric.get("stress_avg", {}).get("score_delta") or 0),
@@ -283,7 +301,7 @@ def build_garmin_stats_insights(
             unit="",
             source_metric=inputs.current_metric,
             source_date=inputs.current_date,
-            baseline_metrics=inputs.baseline_metrics,
+            baseline_metrics=baseline_metrics,
             direction="contextual",
             used_for_readiness=False,
             score_delta=0,
@@ -298,7 +316,7 @@ def build_garmin_stats_insights(
             unit="",
             source_metric=inputs.current_metric,
             source_date=inputs.current_date,
-            baseline_metrics=inputs.baseline_metrics,
+            baseline_metrics=baseline_metrics,
             direction="contextual",
             used_for_readiness=False,
             score_delta=0,
@@ -344,8 +362,13 @@ def build_garmin_stats_insights(
     return {
         "current_date": inputs.current_date,
         "previous_date": inputs.previous_date,
-        "baseline_start_date": inputs.baseline_start_date,
-        "baseline_end_date": inputs.baseline_end_date,
+        "baseline_start_date": adjustment["baseline_start_date"],
+        "baseline_end_date": adjustment["baseline_end_date"],
+        "readiness_scoring_date": adjustment["readiness_scoring_date"],
+        "readiness_scoring_date_source": adjustment["readiness_scoring_date_source"],
+        "readiness_previous_date": adjustment["readiness_previous_date"],
+        "current_metric_completeness": adjustment["current_metric_completeness"],
+        "scoring_metric_completeness": adjustment["scoring_metric_completeness"],
         "baseline_days": GARMIN_STATS_BASELINE_DAYS,
         "minimum_baseline_samples": GARMIN_STATS_MIN_BASELINE_SAMPLES,
         "freshness": freshness,
@@ -374,7 +397,13 @@ def build_garmin_stats_insights(
 def latest_metric_summary(metric: dict[str, Any] | None) -> dict[str, str] | None:
     if metric is None:
         return None
-    return {"date": str(metric["date"]), "synced_at": str(metric["synced_at"])}
+    return {
+        "date": str(metric["date"]),
+        "synced_at": str(metric["synced_at"]),
+        "is_complete": bool(metric.get("is_complete")),
+        "completeness_status": str(metric.get("completeness_status") or ""),
+        "completeness_message": str(metric.get("completeness_message") or ""),
+    }
 
 
 def number_from_keys(payload: Any, keys: tuple[str, ...]) -> float | None:
@@ -617,10 +646,14 @@ class GarminService:
         self.client = client or GarminClientAdapter()
 
     def status(self) -> dict[str, Any]:
+        today = date_service.app_today()
         return {
             "connected": self.client.has_tokens(),
             "last_synced_at": garmin_repository.get_last_synced_at(),
-            "latest_metric": garmin_repository.get_latest_metric(),
+            "latest_metric": annotate_metric_completeness(
+                garmin_repository.get_latest_metric(),
+                today=today,
+            ),
             "pending_mfa": bool(PENDING_MFA),
         }
 
@@ -750,7 +783,10 @@ class GarminService:
         start_date = (today - timedelta(days=sync_days - 1)).isoformat()
         return {
             "days": sync_days,
-            "metrics": garmin_repository.list_daily_metrics(start_date=start_date),
+            "metrics": annotate_metrics_completeness(
+                garmin_repository.list_daily_metrics(start_date=start_date),
+                today=today,
+            ),
         }
 
     def stats(
@@ -773,6 +809,7 @@ class GarminService:
             start_date=start_date,
             end_date=end_date,
         )
+        metrics = annotate_metrics_completeness(metrics, today=today)
         series = [stats_point(metric) for metric in metrics]
 
         if expected_days is None:
@@ -791,7 +828,10 @@ class GarminService:
             "available_days": len(metrics),
             "missing_days": missing_days,
         }
-        latest_metric = garmin_repository.get_latest_metric()
+        latest_metric = annotate_metric_completeness(
+            garmin_repository.get_latest_metric(),
+            today=today,
+        )
 
         return {
             "range": selected_range,
@@ -817,9 +857,18 @@ class GarminService:
         previous_day = today - timedelta(days=1)
         today_date = today.isoformat()
         previous_date = previous_day.isoformat()
-        today_metric = garmin_repository.get_daily_metric(today_date)
-        yesterday_metric = garmin_repository.get_daily_metric(previous_date)
-        latest_metric = garmin_repository.get_latest_metric()
+        today_metric = annotate_metric_completeness(
+            garmin_repository.get_daily_metric(today_date),
+            today=today,
+        )
+        yesterday_metric = annotate_metric_completeness(
+            garmin_repository.get_daily_metric(previous_date),
+            today=today,
+        )
+        latest_metric = annotate_metric_completeness(
+            garmin_repository.get_latest_metric(),
+            today=today,
+        )
         sample_start = (today - timedelta(days=34)).isoformat()
         connected = self.client.has_tokens()
         freshness_status = self._snapshot_freshness_status(
@@ -843,7 +892,7 @@ class GarminService:
             "latest_metric_date": str(latest_metric["date"]) if latest_metric else None,
             "freshness_status": freshness_status,
             "missing_today_metrics": self._missing_today_metrics(today_metric),
-            "message": self._snapshot_message(freshness_status),
+            "message": self._snapshot_message(freshness_status, today_metric),
         }
 
     def _snapshot_freshness_status(
@@ -854,6 +903,8 @@ class GarminService:
         latest_metric: dict[str, Any] | None,
     ) -> str:
         if today_metric is not None:
+            if today_metric.get("is_complete") is False:
+                return str(today_metric.get("completeness_status") or "partial_today")
             return "today_synced"
         if latest_metric is not None:
             return "historical_only"
@@ -861,7 +912,16 @@ class GarminService:
             return "connected_not_synced"
         return "not_connected"
 
-    def _snapshot_message(self, freshness_status: str) -> str:
+    def _snapshot_message(
+        self,
+        freshness_status: str,
+        today_metric: dict[str, Any] | None = None,
+    ) -> str:
+        if freshness_status in {"partial_today", "partial_sync"} and today_metric:
+            return str(
+                today_metric.get("completeness_message")
+                or "Today's Garmin row is partial."
+            )
         if freshness_status == "today_synced":
             return "Today synced"
         if freshness_status == "historical_only":
