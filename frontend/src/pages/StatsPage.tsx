@@ -43,6 +43,7 @@ import {
 } from "../utils/chartDateFormat";
 
 import type {
+  DataQualityWarning,
   ExerciseRepProgress,
   ExerciseRepTargetProgress,
   ExerciseRepWeightPoint,
@@ -527,6 +528,61 @@ function StatsInsightsSection({
             <span>{insight.title}</span>
             <strong>{insight.body}</strong>
             <p>{insight.detail}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function dataQualityTone(severity: string) {
+  if (severity === "risk") {
+    return "risk";
+  }
+  if (severity === "watch") {
+    return "watch";
+  }
+  return "info";
+}
+
+function DataQualityPanel({
+  warnings,
+  onOpenWorkout,
+}: {
+  warnings: DataQualityWarning[];
+  onOpenWorkout: (workoutId: number) => void;
+}) {
+  if (warnings.length === 0) {
+    return null;
+  }
+
+  return (
+    <section className="stats-insights-section" aria-label="Data notes">
+      <div className="stats-insights-heading">
+        <h2>Data notes</h2>
+        <p>Quality checks for interpreting this range.</p>
+      </div>
+
+      <div className="stats-insights-grid">
+        {warnings.map((warning) => (
+          <article
+            className={`stats-insight-card stats-insight-${dataQualityTone(
+              warning.severity,
+            )}`}
+            key={warning.key}
+          >
+            <span>{warning.title}</span>
+            <strong>{warning.count ?? "Note"}</strong>
+            <p>{warning.message}</p>
+            {typeof warning.workout_id === "number" && (
+              <button
+                className="strength-table-link strength-table-date"
+                onClick={() => onOpenWorkout(warning.workout_id as number)}
+                type="button"
+              >
+                Workout #{warning.workout_id}
+              </button>
+            )}
           </article>
         ))}
       </div>
@@ -2127,6 +2183,11 @@ const strengthWorkloadData =
           />
 
           <StatsInsightsSection insights={statsInsights} />
+
+          <DataQualityPanel
+            onOpenWorkout={navigateToWorkout}
+            warnings={stats.stats.data_quality_warnings}
+          />
 
           <div className="stats-chart-grid">
             <ChartCard

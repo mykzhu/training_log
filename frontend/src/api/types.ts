@@ -612,6 +612,15 @@ export type StatsSummary = {
   avg_relative_intensity: number | null;
 };
 
+export type DataQualityWarning = {
+  key: string;
+  severity: "info" | "watch" | "risk" | string;
+  title: string;
+  message: string;
+  count?: number | null;
+  workout_id?: number | null;
+};
+
 export type StatsSparkbars = {
   volume: string;
   volume_kg: string;
@@ -702,6 +711,7 @@ export type StatsResponse = {
     exercise_progress: ExerciseStrengthProgress[];
     exercise_rep_progress: ExerciseRepProgress[];
     exercise_weekly_workload: ExerciseWeeklyWorkload[];
+    data_quality_warnings: DataQualityWarning[];
     training_load: TrainingLoadSummary;
   };
   training_load: TrainingLoadSummary;

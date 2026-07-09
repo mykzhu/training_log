@@ -1,5 +1,6 @@
 from datetime import date, timedelta
 from collections.abc import Mapping
+from statistics import median
 from typing import Any
 
 from app.db import get_db
@@ -12,6 +13,7 @@ from app.services.analysis_service import (
     runtime_profiles_by_key,
 )
 from app.services.date_service import app_today
+from app.services.garmin_insights import metric_completeness
 from app.services.training_load_service import build_training_load_summary
 
 
@@ -844,6 +846,161 @@ def build_scatter_points(workouts: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def data_quality_warning(
+    *,
+    key: str,
+    severity: str,
+    title: str,
+    message: str,
+    count: int | None = None,
+    workout_id: int | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "key": key,
+        "severity": severity,
+        "title": title,
+        "message": message,
+    }
+    if count is not None:
+        payload["count"] = count
+    if workout_id is not None:
+        payload["workout_id"] = workout_id
+    return payload
+
+
+def latest_garmin_metric_from_workouts(workouts: list[Any]) -> dict[str, Any] | None:
+    if not workouts:
+        return None
+
+    first = workouts[0]
+    if first["latest_garmin_date"] is None:
+        return None
+
+    return {
+        "date": first["latest_garmin_date"],
+        "resting_heart_rate": first["latest_garmin_resting_heart_rate"],
+        "hrv_ms": first["latest_garmin_hrv_ms"],
+        "stress_avg": first["latest_garmin_stress_avg"],
+        "body_battery_start": first["latest_garmin_body_battery_start"],
+        "body_battery_end": first["latest_garmin_body_battery_end"],
+        "steps": first["latest_garmin_steps"],
+        "synced_at": first["latest_garmin_synced_at"],
+    }
+
+
+def build_data_quality_warnings(
+    *,
+    workouts: list[dict[str, Any]],
+    summary: dict[str, Any],
+    zero_kg_weighted_set_count: int,
+    latest_garmin_metric: dict[str, Any] | None = None,
+    today: date | None = None,
+) -> list[dict[str, Any]]:
+    warnings: list[dict[str, Any]] = []
+
+    if int(summary["bodyweight_reps"]) > 0:
+        warnings.append(
+            data_quality_warning(
+                key="bodyweight_excluded_from_kg_volume",
+                severity="info",
+                title="Bodyweight work is separate from kg volume",
+                message=(
+                    "Some sessions contain bodyweight-only work. Kg volume excludes "
+                    "this work; use load and back-stress charts for total dose."
+                ),
+                count=int(summary["bodyweight_reps"]),
+            )
+        )
+
+    load_values = [
+        float(workout["load_score"])
+        for workout in workouts
+        if float(workout["load_score"]) > 0
+    ]
+    load_median = median(load_values) if load_values else None
+    high_pain_low_load = [
+        workout
+        for workout in workouts
+        if workout["lower_back_pain"] is not None
+        and int(workout["lower_back_pain"]) >= 6
+        and load_median is not None
+        and float(workout["load_score"]) < float(load_median)
+    ]
+    if high_pain_low_load:
+        latest = high_pain_low_load[-1]
+        warnings.append(
+            data_quality_warning(
+                key="high_pain_low_load",
+                severity="watch",
+                title="High pain on a lower-load session",
+                message=(
+                    "High lower-back pain was logged on a session below the recent "
+                    "median load. This may reflect background pain rather than workout dose."
+                ),
+                count=len(high_pain_low_load),
+                workout_id=int(latest["id"]),
+            )
+        )
+
+    if workouts:
+        rpe_logged = sum(1 for workout in workouts if workout["session_rpe"] is not None)
+        pain_logged = sum(
+            1 for workout in workouts if workout["lower_back_pain"] is not None
+        )
+        minimum_feedback_count = len(workouts) * 0.7
+        if rpe_logged < minimum_feedback_count or pain_logged < minimum_feedback_count:
+            warnings.append(
+                data_quality_warning(
+                    key="missing_feedback",
+                    severity="info",
+                    title="Feedback coverage is low",
+                    message=(
+                        "Add RPE and lower-back pain feedback to improve trend quality."
+                    ),
+                    count=len(workouts) - min(rpe_logged, pain_logged),
+                )
+            )
+
+    if zero_kg_weighted_set_count > 0:
+        warnings.append(
+            data_quality_warning(
+                key="zero_kg_weighted_sets",
+                severity="info",
+                title="Some weighted exercises include 0 kg sets",
+                message=(
+                    "If these are warmups or bodyweight sets, this is okay; they will "
+                    "not add kg volume."
+                ),
+                count=zero_kg_weighted_set_count,
+            )
+        )
+
+    today = today or app_today()
+    latest_garmin_completeness = metric_completeness(
+        latest_garmin_metric,
+        today=today,
+    )
+    if (
+        latest_garmin_metric is not None
+        and not latest_garmin_completeness["is_complete"]
+    ):
+        status = str(latest_garmin_completeness["completeness_status"])
+        if status in {"partial_today", "partial_sync"}:
+            warnings.append(
+                data_quality_warning(
+                    key="partial_garmin_today",
+                    severity="watch",
+                    title="Today's Garmin data is partial",
+                    message=(
+                        "Today's Garmin row is partial. Readiness should use the "
+                        "previous completed day."
+                    ),
+                )
+            )
+
+    return warnings
+
+
 def build_stats2_charts(stats: dict[str, Any]) -> dict[str, Any]:
     workouts = stats["workouts"]
     exercise_stats = stats["exercise_stats"]
@@ -935,19 +1092,67 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
         if limit is None:
             workouts = conn.execute(
                 """
-                SELECT *
-                FROM workouts
+                WITH latest_garmin AS (
+                    SELECT
+                        date,
+                        resting_heart_rate,
+                        hrv_ms,
+                        stress_avg,
+                        body_battery_start,
+                        body_battery_end,
+                        steps,
+                        synced_at
+                    FROM garmin_daily_metrics
+                    ORDER BY date DESC
+                    LIMIT 1
+                )
+                SELECT
+                    w.*,
+                    latest_garmin.date AS latest_garmin_date,
+                    latest_garmin.resting_heart_rate AS latest_garmin_resting_heart_rate,
+                    latest_garmin.hrv_ms AS latest_garmin_hrv_ms,
+                    latest_garmin.stress_avg AS latest_garmin_stress_avg,
+                    latest_garmin.body_battery_start AS latest_garmin_body_battery_start,
+                    latest_garmin.body_battery_end AS latest_garmin_body_battery_end,
+                    latest_garmin.steps AS latest_garmin_steps,
+                    latest_garmin.synced_at AS latest_garmin_synced_at
+                FROM workouts w
+                LEFT JOIN latest_garmin ON 1 = 1
                 ORDER BY created_at ASC, id ASC
                 """
             ).fetchall()
         else:
             workouts = conn.execute(
                 """
+                WITH latest_garmin AS (
+                    SELECT
+                        date,
+                        resting_heart_rate,
+                        hrv_ms,
+                        stress_avg,
+                        body_battery_start,
+                        body_battery_end,
+                        steps,
+                        synced_at
+                    FROM garmin_daily_metrics
+                    ORDER BY date DESC
+                    LIMIT 1
+                )
                 SELECT *
                 FROM (
-                    SELECT *
-                    FROM workouts
-                    ORDER BY created_at DESC, id DESC
+                    SELECT
+                        w.*,
+                        latest_garmin.date AS latest_garmin_date,
+                        latest_garmin.resting_heart_rate AS latest_garmin_resting_heart_rate,
+                        latest_garmin.hrv_ms AS latest_garmin_hrv_ms,
+                        latest_garmin.stress_avg AS latest_garmin_stress_avg,
+                        latest_garmin.body_battery_start AS latest_garmin_body_battery_start,
+                        latest_garmin.body_battery_end AS latest_garmin_body_battery_end,
+                        latest_garmin.steps AS latest_garmin_steps,
+                        latest_garmin.synced_at AS latest_garmin_synced_at
+                    FROM workouts w
+                    LEFT JOIN latest_garmin ON 1 = 1
+                    ORDER BY w.created_at DESC, w.id DESC
                     LIMIT ?
                 )
                 ORDER BY created_at ASC, id ASC
@@ -977,10 +1182,18 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
     exercise_progress: dict[int, dict[str, Any]] = {}
     exercise_rep_progress: dict[int, dict[str, Any]] = {}
     exercise_weekly_workload: dict[int, dict[str, Any]] = {}
+    zero_kg_weighted_set_count = 0
 
     for workout in workouts:
         current_workout_id = int(workout["id"])
         details = details_by_workout.get(current_workout_id, [])
+        zero_kg_weighted_set_count += sum(
+            1
+            for item in details
+            if item["measurement_type"] == "weighted_reps"
+            for set_row in item["sets"]
+            if float(set_row["weight"]) == 0 and int(set_row["reps"]) > 0
+        )
 
         total_volume = sum(item["total_volume"] for item in details)
         total_volume_kg = sum(item["total_volume_kg"] for item in details)
@@ -1365,6 +1578,37 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
             }
         )
 
+    summary_payload = {
+        "workout_count": len(workout_items),
+        "total_volume": total_volume,
+        "total_volume_kg": total_volume_kg,
+        "bodyweight_reps": bodyweight_reps,
+        "duration_seconds": duration_seconds,
+        "distance_m": distance_m,
+        "weighted_reps": weighted_reps,
+        "total_reps": total_reps,
+        "total_sets": total_sets,
+        "avg_intensity": total_volume / total_reps if total_reps else None,
+        "avg_kg_per_rep": (
+            total_volume_kg / weighted_reps
+            if weighted_reps
+            else None
+        ),
+        "avg_rpe": sum(rpe_values) / len(rpe_values) if rpe_values else None,
+        "avg_back_pain": sum(back_values) / len(back_values) if back_values else None,
+        "total_load_score": total_load_score,
+        "avg_load_score": total_load_score / len(workout_items) if workout_items else None,
+        "total_compound_score": total_compound_score,
+        "avg_compound_score": total_compound_score / len(workout_items) if workout_items else None,
+        "total_back_stress_score": total_back_stress_score,
+        "avg_back_stress_score": total_back_stress_score / len(workout_items) if workout_items else None,
+        "avg_relative_intensity": (
+            sum(intensity_scores) / len(intensity_scores)
+            if intensity_scores
+            else None
+        ),
+    }
+
     return {
         "workouts": workout_items,
         "exercise_stats": sorted_exercise_stats,
@@ -1373,36 +1617,13 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
         "exercise_weekly_workload": (
             sorted_exercise_weekly_workload
         ),
-        "summary": {
-            "workout_count": len(workout_items),
-            "total_volume": total_volume,
-            "total_volume_kg": total_volume_kg,
-            "bodyweight_reps": bodyweight_reps,
-            "duration_seconds": duration_seconds,
-            "distance_m": distance_m,
-            "weighted_reps": weighted_reps,
-            "total_reps": total_reps,
-            "total_sets": total_sets,
-            "avg_intensity": total_volume / total_reps if total_reps else None,
-            "avg_kg_per_rep": (
-                total_volume_kg / weighted_reps
-                if weighted_reps
-                else None
-            ),
-            "avg_rpe": sum(rpe_values) / len(rpe_values) if rpe_values else None,
-            "avg_back_pain": sum(back_values) / len(back_values) if back_values else None,
-            "total_load_score": total_load_score,
-            "avg_load_score": total_load_score / len(workout_items) if workout_items else None,
-            "total_compound_score": total_compound_score,
-            "avg_compound_score": total_compound_score / len(workout_items) if workout_items else None,
-            "total_back_stress_score": total_back_stress_score,
-            "avg_back_stress_score": total_back_stress_score / len(workout_items) if workout_items else None,
-            "avg_relative_intensity": (
-                sum(intensity_scores) / len(intensity_scores)
-                if intensity_scores
-                else None
-            ),
-        },
+        "summary": summary_payload,
+        "data_quality_warnings": build_data_quality_warnings(
+            workouts=workout_items,
+            summary=summary_payload,
+            zero_kg_weighted_set_count=zero_kg_weighted_set_count,
+            latest_garmin_metric=latest_garmin_metric_from_workouts(list(workouts)),
+        ),
         "training_load": build_training_load_summary(
             workout_items,
             today=app_today(),

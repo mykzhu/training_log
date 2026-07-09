@@ -1,10 +1,13 @@
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 from app import config
 from app.db import get_db, init_db
+from app.repositories import garmin as garmin_repository
 import app.main as main
 from app.routes.api_stats import get_stats
 
@@ -225,6 +228,96 @@ class StatsApiTests(unittest.TestCase):
         self.assertEqual(scatter["points"][0]["workout_id"], workout_id)
         self.assertGreater(scatter["points"][0]["load"], 0)
         self.assertEqual(scatter["points"][0]["total_volume_kg"], 0.0)
+
+    def test_stats_data_quality_notes_cover_bodyweight_and_zero_kg_weighted_sets(self) -> None:
+        self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            session_rpe=6,
+            lower_back_pain=2,
+            exercises=[
+                {
+                    "name": "Crunches",
+                    "sets": [{"weight": 0, "reps": 50}],
+                },
+                {
+                    "name": "Deadlift",
+                    "sets": [{"weight": 0, "reps": 5}],
+                },
+            ],
+        )
+
+        response = get_stats(limit="all")
+        warnings = response["stats"]["data_quality_warnings"]
+        warnings_by_key = {warning["key"]: warning for warning in warnings}
+
+        self.assertIn("bodyweight_excluded_from_kg_volume", warnings_by_key)
+        self.assertEqual(
+            warnings_by_key["bodyweight_excluded_from_kg_volume"]["count"],
+            50,
+        )
+        self.assertIn("zero_kg_weighted_sets", warnings_by_key)
+        self.assertEqual(warnings_by_key["zero_kg_weighted_sets"]["count"], 1)
+        serialized_keys = " ".join(warnings_by_key)
+        self.assertNotIn("rest", serialized_keys)
+        self.assertNotIn("density", serialized_keys)
+
+    def test_stats_data_quality_notes_cover_high_pain_low_load_and_missing_feedback(self) -> None:
+        low_load_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            lower_back_pain=7,
+            exercises=[
+                {
+                    "name": "Crunches",
+                    "sets": [{"weight": 0, "reps": 20}],
+                },
+            ],
+        )
+        self.insert_workout(
+            created_at="2026-06-08T10:00:00",
+            session_rpe=7,
+            lower_back_pain=2,
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [{"weight": 120, "reps": 5}],
+                },
+            ],
+        )
+
+        response = get_stats(limit="all")
+        warnings_by_key = {
+            warning["key"]: warning
+            for warning in response["stats"]["data_quality_warnings"]
+        }
+
+        self.assertIn("high_pain_low_load", warnings_by_key)
+        self.assertEqual(warnings_by_key["high_pain_low_load"]["workout_id"], low_load_id)
+        self.assertIn("missing_feedback", warnings_by_key)
+
+    def test_stats_data_quality_notes_include_partial_garmin_today(self) -> None:
+        self.seed_stats_workouts()
+        garmin_repository.upsert_daily_metric(
+            {
+                "date": "2026-07-09",
+                "resting_heart_rate": 66,
+                "hrv_ms": None,
+                "stress_avg": 25,
+                "body_battery_start": 52,
+                "body_battery_end": 52,
+                "steps": 97,
+                "synced_at": "2026-07-09T09:25:50",
+                "raw_diagnostics": {"test": {"ok": True}},
+            }
+        )
+
+        with patch("app.services.stats_service.app_today", return_value=date(2026, 7, 9)):
+            response = get_stats(limit="all")
+
+        warning_keys = {
+            warning["key"]
+            for warning in response["stats"]["data_quality_warnings"]
+        }
+        self.assertIn("partial_garmin_today", warning_keys)
 
     def test_get_stats_orders_by_created_at_ascending_then_id_ascending(self) -> None:
         newer_id = self.insert_workout(
