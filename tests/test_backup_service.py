@@ -5,6 +5,7 @@ from pathlib import Path
 from app import config
 from app.db import get_db, init_db
 from app.services.backup_service import (
+    BACKUP_SCHEMA_VERSION,
     build_backup_payload,
     reset_database_data,
     restore_backup_payload,
@@ -114,12 +115,12 @@ class BackupServiceTests(unittest.TestCase):
                 ),
             )
 
-    def test_build_and_restore_backup_payload_round_trips_schema_v7(self) -> None:
+    def test_build_and_restore_backup_payload_round_trips_current_schema(self) -> None:
         workout_id = self.insert_workout()
         self.insert_garmin_metric()
 
         payload = build_backup_payload()
-        self.assertEqual(payload["schema_version"], 8)
+        self.assertEqual(payload["schema_version"], BACKUP_SCHEMA_VERSION)
         self.assertIn("exercise_weight_options", payload["tables"])
         self.assertIn("analysis_profiles", payload["tables"])
         self.assertEqual(len(payload["tables"]["workouts"]), 1)
@@ -128,6 +129,8 @@ class BackupServiceTests(unittest.TestCase):
         self.assertEqual(payload["tables"]["exercises"][0]["is_active"], 1)
         self.assertIn("default_reps", payload["tables"]["exercises"][0])
         self.assertIn("max_reps", payload["tables"]["exercises"][0])
+        self.assertIn("measurement_type", payload["tables"]["exercises"][0])
+        self.assertIn("reps_unit", payload["tables"]["exercises"][0])
         self.assertEqual(len(payload["tables"]["garmin_daily_metrics"]), 1)
         self.assertNotIn(
             "raw_diagnostics",
@@ -168,6 +171,71 @@ class BackupServiceTests(unittest.TestCase):
         self.assertEqual(garmin_metric["resting_heart_rate"], 52)
         self.assertEqual(garmin_metric["steps"], 12345)
         self.assertEqual(garmin_metric["raw_diagnostics"], "{}")
+
+    def test_schema_v6_restore_defaults_missing_exercise_measurement_fields(self) -> None:
+        self.insert_workout()
+        payload = build_backup_payload()
+        payload["schema_version"] = 6
+        for exercise in payload["tables"]["exercises"]:
+            exercise.pop("measurement_type", None)
+            exercise.pop("reps_unit", None)
+            for option_field in (
+                "default_weight",
+                "min_weight",
+                "max_weight",
+                "weight_step",
+                "default_reps",
+                "min_reps",
+                "max_reps",
+                "reps_step",
+            ):
+                exercise.pop(option_field, None)
+
+        reset_database_data()
+        restore_backup_payload(payload)
+
+        with get_db() as conn:
+            rows = {
+                row["name"]: row
+                for row in conn.execute(
+                    """
+                    SELECT name, measurement_type, reps_unit
+                    FROM exercises
+                    """
+                )
+            }
+
+        self.assertEqual(rows["Crunches"]["measurement_type"], "bodyweight_reps")
+        self.assertEqual(rows["Crunches"]["reps_unit"], "reps")
+        self.assertEqual(rows["Deadlift"]["measurement_type"], "weighted_reps")
+        self.assertEqual(rows["Deadlift"]["reps_unit"], "reps")
+
+    def test_schema_v7_restore_defaults_missing_exercise_measurement_fields(self) -> None:
+        self.insert_workout()
+        payload = build_backup_payload()
+        payload["schema_version"] = 7
+        for exercise in payload["tables"]["exercises"]:
+            exercise.pop("measurement_type", None)
+            exercise.pop("reps_unit", None)
+
+        reset_database_data()
+        restore_backup_payload(payload)
+
+        with get_db() as conn:
+            rows = {
+                row["name"]: row
+                for row in conn.execute(
+                    """
+                    SELECT name, measurement_type, reps_unit
+                    FROM exercises
+                    """
+                )
+            }
+
+        self.assertEqual(rows["Crunches"]["measurement_type"], "bodyweight_reps")
+        self.assertEqual(rows["Crunches"]["reps_unit"], "reps")
+        self.assertEqual(rows["Deadlift"]["measurement_type"], "weighted_reps")
+        self.assertEqual(rows["Deadlift"]["reps_unit"], "reps")
 
     def test_schema_v5_restore_accepts_raw_diagnostics(self) -> None:
         self.insert_workout()

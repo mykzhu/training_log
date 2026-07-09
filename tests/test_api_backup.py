@@ -144,6 +144,8 @@ class BackupApiTests(unittest.TestCase):
         self.assertEqual(response["schema_version"], 8)
         self.assertIn("analysis_profiles", response["tables"])
         self.assertIn("default_reps", response["tables"]["exercises"][0])
+        self.assertIn("measurement_type", response["tables"]["exercises"][0])
+        self.assertIn("reps_unit", response["tables"]["exercises"][0])
         self.assertGreater(len(response["tables"]["exercise_weight_options"]), 0)
         self.assertEqual(len(response["tables"]["workouts"]), 1)
         self.assertEqual(len(response["tables"]["workout_exercises"]), 1)
