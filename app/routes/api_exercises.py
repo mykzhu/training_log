@@ -107,6 +107,10 @@ def create_exercise_endpoint(
                 "max_reps": payload.max_reps,
                 "reps_step": payload.reps_step,
             },
+            measurement_settings={
+                "measurement_type": payload.measurement_type,
+                "reps_unit": payload.reps_unit,
+            },
         )
     except ActiveExerciseWeightError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -159,6 +163,12 @@ def update_exercise_endpoint(
         for field_name in option_field_names
         if field_name in changed_fields
     }
+    measurement_field_names = {"measurement_type", "reps_unit"}
+    measurement_settings = {
+        field_name: getattr(payload, field_name)
+        for field_name in measurement_field_names
+        if field_name in changed_fields
+    }
 
     try:
         exercise = update_exercise(
@@ -171,6 +181,9 @@ def update_exercise_endpoint(
                 else None
             ),
             option_settings=option_settings if option_settings else None,
+            measurement_settings=(
+                measurement_settings if measurement_settings else None
+            ),
         )
     except ActiveExerciseWeightError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc

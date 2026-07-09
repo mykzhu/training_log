@@ -69,20 +69,33 @@ def seed_default_exercises(conn: sqlite3.Connection) -> None:
         return
 
     for index, exercise in enumerate(config.DEFAULT_EXERCISES, start=1):
+        normalized_name = exercise.lower()
+        measurement_type = "weighted_reps"
+        reps_unit = "reps"
+        if "crunch" in normalized_name:
+            measurement_type = "bodyweight_reps"
+        elif "carry" in normalized_name:
+            measurement_type = "loaded_carry_time"
+            reps_unit = "sec"
+
         conn.execute(
             """
             INSERT INTO exercises (
                 name,
                 is_active,
                 sort_order,
-                profile_key
+                profile_key,
+                measurement_type,
+                reps_unit
             )
-            VALUES (?, 1, ?, ?)
+            VALUES (?, 1, ?, ?, ?, ?)
             """,
             (
                 exercise,
                 index * 10,
                 config.DEFAULT_EXERCISE_PROFILE_KEYS[exercise],
+                measurement_type,
+                reps_unit,
             ),
         )
 

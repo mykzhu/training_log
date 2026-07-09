@@ -5,8 +5,10 @@ from typing import Any
 
 from app.db import get_db
 from app.repositories.exercises import (
+    derive_set_metrics,
     get_float_options,
     get_int_options,
+    get_measurement_settings_by_exercise_ids,
     get_option_settings_by_exercise_ids,
     get_weight_options_by_exercise_ids,
 )
@@ -357,11 +359,25 @@ def get_draft_workout_details(draft: dict[str, Any]) -> list[dict[str, Any]]:
             for item in draft["workout_exercises"]
         ]
     )
+    measurements_by_exercise = get_measurement_settings_by_exercise_ids(
+        [
+            int(item["exercise_id"])
+            for item in draft["workout_exercises"]
+        ]
+    )
 
     for item in sorted(draft["workout_exercises"], key=lambda x: (x["position"], x["id"])):
         sets = item["sets"]
         total_volume = sum(float(s["weight"]) * int(s["reps"]) for s in sets)
         total_reps = sum(int(s["reps"]) for s in sets)
+        measurement = measurements_by_exercise.get(
+            int(item["exercise_id"]),
+            {"measurement_type": "weighted_reps", "reps_unit": "reps"},
+        )
+        derived_metrics = derive_set_metrics(
+            sets,
+            measurement["measurement_type"],
+        )
 
         if sets:
             last_set = sets[-1]
@@ -395,9 +411,15 @@ def get_draft_workout_details(draft: dict[str, Any]) -> list[dict[str, Any]]:
                 "exercise_id": item["exercise_id"],
                 "exercise_name": item["exercise_name"],
                 "profile_key": item.get("profile_key") or "accessory",
+                "measurement_type": measurement["measurement_type"],
+                "reps_unit": measurement["reps_unit"],
                 "position": item["position"],
                 "sets": sets,
                 "total_volume": total_volume,
+                "total_volume_kg": derived_metrics["total_volume_kg"],
+                "bodyweight_reps": derived_metrics["bodyweight_reps"],
+                "duration_seconds": derived_metrics["duration_seconds"],
+                "distance_m": derived_metrics["distance_m"],
                 "total_reps": total_reps,
                 "default_weight": default_weight,
                 "default_reps": default_reps,

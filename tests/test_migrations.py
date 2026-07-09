@@ -51,6 +51,21 @@ class MigrationTests(unittest.TestCase):
             exercise_count = conn.execute(
                 "SELECT COUNT(*) FROM exercises"
             ).fetchone()[0]
+            crunches = conn.execute(
+                """
+                SELECT measurement_type, reps_unit
+                FROM exercises
+                WHERE name = 'Crunches'
+                """
+            ).fetchone()
+            carry = conn.execute(
+                """
+                SELECT measurement_type, reps_unit
+                FROM exercises
+                WHERE name LIKE '%Carry%'
+                LIMIT 1
+                """
+            ).fetchone()
             workout_columns = {
                 row["name"] for row in conn.execute("PRAGMA table_info(workouts)")
             }
@@ -61,7 +76,7 @@ class MigrationTests(unittest.TestCase):
 
         self.assertEqual(
             [int(row["version"]) for row in rows],
-            [1, 2, 3, 4, 5, 6, 7, 8, 9],
+            [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
         )
         self.assertEqual(
             [row["name"] for row in rows],
@@ -75,9 +90,16 @@ class MigrationTests(unittest.TestCase):
                 "analysis_profiles",
                 "garmin_auto_sync_settings",
                 "exercise_option_settings",
+                "exercise_measurement_type",
             ],
         )
         self.assertGreater(exercise_count, 0)
+        self.assertIsNotNone(crunches)
+        self.assertEqual(crunches["measurement_type"], "bodyweight_reps")
+        self.assertEqual(crunches["reps_unit"], "reps")
+        if carry is not None:
+            self.assertEqual(carry["measurement_type"], "loaded_carry_time")
+            self.assertEqual(carry["reps_unit"], "sec")
         self.assertIn("session_rpe", workout_columns)
         self.assertIn("lower_back_pain", workout_columns)
         self.assertIn("duration_seconds", workout_columns)
@@ -111,7 +133,7 @@ class MigrationTests(unittest.TestCase):
             ]
             exercise = conn.execute(
                 """
-                SELECT name, profile_key, is_active
+                SELECT name, profile_key, is_active, measurement_type, reps_unit
                 FROM exercises
                 WHERE id = 1
                 """
@@ -121,10 +143,12 @@ class MigrationTests(unittest.TestCase):
                 ("Deadlift",),
             ).fetchone()[0]
 
-        self.assertEqual(versions, [1, 2, 3, 4, 5, 6, 7, 8, 9])
+        self.assertEqual(versions, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
         self.assertEqual(exercise["name"], "Romanian Deadlift")
         self.assertEqual(exercise["profile_key"], "deadlift")
         self.assertEqual(exercise["is_active"], 1)
+        self.assertEqual(exercise["measurement_type"], "weighted_reps")
+        self.assertEqual(exercise["reps_unit"], "reps")
         self.assertEqual(deadlift_count, 0)
 
     def test_migration_runner_records_only_successful_migrations(self) -> None:

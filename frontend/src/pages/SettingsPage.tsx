@@ -20,6 +20,7 @@ import {
 import AnalysisProfilesPanel from "../components/settings/AnalysisProfilesPanel";
 import type {
   Exercise,
+  ExerciseMeasurementType,
   ExerciseProfile,
   GarminAutoSyncSettings,
   GarminStatus,
@@ -27,6 +28,8 @@ import type {
 import { formatSetOption, uniqueSortedNumbers } from "../utils/setOptions";
 
 type ExerciseOptionSettingsDraft = {
+  measurement_type: ExerciseMeasurementType;
+  reps_unit: string;
   default_weight: number;
   min_weight: number;
   max_weight: number;
@@ -36,6 +39,17 @@ type ExerciseOptionSettingsDraft = {
   max_reps: number;
   reps_step: number;
 };
+
+const measurementTypeOptions: Array<{
+  value: ExerciseMeasurementType;
+  label: string;
+}> = [
+  { value: "weighted_reps", label: "Weighted reps" },
+  { value: "bodyweight_reps", label: "Bodyweight reps" },
+  { value: "loaded_carry_time", label: "Loaded carry time" },
+  { value: "loaded_carry_distance", label: "Loaded carry distance" },
+  { value: "reps_only", label: "Reps only" },
+];
 
 function normalizeWeights(weights: number[]) {
   return uniqueSortedNumbers(
@@ -51,6 +65,8 @@ function weightsKey(weights: number[]) {
 
 function optionSettingsDraft(exercise: Exercise): ExerciseOptionSettingsDraft {
   return {
+    measurement_type: exercise.measurement_type,
+    reps_unit: exercise.reps_unit,
     default_weight: exercise.default_weight,
     min_weight: exercise.min_weight,
     max_weight: exercise.max_weight,
@@ -401,7 +417,7 @@ export default function SettingsPage() {
   function updateOptionDraft(
     exerciseId: number,
     field: keyof ExerciseOptionSettingsDraft,
-    value: number,
+    value: ExerciseOptionSettingsDraft[keyof ExerciseOptionSettingsDraft],
   ) {
     const exercise = exercises.find((candidate) => candidate.id === exerciseId);
     if (!exercise) {
@@ -1205,6 +1221,42 @@ export default function SettingsPage() {
                 <section className="settings-weights">
                   <h3>Set defaults and ranges</h3>
                   <div className="settings-options-grid">
+                    <label>
+                      Measurement
+                      <select
+                        disabled={optionsPending}
+                        onChange={(event) =>
+                          updateOptionDraft(
+                            exercise.id,
+                            "measurement_type",
+                            event.target.value as ExerciseMeasurementType,
+                          )
+                        }
+                        value={optionSettings.measurement_type}
+                      >
+                        {measurementTypeOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      Reps unit
+                      <input
+                        disabled={optionsPending}
+                        maxLength={16}
+                        onChange={(event) =>
+                          updateOptionDraft(
+                            exercise.id,
+                            "reps_unit",
+                            event.target.value,
+                          )
+                        }
+                        type="text"
+                        value={optionSettings.reps_unit}
+                      />
+                    </label>
                     <label>
                       Default kg
                       <input

@@ -13,6 +13,7 @@ from app.migrations import (
     v007_analysis_profiles,
     v008_garmin_auto_sync_settings,
     v009_exercise_option_settings,
+    v010_exercise_measurement_type,
 )
 
 
@@ -34,6 +35,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     v007_analysis_profiles,
     v008_garmin_auto_sync_settings,
     v009_exercise_option_settings,
+    v010_exercise_measurement_type,
 )
 
 

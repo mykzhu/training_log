@@ -21,19 +21,25 @@ export type BackupPayloadResponse = {
 };
 
 export type CurrentWorkoutExerciseResponse = {
+  bodyweight_reps: number;
   configured_weights: Array<number>;
   default_reps: number;
   default_weight: number;
+  distance_m: number;
   draft_exercise_id: number;
+  duration_seconds: number;
   exercise_id: number;
   exercise_name: string;
+  measurement_type: string;
   position: number;
   profile_key: string;
   reps_options: Array<number>;
+  reps_unit: string;
   sets: Array<CurrentWorkoutSetEntryResponse>;
   total_reps: number;
   total_sets: number;
   total_volume: number;
+  total_volume_kg: number;
   weight_options: Array<number>;
 };
 
@@ -72,11 +78,13 @@ export type ExerciseCreateRequest = {
   is_active?: boolean | null;
   max_reps?: number | null;
   max_weight?: number | null;
+  measurement_type?: string | null;
   min_reps?: number | null;
   min_weight?: number | null;
   name: string;
   profile_key?: string | null;
   reps_step?: number | null;
+  reps_unit?: string | null;
   weight_step?: number | null;
   weights?: Array<number> | null;
 };
@@ -137,11 +145,13 @@ export type ExerciseResponse = {
   is_active: boolean;
   max_reps: number;
   max_weight: number;
+  measurement_type: string;
   min_reps: number;
   min_weight: number;
   name: string;
   profile_key: string;
   reps_step: number;
+  reps_unit: string;
   sort_order: number;
   weight_step: number;
   weights: Array<number>;
@@ -166,11 +176,13 @@ export type ExerciseUpdateRequest = {
   is_active?: boolean | null;
   max_reps?: number | null;
   max_weight?: number | null;
+  measurement_type?: string | null;
   min_reps?: number | null;
   min_weight?: number | null;
   name?: string | null;
   profile_key?: string | null;
   reps_step?: number | null;
+  reps_unit?: string | null;
   weight_step?: number | null;
 };
 
@@ -495,18 +507,24 @@ export type WorkoutDetailResponse = {
 };
 
 export type WorkoutExerciseResponse = {
+  bodyweight_reps: number;
   configured_weights: Array<number>;
   default_reps: number;
   default_weight: number;
+  distance_m: number;
+  duration_seconds: number;
   exercise_id: number;
   exercise_name: string;
+  measurement_type: string;
   position: number;
   profile_key: string;
   reps_options: Array<number>;
+  reps_unit: string;
   sets: Array<SetEntryResponse>;
   total_reps: number;
   total_sets: number;
   total_volume: number;
+  total_volume_kg: number;
   weight_options: Array<number>;
   workout_exercise_id: number;
 };

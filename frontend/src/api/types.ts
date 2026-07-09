@@ -7,16 +7,29 @@ export type SetEntry = {
   created_at: string;
 };
 
+export type ExerciseMeasurementType =
+  | "weighted_reps"
+  | "bodyweight_reps"
+  | "loaded_carry_time"
+  | "loaded_carry_distance"
+  | "reps_only";
+
 export type CurrentWorkoutExercise = {
   draft_exercise_id: number;
   exercise_id: number;
   exercise_name: string;
   profile_key: string;
+  measurement_type: ExerciseMeasurementType;
+  reps_unit: string;
   position: number;
   sets: SetEntry[];
   total_sets: number;
   total_reps: number;
   total_volume: number;
+  total_volume_kg: number;
+  bodyweight_reps: number;
+  duration_seconds: number;
+  distance_m: number;
   default_weight: number;
   default_reps: number;
   configured_weights: number[];
@@ -29,11 +42,17 @@ export type WorkoutExercise = {
   exercise_id: number;
   exercise_name: string;
   profile_key: string;
+  measurement_type: ExerciseMeasurementType;
+  reps_unit: string;
   position: number;
   sets: SetEntry[];
   total_sets: number;
   total_reps: number;
   total_volume: number;
+  total_volume_kg: number;
+  bodyweight_reps: number;
+  duration_seconds: number;
+  distance_m: number;
   default_weight: number;
   default_reps: number;
   configured_weights: number[];
@@ -401,6 +420,8 @@ export type Exercise = {
   is_active: boolean;
   sort_order: number;
   profile_key: string;
+  measurement_type: ExerciseMeasurementType;
+  reps_unit: string;
   default_weight: number;
   min_weight: number;
   max_weight: number;
@@ -416,6 +437,8 @@ export type ExerciseCreatePayload = {
   name: string;
   is_active?: boolean;
   profile_key?: string;
+  measurement_type?: ExerciseMeasurementType;
+  reps_unit?: string;
   weights?: number[];
   default_weight?: number;
   min_weight?: number;
@@ -431,6 +454,8 @@ export type ExerciseUpdatePayload = {
   name?: string;
   is_active?: boolean;
   profile_key?: string;
+  measurement_type?: ExerciseMeasurementType;
+  reps_unit?: string;
   default_weight?: number;
   min_weight?: number;
   max_weight?: number;

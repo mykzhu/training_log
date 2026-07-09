@@ -119,7 +119,7 @@ class BackupServiceTests(unittest.TestCase):
         self.insert_garmin_metric()
 
         payload = build_backup_payload()
-        self.assertEqual(payload["schema_version"], 7)
+        self.assertEqual(payload["schema_version"], 8)
         self.assertIn("exercise_weight_options", payload["tables"])
         self.assertIn("analysis_profiles", payload["tables"])
         self.assertEqual(len(payload["tables"]["workouts"]), 1)

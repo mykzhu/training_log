@@ -141,7 +141,7 @@ class BackupApiTests(unittest.TestCase):
         response = get_backup()
 
         self.assertEqual(response["app"], "training-log")
-        self.assertEqual(response["schema_version"], 7)
+        self.assertEqual(response["schema_version"], 8)
         self.assertIn("analysis_profiles", response["tables"])
         self.assertIn("default_reps", response["tables"]["exercises"][0])
         self.assertGreater(len(response["tables"]["exercise_weight_options"]), 0)

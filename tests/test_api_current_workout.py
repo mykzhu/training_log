@@ -160,12 +160,24 @@ class CurrentWorkoutApiTests(unittest.TestCase):
 
         exercise = response["exercises"][0]
         self.assertEqual(exercise["default_reps"], 50)
+        self.assertEqual(exercise["measurement_type"], "bodyweight_reps")
+        self.assertEqual(exercise["reps_unit"], "reps")
         self.assertIn(20, exercise["reps_options"])
         self.assertIn(25, exercise["reps_options"])
         self.assertIn(30, exercise["reps_options"])
         self.assertIn(100, exercise["reps_options"])
         self.assertNotIn(21, exercise["reps_options"])
         self.assertNotIn(99, exercise["reps_options"])
+
+        response = add_current_workout_set(
+            exercise["draft_exercise_id"],
+            AddSetRequest(weight=0, reps=50),
+        )
+        exercise = response["exercises"][0]
+        self.assertEqual(exercise["total_volume_kg"], 0)
+        self.assertEqual(exercise["bodyweight_reps"], 50)
+        self.assertEqual(exercise["duration_seconds"], 0)
+        self.assertEqual(exercise["distance_m"], 0)
 
     def test_metadata_patch_preserves_omitted_fields(self) -> None:
         start_current_workout()

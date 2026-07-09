@@ -25,10 +25,93 @@ EXERCISE_OPTION_SETTING_DEFAULTS = {
     "max_reps": 50,
     "reps_step": 1,
 }
+MEASUREMENT_TYPE_DEFAULT = "weighted_reps"
+VALID_MEASUREMENT_TYPES = {
+    "weighted_reps",
+    "bodyweight_reps",
+    "loaded_carry_time",
+    "loaded_carry_distance",
+    "reps_only",
+}
+REPS_UNIT_DEFAULTS = {
+    "weighted_reps": "reps",
+    "bodyweight_reps": "reps",
+    "loaded_carry_time": "sec",
+    "loaded_carry_distance": "m",
+    "reps_only": "reps",
+}
 
 
 def normalize_exercise_name(name: str) -> str:
     return " ".join(name.strip().split())
+
+
+def default_measurement_settings_for_name(name: str) -> dict[str, str]:
+    normalized_name = normalize_exercise_name(name).lower()
+    if "carry" in normalized_name:
+        return {"measurement_type": "loaded_carry_time", "reps_unit": "sec"}
+    if "crunch" in normalized_name:
+        return {"measurement_type": "bodyweight_reps", "reps_unit": "reps"}
+    return {
+        "measurement_type": MEASUREMENT_TYPE_DEFAULT,
+        "reps_unit": REPS_UNIT_DEFAULTS[MEASUREMENT_TYPE_DEFAULT],
+    }
+
+
+def normalize_measurement_settings(
+    *,
+    measurement_type: str | None = None,
+    reps_unit: str | None = None,
+    exercise_name: str | None = None,
+) -> dict[str, str]:
+    defaults = (
+        default_measurement_settings_for_name(exercise_name)
+        if exercise_name
+        else {
+            "measurement_type": MEASUREMENT_TYPE_DEFAULT,
+            "reps_unit": REPS_UNIT_DEFAULTS[MEASUREMENT_TYPE_DEFAULT],
+        }
+    )
+    normalized_type = str(
+        measurement_type or defaults["measurement_type"]
+    ).strip()
+    if normalized_type not in VALID_MEASUREMENT_TYPES:
+        raise ValueError("Invalid measurement type.")
+
+    normalized_unit = str(
+        reps_unit or REPS_UNIT_DEFAULTS.get(normalized_type, "reps")
+    ).strip()
+    if not normalized_unit:
+        normalized_unit = REPS_UNIT_DEFAULTS.get(normalized_type, "reps")
+    if len(normalized_unit) > 16:
+        raise ValueError("Reps unit is too long.")
+
+    return {
+        "measurement_type": normalized_type,
+        "reps_unit": normalized_unit,
+    }
+
+
+def derive_set_metrics(
+    sets: list[Any],
+    measurement_type: str,
+) -> dict[str, float | int]:
+    total_volume_kg = sum(float(s["weight"]) * int(s["reps"]) for s in sets)
+    total_reps = sum(int(s["reps"]) for s in sets)
+    bodyweight_reps = (
+        total_reps
+        if measurement_type in {"bodyweight_reps", "reps_only"}
+        else 0
+    )
+    duration_seconds = total_reps if measurement_type == "loaded_carry_time" else 0
+    distance_m = total_reps if measurement_type == "loaded_carry_distance" else 0
+
+    return {
+        "total_volume_kg": total_volume_kg,
+        "bodyweight_reps": bodyweight_reps,
+        "duration_seconds": duration_seconds,
+        "distance_m": distance_m,
+    }
 
 
 def resolve_profile_key(
@@ -262,6 +345,11 @@ def hydrate_exercises(
             "is_active": bool(row["is_active"]),
             "sort_order": int(row["sort_order"]),
             "profile_key": row["profile_key"] or "accessory",
+            "measurement_type": row["measurement_type"] or MEASUREMENT_TYPE_DEFAULT,
+            "reps_unit": (
+                row["reps_unit"]
+                or REPS_UNIT_DEFAULTS[MEASUREMENT_TYPE_DEFAULT]
+            ),
             "default_weight": float(value_or_default(row["default_weight"], 0)),
             "min_weight": float(value_or_default(row["min_weight"], 0)),
             "max_weight": float(value_or_default(row["max_weight"], 200)),
@@ -301,6 +389,8 @@ def list_exercises(
                 is_active,
                 sort_order,
                 profile_key,
+                measurement_type,
+                reps_unit,
                 default_weight,
                 min_weight,
                 max_weight,
@@ -332,6 +422,8 @@ def get_exercise(
                 is_active,
                 sort_order,
                 profile_key,
+                measurement_type,
+                reps_unit,
                 default_weight,
                 min_weight,
                 max_weight,
@@ -364,6 +456,8 @@ def get_exercise_by_name(name: str) -> dict[str, Any] | None:
                 is_active,
                 sort_order,
                 profile_key,
+                measurement_type,
+                reps_unit,
                 default_weight,
                 min_weight,
                 max_weight,
@@ -399,10 +493,15 @@ def create_exercise(
     profile_key: str | None = None,
     weights: list[float] | None = None,
     option_settings: dict[str, float | int | None] | None = None,
+    measurement_settings: dict[str, str | None] | None = None,
 ) -> tuple[dict[str, Any], bool]:
     normalized_name = normalize_exercise_name(name)
     normalized_weights = normalize_weights(weights or [])
     settings = normalize_exercise_option_settings(**(option_settings or {}))
+    measurement = normalize_measurement_settings(
+        **(measurement_settings or {}),
+        exercise_name=normalized_name,
+    )
 
     if is_active and not normalized_weights:
         raise ActiveExerciseWeightError("Active exercise must have at least one weight.")
@@ -428,6 +527,8 @@ def create_exercise(
                     is_active,
                     sort_order,
                     profile_key,
+                    measurement_type,
+                    reps_unit,
                     default_weight,
                     min_weight,
                     max_weight,
@@ -437,13 +538,15 @@ def create_exercise(
                     max_reps,
                     reps_step
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     normalized_name,
                     1 if is_active else 0,
                     next_sort_order(conn),
                     resolved_profile_key,
+                    measurement["measurement_type"],
+                    measurement["reps_unit"],
                     settings["default_weight"],
                     settings["min_weight"],
                     settings["max_weight"],
@@ -485,6 +588,7 @@ def update_exercise(
     is_active: bool | None = None,
     profile_key: str | None = None,
     option_settings: dict[str, float | int | None] | None = None,
+    measurement_settings: dict[str, str | None] | None = None,
 ) -> dict[str, Any] | None:
     current = get_exercise(exercise_id, include_weights=False)
     if current is None:
@@ -501,6 +605,14 @@ def update_exercise(
         }
         current_settings.update(option_settings)
         settings = normalize_exercise_option_settings(**current_settings)
+    measurement = None
+    if measurement_settings is not None:
+        current_measurement = {
+            "measurement_type": current["measurement_type"],
+            "reps_unit": current["reps_unit"],
+        }
+        current_measurement.update(measurement_settings)
+        measurement = normalize_measurement_settings(**current_measurement)
 
     with get_db() as conn:
         if profile_key is not None:
@@ -539,6 +651,8 @@ def update_exercise(
                 SET name = ?,
                     is_active = ?,
                     profile_key = ?,
+                    measurement_type = COALESCE(?, measurement_type),
+                    reps_unit = COALESCE(?, reps_unit),
                     default_weight = COALESCE(?, default_weight),
                     min_weight = COALESCE(?, min_weight),
                     max_weight = COALESCE(?, max_weight),
@@ -553,6 +667,8 @@ def update_exercise(
                     updated_name,
                     1 if updated_active else 0,
                     updated_profile_key,
+                    None if measurement is None else measurement["measurement_type"],
+                    None if measurement is None else measurement["reps_unit"],
                     None if settings is None else settings["default_weight"],
                     None if settings is None else settings["min_weight"],
                     None if settings is None else settings["max_weight"],
@@ -610,6 +726,34 @@ def get_option_settings_by_exercise_ids(
             min_reps=int(value_or_default(row["min_reps"], 1)),
             max_reps=int(value_or_default(row["max_reps"], 50)),
             reps_step=int(value_or_default(row["reps_step"], 1)),
+        )
+        for row in rows
+    }
+
+
+def get_measurement_settings_by_exercise_ids(
+    exercise_ids: list[int],
+) -> dict[int, dict[str, str]]:
+    unique_ids = sorted({int(exercise_id) for exercise_id in exercise_ids})
+    if not unique_ids:
+        return {}
+
+    placeholders = ", ".join("?" for _ in unique_ids)
+    with get_db() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT id, name, measurement_type, reps_unit
+            FROM exercises
+            WHERE id IN ({placeholders})
+            """,
+            unique_ids,
+        ).fetchall()
+
+    return {
+        int(row["id"]): normalize_measurement_settings(
+            measurement_type=row["measurement_type"],
+            reps_unit=row["reps_unit"],
+            exercise_name=row["name"],
         )
         for row in rows
     }

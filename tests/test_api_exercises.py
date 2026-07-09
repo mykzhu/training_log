@@ -306,6 +306,8 @@ class ExercisesApiTests(unittest.TestCase):
         self.assertEqual(response["exercise"]["name"], "Incline Row")
         self.assertEqual(response["exercise"]["weights"], [15.0, 17.75])
         self.assertEqual(response["exercise"]["profile_key"], "accessory")
+        self.assertEqual(response["exercise"]["measurement_type"], "weighted_reps")
+        self.assertEqual(response["exercise"]["reps_unit"], "reps")
         self.assertEqual(response["exercise"]["default_reps"], 10)
 
         with self.assertRaises(HTTPException) as exc:
@@ -327,6 +329,8 @@ class ExercisesApiTests(unittest.TestCase):
                 min_reps=1,
                 max_reps=200,
                 reps_step=1,
+                measurement_type="bodyweight_reps",
+                reps_unit="reps",
             ),
         )
 
@@ -335,6 +339,19 @@ class ExercisesApiTests(unittest.TestCase):
         self.assertEqual(exercise["max_weight"], 0)
         self.assertEqual(exercise["default_reps"], 70)
         self.assertEqual(exercise["max_reps"], 200)
+        self.assertEqual(exercise["measurement_type"], "bodyweight_reps")
+        self.assertEqual(exercise["reps_unit"], "reps")
+
+    def test_create_exercise_infers_measurement_from_name(self) -> None:
+        response = create_exercise_endpoint(
+            ExerciseCreateRequest(
+                name="Farmer Carry",
+                weights=[20],
+            )
+        )
+
+        self.assertEqual(response["exercise"]["measurement_type"], "loaded_carry_time")
+        self.assertEqual(response["exercise"]["reps_unit"], "sec")
 
     def test_update_exercise_expands_reps_range_to_save_high_default(self) -> None:
         exercise_id = self.exercise_id("Crunches")

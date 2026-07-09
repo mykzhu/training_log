@@ -75,6 +75,10 @@
       },
       "CurrentWorkoutExerciseResponse": {
         "properties": {
+          "bodyweight_reps": {
+            "title": "Bodyweight Reps",
+            "type": "integer"
+          },
           "configured_weights": {
             "items": {
               "type": "number"
@@ -90,8 +94,16 @@
             "title": "Default Weight",
             "type": "number"
           },
+          "distance_m": {
+            "title": "Distance M",
+            "type": "integer"
+          },
           "draft_exercise_id": {
             "title": "Draft Exercise Id",
+            "type": "integer"
+          },
+          "duration_seconds": {
+            "title": "Duration Seconds",
             "type": "integer"
           },
           "exercise_id": {
@@ -100,6 +112,10 @@
           },
           "exercise_name": {
             "title": "Exercise Name",
+            "type": "string"
+          },
+          "measurement_type": {
+            "title": "Measurement Type",
             "type": "string"
           },
           "position": {
@@ -116,6 +132,10 @@
             },
             "title": "Reps Options",
             "type": "array"
+          },
+          "reps_unit": {
+            "title": "Reps Unit",
+            "type": "string"
           },
           "sets": {
             "items": {
@@ -136,6 +156,10 @@
             "title": "Total Volume",
             "type": "number"
           },
+          "total_volume_kg": {
+            "title": "Total Volume Kg",
+            "type": "number"
+          },
           "weight_options": {
             "items": {
               "type": "number"
@@ -149,11 +173,17 @@
           "exercise_id",
           "exercise_name",
           "profile_key",
+          "measurement_type",
+          "reps_unit",
           "position",
           "sets",
           "total_sets",
           "total_reps",
           "total_volume",
+          "total_volume_kg",
+          "bodyweight_reps",
+          "duration_seconds",
+          "distance_m",
           "default_weight",
           "default_reps",
           "configured_weights",
@@ -308,6 +338,12 @@
             "title": "Max Weight",
             "type": "number"
           },
+          "measurement_type": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Measurement Type",
+            "type": "string"
+          },
           "min_reps": {
             "maximum": 1000.0,
             "minimum": 1.0,
@@ -336,6 +372,12 @@
             "minimum": 1.0,
             "title": "Reps Step",
             "type": "integer"
+          },
+          "reps_unit": {
+            "maxLength": 16,
+            "minLength": 1,
+            "title": "Reps Unit",
+            "type": "string"
           },
           "weight_step": {
             "exclusiveMinimum": 0.0,
@@ -593,6 +635,10 @@
             "title": "Max Weight",
             "type": "number"
           },
+          "measurement_type": {
+            "title": "Measurement Type",
+            "type": "string"
+          },
           "min_reps": {
             "title": "Min Reps",
             "type": "integer"
@@ -612,6 +658,10 @@
           "reps_step": {
             "title": "Reps Step",
             "type": "integer"
+          },
+          "reps_unit": {
+            "title": "Reps Unit",
+            "type": "string"
           },
           "sort_order": {
             "title": "Sort Order",
@@ -635,6 +685,8 @@
           "is_active",
           "sort_order",
           "profile_key",
+          "measurement_type",
+          "reps_unit",
           "default_weight",
           "min_weight",
           "max_weight",
@@ -748,6 +800,12 @@
             "title": "Max Weight",
             "type": "number"
           },
+          "measurement_type": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Measurement Type",
+            "type": "string"
+          },
           "min_reps": {
             "maximum": 1000.0,
             "minimum": 1.0,
@@ -776,6 +834,12 @@
             "minimum": 1.0,
             "title": "Reps Step",
             "type": "integer"
+          },
+          "reps_unit": {
+            "maxLength": 16,
+            "minLength": 1,
+            "title": "Reps Unit",
+            "type": "string"
           },
           "weight_step": {
             "exclusiveMinimum": 0.0,
@@ -2114,6 +2178,10 @@
       },
       "WorkoutExerciseResponse": {
         "properties": {
+          "bodyweight_reps": {
+            "title": "Bodyweight Reps",
+            "type": "integer"
+          },
           "configured_weights": {
             "items": {
               "type": "number"
@@ -2129,12 +2197,24 @@
             "title": "Default Weight",
             "type": "number"
           },
+          "distance_m": {
+            "title": "Distance M",
+            "type": "integer"
+          },
+          "duration_seconds": {
+            "title": "Duration Seconds",
+            "type": "integer"
+          },
           "exercise_id": {
             "title": "Exercise Id",
             "type": "integer"
           },
           "exercise_name": {
             "title": "Exercise Name",
+            "type": "string"
+          },
+          "measurement_type": {
+            "title": "Measurement Type",
             "type": "string"
           },
           "position": {
@@ -2151,6 +2231,10 @@
             },
             "title": "Reps Options",
             "type": "array"
+          },
+          "reps_unit": {
+            "title": "Reps Unit",
+            "type": "string"
           },
           "sets": {
             "items": {
@@ -2171,6 +2255,10 @@
             "title": "Total Volume",
             "type": "number"
           },
+          "total_volume_kg": {
+            "title": "Total Volume Kg",
+            "type": "number"
+          },
           "weight_options": {
             "items": {
               "type": "number"
@@ -2188,11 +2276,17 @@
           "exercise_id",
           "exercise_name",
           "profile_key",
+          "measurement_type",
+          "reps_unit",
           "position",
           "sets",
           "total_sets",
           "total_reps",
           "total_volume",
+          "total_volume_kg",
+          "bodyweight_reps",
+          "duration_seconds",
+          "distance_m",
           "default_weight",
           "default_reps",
           "configured_weights",

@@ -3,9 +3,11 @@ from typing import Any
 
 from app.db import get_db
 from app.repositories.exercises import (
+    derive_set_metrics,
     get_float_options,
     get_int_options,
     get_weight_options_by_exercise_ids,
+    normalize_measurement_settings,
     value_or_default,
 )
 
@@ -593,6 +595,8 @@ def get_workout_details_batch(
                 e.id AS exercise_id,
                 e.name AS exercise_name,
                 e.profile_key,
+                e.measurement_type,
+                e.reps_unit,
                 e.default_weight,
                 e.min_weight,
                 e.max_weight,
@@ -643,6 +647,15 @@ def get_workout_details_batch(
 
             total_volume = sum(float(s["weight"]) * int(s["reps"]) for s in sets)
             total_reps = sum(int(s["reps"]) for s in sets)
+            measurement = normalize_measurement_settings(
+                measurement_type=row["measurement_type"],
+                reps_unit=row["reps_unit"],
+                exercise_name=row["exercise_name"],
+            )
+            derived_metrics = derive_set_metrics(
+                sets,
+                measurement["measurement_type"],
+            )
 
             if sets:
                 last_set = sets[-1]
@@ -658,9 +671,15 @@ def get_workout_details_batch(
                 "exercise_id": int(row["exercise_id"]),
                 "exercise_name": row["exercise_name"],
                 "profile_key": row["profile_key"] or "accessory",
+                "measurement_type": measurement["measurement_type"],
+                "reps_unit": measurement["reps_unit"],
                 "position": int(row["position"]),
                 "sets": sets,
                 "total_volume": total_volume,
+                "total_volume_kg": derived_metrics["total_volume_kg"],
+                "bodyweight_reps": derived_metrics["bodyweight_reps"],
+                "duration_seconds": derived_metrics["duration_seconds"],
+                "distance_m": derived_metrics["distance_m"],
                 "total_reps": total_reps,
                 "default_weight": default_weight,
                 "default_reps": default_reps,

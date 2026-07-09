@@ -165,15 +165,27 @@ function recalculateExercise(exercise: WorkoutExercise): WorkoutExercise {
     ...setEntry,
     set_number: index + 1,
   }));
+  const totalReps = sets.reduce((sum, setEntry) => sum + setEntry.reps, 0);
+  const totalVolumeKg = sets.reduce(
+    (sum, setEntry) => sum + setEntry.weight * setEntry.reps,
+    0,
+  );
   return {
     ...exercise,
     sets,
     total_sets: sets.length,
-    total_reps: sets.reduce((sum, setEntry) => sum + setEntry.reps, 0),
-    total_volume: sets.reduce(
-      (sum, setEntry) => sum + setEntry.weight * setEntry.reps,
-      0,
-    ),
+    total_reps: totalReps,
+    total_volume: totalVolumeKg,
+    total_volume_kg: totalVolumeKg,
+    bodyweight_reps:
+      exercise.measurement_type === "bodyweight_reps" ||
+      exercise.measurement_type === "reps_only"
+        ? totalReps
+        : 0,
+    duration_seconds:
+      exercise.measurement_type === "loaded_carry_time" ? totalReps : 0,
+    distance_m:
+      exercise.measurement_type === "loaded_carry_distance" ? totalReps : 0,
   };
 }
 
@@ -601,11 +613,17 @@ export default function HistoryPage({
           exercise_id: exercise.id,
           exercise_name: exercise.name,
           profile_key: exercise.profile_key,
+          measurement_type: exercise.measurement_type,
+          reps_unit: exercise.reps_unit,
           position: current.exercises.length + 1,
           sets: [],
           total_sets: 0,
           total_reps: 0,
           total_volume: 0,
+          total_volume_kg: 0,
+          bodyweight_reps: 0,
+          duration_seconds: 0,
+          distance_m: 0,
           default_weight: exercise.default_weight,
           default_reps: exercise.default_reps,
           configured_weights: exercise.weights,
