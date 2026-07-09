@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import {
   createExercise,
+  deleteExercise,
   getExerciseProfiles,
   getExercises,
   reorderExercises,
@@ -156,6 +157,9 @@ export default function SettingsPage() {
   >({});
   const [expandedExerciseIds, setExpandedExerciseIds] = useState<Set<number>>(
     () => new Set(),
+  );
+  const [confirmDeleteExerciseId, setConfirmDeleteExerciseId] = useState<number | null>(
+    null,
   );
   const [newWeightDrafts, setNewWeightDrafts] = useState<Record<number, string>>({});
   const [newExerciseName, setNewExerciseName] = useState("");
@@ -472,6 +476,50 @@ export default function SettingsPage() {
         setExercises((current) => replaceExerciseInList(current, response.exercise));
       },
       exercise.is_active ? "Exercise deactivated" : "Exercise reactivated",
+    );
+  }
+
+  async function deleteExerciseFromSettings(exercise: Exercise) {
+    await runAction(
+      `delete:${exercise.id}`,
+      async () => {
+        await deleteExercise(exercise.id);
+
+        setNameDrafts((current) => {
+          const next = { ...current };
+          delete next[exercise.id];
+          return next;
+        });
+        setProfileDrafts((current) => {
+          const next = { ...current };
+          delete next[exercise.id];
+          return next;
+        });
+        setWeightDrafts((current) => {
+          const next = { ...current };
+          delete next[exercise.id];
+          return next;
+        });
+        setOptionSettingsDrafts((current) => {
+          const next = { ...current };
+          delete next[exercise.id];
+          return next;
+        });
+        setNewWeightDrafts((current) => {
+          const next = { ...current };
+          delete next[exercise.id];
+          return next;
+        });
+        setExpandedExerciseIds((current) => {
+          const next = new Set(current);
+          next.delete(exercise.id);
+          return next;
+        });
+        setConfirmDeleteExerciseId(null);
+
+        await load();
+      },
+      "Exercise deleted",
     );
   }
 
@@ -1017,6 +1065,7 @@ export default function SettingsPage() {
             const optionSettingsChanged = isOptionSettingsDirty(exercise);
             const detailsPending = pendingAction === `details:${exercise.id}`;
             const activePending = pendingAction === `active:${exercise.id}`;
+            const deletePending = pendingAction === `delete:${exercise.id}`;
             const weightsPending = pendingAction === `weights:${exercise.id}`;
             const optionsPending = pendingAction === `options:${exercise.id}`;
             const profileLabel =
@@ -1402,6 +1451,49 @@ export default function SettingsPage() {
                   >
                     Save set options
                   </button>
+                </section>
+
+                <section className="settings-danger-zone">
+                  <div>
+                    <h3>Danger zone</h3>
+                    <p className="muted small">
+                      Delete only exercises that have no workout history. Use
+                      Inactive to hide exercises that already have logs.
+                    </p>
+                  </div>
+
+                  {confirmDeleteExerciseId === exercise.id ? (
+                    <div className="danger-confirm-row">
+                      <span>
+                        Delete "{exercise.name}"? This removes its weight presets
+                        and cannot be undone.
+                      </span>
+                      <button
+                        className="ghost-button compact-action"
+                        onClick={() => setConfirmDeleteExerciseId(null)}
+                        type="button"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        className="danger-button compact-action"
+                        disabled={deletePending}
+                        onClick={() => deleteExerciseFromSettings(exercise)}
+                        type="button"
+                      >
+                        Delete permanently
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      className="danger-button compact-action"
+                      disabled={isBusy}
+                      onClick={() => setConfirmDeleteExerciseId(exercise.id)}
+                      type="button"
+                    >
+                      Delete
+                    </button>
+                  )}
                 </section>
                 </div>
               </article>

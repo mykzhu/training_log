@@ -11,6 +11,7 @@ from app.db import init_db
 from app.routes.api_backup import router as backup_api_router
 from app.routes.api_current_workout import router as current_workout_api_router
 from app.routes.api_garmin import router as garmin_api_router
+from app.routes.api_logs import router as logs_api_router
 from app.routes.api_exercises import (
     profiles_router as exercise_profiles_api_router,
     router as exercises_api_router,
@@ -24,17 +25,16 @@ from app.services.garmin_auto_sync_service import (
     start_garmin_auto_sync_scheduler,
     stop_garmin_auto_sync_scheduler,
 )
+from app.services.log_service import install_log_handlers
 
 
 def configure_logging() -> None:
-    logging.basicConfig(
+    install_log_handlers(
         level=getattr(logging, config.LOG_LEVEL, logging.DEBUG),
-        format=(
-            "%(asctime)s "
-            "%(levelname)s "
-            "[%(name)s] "
-            "%(message)s"
-        ),
+        log_file_path=config.LOG_FILE_PATH,
+        buffer_size=config.LOG_BUFFER_SIZE,
+        max_bytes=config.LOG_FILE_MAX_BYTES,
+        backup_count=config.LOG_FILE_BACKUP_COUNT,
     )
 
 
@@ -49,6 +49,7 @@ app.include_router(current_workout_api_router)
 app.include_router(exercises_api_router)
 app.include_router(exercise_profiles_api_router)
 app.include_router(garmin_api_router)
+app.include_router(logs_api_router)
 app.include_router(stats_api_router)
 app.include_router(workout_items_api_router)
 app.include_router(workouts_api_router)

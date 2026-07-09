@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 
 import {
   createExerciseProfile,
+  deleteExerciseProfile,
   updateExerciseProfile,
 } from "../../api/exercises";
 import type { ExerciseProfile } from "../../api/types";
@@ -100,6 +101,9 @@ export default function AnalysisProfilesPanel({
   const [message, setMessage] = useState<string | null>(null);
   const [expandedProfileKeys, setExpandedProfileKeys] = useState<Set<string>>(
     () => new Set(),
+  );
+  const [confirmDeleteProfileKey, setConfirmDeleteProfileKey] = useState<string | null>(
+    null,
   );
 
   useEffect(() => {
@@ -201,6 +205,25 @@ export default function AnalysisProfilesPanel({
         onProfilesChange(sortProfiles(replaceProfile(profiles, response.profile)));
       },
       "Analysis type saved",
+    );
+  }
+
+  async function deleteProfile(profile: ExerciseProfile) {
+    await runAction(
+      `profile:delete:${profile.key}`,
+      async () => {
+        await deleteExerciseProfile(profile.key);
+        onProfilesChange(
+          sortProfiles(profiles.filter((item) => item.key !== profile.key)),
+        );
+        setDrafts((current) => {
+          const next = { ...current };
+          delete next[profile.key];
+          return next;
+        });
+        setConfirmDeleteProfileKey(null);
+      },
+      "Analysis type deleted",
     );
   }
 
@@ -316,9 +339,17 @@ export default function AnalysisProfilesPanel({
         {profiles.map((profile) => {
           const draft = drafts[profile.key] ?? profileToDraft(profile);
           const profilePending = pendingAction === `profile:${profile.key}`;
+          const deletePending = pendingAction === `profile:delete:${profile.key}`;
           const deactivateDisabled = profile.key === "accessory" || profile.exercise_count > 0;
           const isExpanded = expandedProfileKeys.has(profile.key);
           const bodyId = `analysis-profile-details-${profile.key}`;
+          const deleteBlockedReason = profile.is_builtin
+            ? "Built-in analysis types cannot be deleted."
+            : profile.key === "accessory"
+              ? "Accessory is the fallback analysis type and cannot be deleted."
+              : profile.exercise_count > 0
+                ? `Used by ${profile.exercise_count} exercise${profile.exercise_count === 1 ? "" : "s"}. Reassign or delete those exercises first.`
+                : null;
 
           return (
             <article
@@ -451,6 +482,46 @@ export default function AnalysisProfilesPanel({
                 >
                   Save
                 </button>
+                <section className="settings-danger-zone">
+                  <div>
+                    <h4>Danger zone</h4>
+                    <p className="muted small">
+                      Delete this custom analysis type only when no exercise uses it.
+                    </p>
+                  </div>
+
+                  {deleteBlockedReason ? (
+                    <p className="muted small">{deleteBlockedReason}</p>
+                  ) : confirmDeleteProfileKey === profile.key ? (
+                    <div className="danger-confirm-row">
+                      <span>Delete "{profile.label}"? This cannot be undone.</span>
+                      <button
+                        className="ghost-button compact-action"
+                        onClick={() => setConfirmDeleteProfileKey(null)}
+                        type="button"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        className="danger-button compact-action"
+                        disabled={deletePending}
+                        onClick={() => deleteProfile(profile)}
+                        type="button"
+                      >
+                        Delete permanently
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      className="danger-button compact-action"
+                      disabled={pendingAction !== null}
+                      onClick={() => setConfirmDeleteProfileKey(profile.key)}
+                      type="button"
+                    >
+                      Delete
+                    </button>
+                  )}
+                </section>
               </div>
             </article>
           );

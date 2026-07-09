@@ -67,6 +67,19 @@ export type CurrentWorkoutSetEntryResponse = {
   weight: number;
 };
 
+export type DeleteExerciseProfileResponse = {
+  deleted: boolean;
+  profile?: ExerciseProfileResponse | null;
+  profile_key: string;
+};
+
+export type DeleteExerciseResponse = {
+  deleted: boolean;
+  exercise?: Record<string, unknown> | null;
+  exercise_id: number;
+  usage?: Record<string, number> | null;
+};
+
 export type DeleteWorkoutResponse = {
   deleted: boolean;
   workout_id: number;
@@ -225,8 +238,11 @@ export type GarminAutoSyncSettingsUpdateRequest = {
 export type GarminDailyMetricResponse = {
   body_battery_end?: number | null;
   body_battery_start?: number | null;
+  completeness_message?: string | null;
+  completeness_status?: string | null;
   date: string;
   hrv_ms?: number | null;
+  is_complete?: boolean | null;
   raw_diagnostics: Record<string, unknown>;
   resting_heart_rate?: number | null;
   steps?: number | null;
@@ -330,25 +346,36 @@ export type GarminStatsInsightsResponse = {
   baseline_end_date: string;
   baseline_start_date: string;
   current_date: string;
+  current_metric_completeness?: Record<string, unknown> | null;
   freshness: GarminStatsFreshnessResponse;
   minimum_baseline_samples: number;
   overall_message: string;
   overall_status: string;
   previous_date: string;
   readiness_impact: GarminStatsReadinessImpactResponse;
+  readiness_previous_date?: string | null;
+  readiness_scoring_date?: string | null;
+  readiness_scoring_date_source?: string | null;
+  scoring_metric_completeness?: Record<string, unknown> | null;
   signals: Array<GarminStatsSignalResponse>;
 };
 
 export type GarminStatsLatestMetricResponse = {
+  completeness_message?: string | null;
+  completeness_status?: string | null;
   date: string;
+  is_complete?: boolean | null;
   synced_at: string;
 };
 
 export type GarminStatsPointResponse = {
   body_battery_end?: number | null;
   body_battery_start?: number | null;
+  completeness_message?: string | null;
+  completeness_status?: string | null;
   date: string;
   hrv_ms?: number | null;
+  is_complete?: boolean | null;
   resting_heart_rate?: number | null;
   steps?: number | null;
   stress_avg?: number | null;
@@ -422,6 +449,26 @@ export type LoadMetricsResponse = {
   intensity_score?: number | null;
   load_label: string;
   load_score: number;
+};
+
+export type LogEntryResponse = {
+  exception?: string | null;
+  function?: string | null;
+  id: number;
+  level: string;
+  line?: number | null;
+  logger: string;
+  message: string;
+  module?: string | null;
+  timestamp: string;
+};
+
+export type LogsResponse = {
+  count: number;
+  entries: Array<LogEntryResponse>;
+  limit: number;
+  total_available: number;
+  truncated: boolean;
 };
 
 export type NextWorkoutRecommendationResponse = {
@@ -568,6 +615,8 @@ export type ApiSchemas = {
   CurrentWorkoutExerciseResponse: CurrentWorkoutExerciseResponse;
   CurrentWorkoutResponse: CurrentWorkoutResponse;
   CurrentWorkoutSetEntryResponse: CurrentWorkoutSetEntryResponse;
+  DeleteExerciseProfileResponse: DeleteExerciseProfileResponse;
+  DeleteExerciseResponse: DeleteExerciseResponse;
   DeleteWorkoutResponse: DeleteWorkoutResponse;
   ExerciseCreateRequest: ExerciseCreateRequest;
   ExerciseMutationResponse: ExerciseMutationResponse;
@@ -608,6 +657,8 @@ export type ApiSchemas = {
   GarminSyncResponse: GarminSyncResponse;
   HTTPValidationError: HTTPValidationError;
   LoadMetricsResponse: LoadMetricsResponse;
+  LogEntryResponse: LogEntryResponse;
+  LogsResponse: LogsResponse;
   NextWorkoutRecommendationResponse: NextWorkoutRecommendationResponse;
   RecoveryContextResponse: RecoveryContextResponse;
   SetEntryResponse: SetEntryResponse;

@@ -10,6 +10,9 @@ from app.db import get_db, init_db
 import app.main as main
 from app.routes.api_exercises import (
     create_exercise_endpoint,
+    create_exercise_profile_endpoint,
+    delete_exercise_endpoint,
+    delete_exercise_profile_endpoint,
     get_exercises,
     get_exercise_profiles,
     get_exercise_stats_endpoint,
@@ -20,8 +23,13 @@ from app.routes.api_exercises import (
 from app.schemas import (
     ExerciseCreateRequest,
     ExerciseOrderUpdateRequest,
+    ExerciseProfileCreateRequest,
     ExerciseUpdateRequest,
     ExerciseWeightsUpdateRequest,
+)
+from app.services.draft_service import (
+    add_exercise_to_active_draft,
+    start_active_workout_draft,
 )
 
 
@@ -135,9 +143,13 @@ class ExercisesApiTests(unittest.TestCase):
             ("GET",),
         ), routes)
         self.assertIn(("/api/v1/exercises/{exercise_id}", ("PATCH",)), routes)
+        self.assertIn(("/api/v1/exercises/{exercise_id}", ("DELETE",)), routes)
         self.assertIn(("/api/v1/exercises/{exercise_id}/weights", ("PUT",)), routes)
         self.assertIn(("/api/v1/exercises/order", ("PUT",)), routes)
         self.assertIn(("/api/v1/exercise-profiles", ("GET",)), routes)
+        self.assertIn(("/api/v1/exercise-profiles", ("POST",)), routes)
+        self.assertIn(("/api/v1/exercise-profiles/{profile_key}", ("PATCH",)), routes)
+        self.assertIn(("/api/v1/exercise-profiles/{profile_key}", ("DELETE",)), routes)
 
     def test_get_exercise_profiles_returns_friendly_catalog(self) -> None:
         response = get_exercise_profiles()
@@ -524,6 +536,80 @@ class ExercisesApiTests(unittest.TestCase):
         self.assertNotIn("Deadlift", active_names)
         self.assertIn("Deadlift", all_names)
 
+    def test_delete_unused_exercise_succeeds_and_removes_weight_presets(self) -> None:
+        created = create_exercise_endpoint(
+            ExerciseCreateRequest(
+                name="Temporary Exercise",
+                is_active=False,
+                weights=[5, 10],
+            )
+        )
+        exercise_id = int(created["exercise"]["id"])
+
+        response = delete_exercise_endpoint(exercise_id)
+
+        self.assertTrue(response["deleted"])
+        self.assertEqual(response["exercise_id"], exercise_id)
+        self.assertEqual(response["usage"], {
+            "workout_count": 0,
+            "set_count": 0,
+            "draft_count": 0,
+        })
+        with get_db() as conn:
+            exercise_row = conn.execute(
+                "SELECT 1 FROM exercises WHERE id = ?",
+                (exercise_id,),
+            ).fetchone()
+            weight_count = conn.execute(
+                "SELECT COUNT(*) FROM exercise_weight_options WHERE exercise_id = ?",
+                (exercise_id,),
+            ).fetchone()[0]
+
+        self.assertIsNone(exercise_row)
+        self.assertEqual(int(weight_count), 0)
+
+    def test_delete_missing_exercise_returns_404(self) -> None:
+        with self.assertRaises(HTTPException) as exc:
+            delete_exercise_endpoint(999999)
+
+        self.assertEqual(exc.exception.status_code, 404)
+
+    def test_delete_exercise_with_workout_history_returns_409_and_preserves_history(self) -> None:
+        exercise_id = self.exercise_id("Deadlift")
+        self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [{"weight": 100, "reps": 5}],
+                },
+            ],
+        )
+
+        with self.assertRaises(HTTPException) as exc:
+            delete_exercise_endpoint(exercise_id)
+
+        self.assertEqual(exc.exception.status_code, 409)
+        self.assertIn("Deactivate it instead", exc.exception.detail)
+        with get_db() as conn:
+            history_count = conn.execute(
+                "SELECT COUNT(*) FROM workout_exercises WHERE exercise_id = ?",
+                (exercise_id,),
+            ).fetchone()[0]
+
+        self.assertEqual(int(history_count), 1)
+
+    def test_delete_exercise_with_active_draft_returns_409(self) -> None:
+        exercise_id = self.exercise_id("Deadlift")
+        start_active_workout_draft()
+        add_exercise_to_active_draft(exercise_id, "Deadlift")
+
+        with self.assertRaises(HTTPException) as exc:
+            delete_exercise_endpoint(exercise_id)
+
+        self.assertEqual(exc.exception.status_code, 409)
+        self.assertIn("active draft", exc.exception.detail)
+
     def test_replace_exercise_weights_normalizes_values(self) -> None:
         deadlift_id = self.exercise_id("Deadlift")
 
@@ -603,6 +689,75 @@ class ExercisesApiTests(unittest.TestCase):
 
         with self.assertRaises(Exception):
             ExerciseUpdateRequest(name="")
+
+    def test_delete_custom_unused_profile_succeeds(self) -> None:
+        created = create_exercise_profile_endpoint(
+            ExerciseProfileCreateRequest(
+                label="Loaded carry test",
+                category="core carry",
+                exercise_factor=1,
+                compound_factor=0.5,
+                back_factor=0.2,
+            )
+        )
+        profile_key = created["profile"]["key"]
+
+        response = delete_exercise_profile_endpoint(profile_key)
+
+        self.assertTrue(response["deleted"])
+        self.assertEqual(response["profile_key"], profile_key)
+        with get_db() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM analysis_profiles WHERE key = ?",
+                (profile_key,),
+            ).fetchone()
+
+        self.assertIsNone(row)
+
+    def test_delete_profile_returns_404_for_missing_profile(self) -> None:
+        with self.assertRaises(HTTPException) as exc:
+            delete_exercise_profile_endpoint("missing_profile")
+
+        self.assertEqual(exc.exception.status_code, 404)
+
+    def test_delete_builtin_profile_is_rejected(self) -> None:
+        with self.assertRaises(HTTPException) as exc:
+            delete_exercise_profile_endpoint("deadlift")
+
+        self.assertEqual(exc.exception.status_code, 409)
+        self.assertIn("Built-in", exc.exception.detail)
+
+    def test_delete_accessory_profile_is_rejected(self) -> None:
+        with self.assertRaises(HTTPException) as exc:
+            delete_exercise_profile_endpoint("accessory")
+
+        self.assertEqual(exc.exception.status_code, 409)
+        self.assertIn("Accessory", exc.exception.detail)
+
+    def test_delete_profile_used_by_exercise_is_rejected(self) -> None:
+        created = create_exercise_profile_endpoint(
+            ExerciseProfileCreateRequest(
+                label="Used custom type",
+                category="custom",
+                exercise_factor=1,
+                compound_factor=0.5,
+                back_factor=0.2,
+            )
+        )
+        profile_key = created["profile"]["key"]
+        create_exercise_endpoint(
+            ExerciseCreateRequest(
+                name="Profile Locked Exercise",
+                is_active=False,
+                profile_key=profile_key,
+            )
+        )
+
+        with self.assertRaises(HTTPException) as exc:
+            delete_exercise_profile_endpoint(profile_key)
+
+        self.assertEqual(exc.exception.status_code, 409)
+        self.assertIn("used by exercises", exc.exception.detail)
 
 
 if __name__ == "__main__":

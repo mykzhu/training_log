@@ -41,6 +41,10 @@ GARMIN_AUTO_SYNC_CHECK_INTERVAL_SECONDS = int_env(
     3600,
     minimum=300,
 )
+LOG_BUFFER_SIZE = int_env("LOG_BUFFER_SIZE", 2000, minimum=100)
+LOG_FILE_PATH = Path(os.getenv("LOG_FILE_PATH", "/data/training-log.log"))
+LOG_FILE_MAX_BYTES = int_env("LOG_FILE_MAX_BYTES", 1_000_000, minimum=100_000)
+LOG_FILE_BACKUP_COUNT = int_env("LOG_FILE_BACKUP_COUNT", 3, minimum=0)
 
 DEFAULT_EXERCISES = (
     "Deadlift",

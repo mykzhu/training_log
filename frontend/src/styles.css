@@ -586,6 +586,27 @@ a.compact-button {
   font-size: 14px;
 }
 
+.settings-danger-zone {
+  border-top: 1px solid var(--border);
+  margin-top: 16px;
+  padding-top: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.settings-danger-zone h3,
+.settings-danger-zone h4 {
+  margin: 0 0 4px;
+  color: var(--red);
+}
+
+.danger-confirm-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
 .file-control {
   min-width: 180px;
 }
@@ -4108,10 +4129,140 @@ button.load-calendar-cell:focus-visible {
   min-height: 18px;
 }
 
+.log-summary-panel {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.log-summary-panel h2 {
+  margin: 0 0 4px;
+}
+
+.log-summary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.log-auto-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+}
+
+.log-auto-refresh input {
+  width: 18px;
+  min-height: 18px;
+}
+
+.log-controls {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.7fr) minmax(160px, 1fr) minmax(180px, 1.3fr) minmax(110px, 0.6fr);
+  gap: 10px;
+  align-items: end;
+}
+
+.log-list {
+  display: grid;
+  gap: 2px;
+}
+
+.log-entry {
+  display: grid;
+  grid-template-columns: 148px 74px minmax(140px, 220px) minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+  border-bottom: 1px solid var(--border);
+  padding: 5px 0;
+  font-size: 12px;
+}
+
+.log-entry-warning {
+  border-bottom-color: rgba(255, 159, 10, 0.45);
+}
+
+.log-entry-error,
+.log-entry-critical {
+  border-bottom-color: rgba(255, 69, 58, 0.45);
+}
+
+.log-time,
+.log-logger {
+  color: var(--muted);
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.log-level {
+  color: var(--text);
+  font-weight: 800;
+}
+
+.log-level-warning {
+  color: var(--yellow);
+}
+
+.log-level-error,
+.log-level-critical {
+  color: var(--red);
+}
+
+.log-message {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  line-height: 1.35;
+}
+
+.log-exception pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.log-exception {
+  grid-column: 4;
+  margin-top: 2px;
+}
+
+.log-exception summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 700;
+}
+
 @media (max-width: 760px) {
   .analysis-profile-form,
-  .analysis-profile-grid {
+  .analysis-profile-grid,
+  .log-controls {
     grid-template-columns: 1fr;
+  }
+
+  .log-summary-panel {
+    display: grid;
+  }
+
+  .log-summary-actions {
+    justify-content: flex-start;
+  }
+
+  .log-entry {
+    grid-template-columns: 104px 62px minmax(0, 1fr);
+  }
+
+  .log-logger,
+  .log-message,
+  .log-exception {
+    grid-column: 1 / -1;
   }
 }
 

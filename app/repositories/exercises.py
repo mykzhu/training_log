@@ -15,6 +15,10 @@ class InactiveExerciseProfileError(ValueError):
     pass
 
 
+class ExerciseInUseError(ValueError):
+    pass
+
+
 EXERCISE_OPTION_SETTING_DEFAULTS = {
     "default_weight": 0.0,
     "min_weight": 0.0,
@@ -687,6 +691,79 @@ def update_exercise(
             return None
 
     return get_exercise(exercise_id)
+
+
+def get_exercise_usage_counts(
+    conn: sqlite3.Connection,
+    exercise_id: int,
+) -> dict[str, int]:
+    workout_count = conn.execute(
+        """
+        SELECT COUNT(DISTINCT workout_id)
+        FROM workout_exercises
+        WHERE exercise_id = ?
+        """,
+        (exercise_id,),
+    ).fetchone()[0]
+    set_count = conn.execute(
+        """
+        SELECT COUNT(*)
+        FROM workout_exercises we
+        JOIN set_entries se ON se.workout_exercise_id = we.id
+        WHERE we.exercise_id = ?
+        """,
+        (exercise_id,),
+    ).fetchone()[0]
+    draft_count = conn.execute(
+        """
+        SELECT COUNT(*)
+        FROM active_draft_exercises
+        WHERE exercise_id = ?
+        """,
+        (exercise_id,),
+    ).fetchone()[0]
+
+    return {
+        "workout_count": int(workout_count),
+        "set_count": int(set_count),
+        "draft_count": int(draft_count),
+    }
+
+
+def delete_exercise_by_id(exercise_id: int) -> dict[str, Any] | None:
+    with get_db() as conn:
+        exercise = conn.execute(
+            """
+            SELECT id, name, is_active, sort_order, profile_key
+            FROM exercises
+            WHERE id = ?
+            """,
+            (exercise_id,),
+        ).fetchone()
+
+        if exercise is None:
+            return None
+
+        usage = get_exercise_usage_counts(conn, exercise_id)
+        if usage["workout_count"] > 0 or usage["draft_count"] > 0:
+            raise ExerciseInUseError(
+                "Exercise has workout history or active draft usage and cannot be deleted. Deactivate it instead."
+            )
+
+        conn.execute(
+            "DELETE FROM exercises WHERE id = ?",
+            (exercise_id,),
+        )
+
+    deleted = {
+        "id": int(exercise["id"]),
+        "name": str(exercise["name"]),
+        "is_active": bool(exercise["is_active"]),
+        "sort_order": int(exercise["sort_order"]),
+        "profile_key": exercise["profile_key"] or "accessory",
+        "usage": usage,
+    }
+    return deleted
 
 
 def get_option_settings_by_exercise_ids(

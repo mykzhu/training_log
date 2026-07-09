@@ -44,6 +44,17 @@ export function updateExercise(
   });
 }
 
+export function deleteExercise(exerciseId: number) {
+  return requestJson<{
+    deleted: boolean;
+    exercise_id: number;
+    exercise?: Record<string, unknown> | null;
+    usage?: Record<string, number> | null;
+  }>(`/api/v1/exercises/${exerciseId}`, {
+    method: "DELETE",
+  });
+}
+
 export function replaceExerciseWeights(exerciseId: number, weights: number[]) {
   return requestJson<{ exercise_id: number; weights: number[] }>(
     `/api/v1/exercises/${exerciseId}/weights`,
@@ -86,4 +97,14 @@ export function updateExerciseProfile(
       body: jsonBody(payload),
     },
   );
+}
+
+export function deleteExerciseProfile(profileKey: string) {
+  return requestJson<{
+    deleted: boolean;
+    profile_key: string;
+    profile?: ExerciseProfile | null;
+  }>(`/api/v1/exercise-profiles/${encodeURIComponent(profileKey)}`, {
+    method: "DELETE",
+  });
 }

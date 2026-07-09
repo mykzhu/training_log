@@ -254,6 +254,13 @@ class ExerciseMutationResponse(AppBaseModel):
     created: bool | None = None
 
 
+class DeleteExerciseResponse(AppBaseModel):
+    deleted: bool
+    exercise_id: int
+    exercise: dict[str, Any] | None = None
+    usage: dict[str, int] | None = None
+
+
 class ExerciseWeightsResponse(AppBaseModel):
     exercise_id: int
     weights: list[float]
@@ -279,6 +286,32 @@ class ExerciseProfilesResponse(AppBaseModel):
 class ExerciseProfileMutationResponse(AppBaseModel):
     profile: ExerciseProfileResponse
     created: bool | None = None
+
+
+class DeleteExerciseProfileResponse(AppBaseModel):
+    deleted: bool
+    profile_key: str
+    profile: ExerciseProfileResponse | None = None
+
+
+class LogEntryResponse(AppBaseModel):
+    id: int
+    timestamp: str
+    level: str
+    logger: str
+    message: str
+    module: str | None = None
+    function: str | None = None
+    line: int | None = None
+    exception: str | None = None
+
+
+class LogsResponse(AppBaseModel):
+    limit: int
+    count: int
+    total_available: int
+    truncated: bool
+    entries: list[LogEntryResponse]
 
 
 class RecoveryContextResponse(FlexibleResponse):

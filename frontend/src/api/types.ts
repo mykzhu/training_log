@@ -259,6 +259,26 @@ export type GarminLoginResponse = {
   mfa_token: string | null;
 };
 
+export type LogEntry = {
+  id: number;
+  timestamp: string;
+  level: string;
+  logger: string;
+  message: string;
+  module?: string | null;
+  function?: string | null;
+  line?: number | null;
+  exception?: string | null;
+};
+
+export type LogsResponse = {
+  limit: number;
+  count: number;
+  total_available: number;
+  truncated: boolean;
+  entries: LogEntry[];
+};
+
 export type GarminSyncResponse = {
   synced: boolean;
   days: number;

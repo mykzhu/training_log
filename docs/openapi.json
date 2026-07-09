@@ -291,6 +291,56 @@
         "title": "CurrentWorkoutSetEntryResponse",
         "type": "object"
       },
+      "DeleteExerciseProfileResponse": {
+        "properties": {
+          "deleted": {
+            "title": "Deleted",
+            "type": "boolean"
+          },
+          "profile": {
+            "$ref": "#/components/schemas/ExerciseProfileResponse"
+          },
+          "profile_key": {
+            "title": "Profile Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "deleted",
+          "profile_key"
+        ],
+        "title": "DeleteExerciseProfileResponse",
+        "type": "object"
+      },
+      "DeleteExerciseResponse": {
+        "properties": {
+          "deleted": {
+            "title": "Deleted",
+            "type": "boolean"
+          },
+          "exercise": {
+            "title": "Exercise",
+            "type": "object"
+          },
+          "exercise_id": {
+            "title": "Exercise Id",
+            "type": "integer"
+          },
+          "usage": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Usage",
+            "type": "object"
+          }
+        },
+        "required": [
+          "deleted",
+          "exercise_id"
+        ],
+        "title": "DeleteExerciseResponse",
+        "type": "object"
+      },
       "DeleteWorkoutResponse": {
         "properties": {
           "deleted": {
@@ -999,6 +1049,14 @@
             "title": "Body Battery Start",
             "type": "integer"
           },
+          "completeness_message": {
+            "title": "Completeness Message",
+            "type": "string"
+          },
+          "completeness_status": {
+            "title": "Completeness Status",
+            "type": "string"
+          },
           "date": {
             "title": "Date",
             "type": "string"
@@ -1006,6 +1064,10 @@
           "hrv_ms": {
             "title": "Hrv Ms",
             "type": "number"
+          },
+          "is_complete": {
+            "title": "Is Complete",
+            "type": "boolean"
           },
           "raw_diagnostics": {
             "title": "Raw Diagnostics",
@@ -1433,6 +1495,10 @@
             "title": "Current Date",
             "type": "string"
           },
+          "current_metric_completeness": {
+            "title": "Current Metric Completeness",
+            "type": "object"
+          },
           "freshness": {
             "$ref": "#/components/schemas/GarminStatsFreshnessResponse"
           },
@@ -1454,6 +1520,22 @@
           },
           "readiness_impact": {
             "$ref": "#/components/schemas/GarminStatsReadinessImpactResponse"
+          },
+          "readiness_previous_date": {
+            "title": "Readiness Previous Date",
+            "type": "string"
+          },
+          "readiness_scoring_date": {
+            "title": "Readiness Scoring Date",
+            "type": "string"
+          },
+          "readiness_scoring_date_source": {
+            "title": "Readiness Scoring Date Source",
+            "type": "string"
+          },
+          "scoring_metric_completeness": {
+            "title": "Scoring Metric Completeness",
+            "type": "object"
           },
           "signals": {
             "items": {
@@ -1481,9 +1563,21 @@
       },
       "GarminStatsLatestMetricResponse": {
         "properties": {
+          "completeness_message": {
+            "title": "Completeness Message",
+            "type": "string"
+          },
+          "completeness_status": {
+            "title": "Completeness Status",
+            "type": "string"
+          },
           "date": {
             "title": "Date",
             "type": "string"
+          },
+          "is_complete": {
+            "title": "Is Complete",
+            "type": "boolean"
           },
           "synced_at": {
             "title": "Synced At",
@@ -1507,6 +1601,14 @@
             "title": "Body Battery Start",
             "type": "integer"
           },
+          "completeness_message": {
+            "title": "Completeness Message",
+            "type": "string"
+          },
+          "completeness_status": {
+            "title": "Completeness Status",
+            "type": "string"
+          },
           "date": {
             "title": "Date",
             "type": "string"
@@ -1514,6 +1616,10 @@
           "hrv_ms": {
             "title": "Hrv Ms",
             "type": "number"
+          },
+          "is_complete": {
+            "title": "Is Complete",
+            "type": "boolean"
           },
           "resting_heart_rate": {
             "title": "Resting Heart Rate",
@@ -1821,6 +1927,91 @@
           "back_stress_score"
         ],
         "title": "LoadMetricsResponse",
+        "type": "object"
+      },
+      "LogEntryResponse": {
+        "properties": {
+          "exception": {
+            "title": "Exception",
+            "type": "string"
+          },
+          "function": {
+            "title": "Function",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "level": {
+            "title": "Level",
+            "type": "string"
+          },
+          "line": {
+            "title": "Line",
+            "type": "integer"
+          },
+          "logger": {
+            "title": "Logger",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "module": {
+            "title": "Module",
+            "type": "string"
+          },
+          "timestamp": {
+            "title": "Timestamp",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "timestamp",
+          "level",
+          "logger",
+          "message"
+        ],
+        "title": "LogEntryResponse",
+        "type": "object"
+      },
+      "LogsResponse": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/LogEntryResponse"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "total_available": {
+            "title": "Total Available",
+            "type": "integer"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "limit",
+          "count",
+          "total_available",
+          "truncated",
+          "entries"
+        ],
+        "title": "LogsResponse",
         "type": "object"
       },
       "NextWorkoutRecommendationResponse": {
@@ -2967,6 +3158,46 @@
       }
     },
     "/api/v1/exercise-profiles/{profile_key}": {
+      "delete": {
+        "operationId": "delete_exercise_profile_endpoint_api_v1_exercise_profiles__profile_key__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "profile_key",
+            "required": true,
+            "schema": {
+              "title": "Profile Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteExerciseProfileResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Exercise Profile Endpoint",
+        "tags": [
+          "exercises"
+        ]
+      },
       "patch": {
         "operationId": "update_exercise_profile_endpoint_api_v1_exercise_profiles__profile_key__patch",
         "parameters": [
@@ -3142,6 +3373,46 @@
       }
     },
     "/api/v1/exercises/{exercise_id}": {
+      "delete": {
+        "operationId": "delete_exercise_endpoint_api_v1_exercises__exercise_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "exercise_id",
+            "required": true,
+            "schema": {
+              "title": "Exercise Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteExerciseResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Exercise Endpoint",
+        "tags": [
+          "exercises"
+        ]
+      },
       "patch": {
         "operationId": "update_exercise_endpoint_api_v1_exercises__exercise_id__patch",
         "parameters": [
@@ -3606,6 +3877,92 @@
         "summary": "Sync Garmin",
         "tags": [
           "garmin"
+        ]
+      }
+    },
+    "/api/v1/logs": {
+      "get": {
+        "operationId": "get_logs_endpoint_api_v1_logs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 500,
+              "maximum": 5000.0,
+              "minimum": 1.0,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "level",
+            "required": false,
+            "schema": {
+              "maxLength": 20,
+              "title": "Level",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "logger",
+            "required": false,
+            "schema": {
+              "maxLength": 120,
+              "title": "Logger",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "query",
+            "required": false,
+            "schema": {
+              "maxLength": 200,
+              "title": "Query",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "order",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "pattern": "^(asc|desc)$",
+              "title": "Order",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Logs Endpoint",
+        "tags": [
+          "logs"
         ]
       }
     },

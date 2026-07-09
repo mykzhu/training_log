@@ -33,7 +33,7 @@ navigation in App.tsx
 Always show:
 
 ```text
-Current | History | Stats | Garmin | Backup | Settings
+Current | History | Stats | Garmin | Log | Backup | Settings
 ```
 
 Never hide the active route. Highlight it instead.

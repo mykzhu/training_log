@@ -35,6 +35,10 @@ class AccessoryProfileError(ValueError):
     pass
 
 
+class BuiltInProfileDeleteError(ValueError):
+    pass
+
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -412,6 +416,31 @@ def update_analysis_profile(
         ),
     )
     return get_analysis_profile(conn, key)
+
+
+def delete_analysis_profile(
+    conn: sqlite3.Connection,
+    profile_key: str,
+) -> dict[str, Any] | None:
+    key = normalize_profile_key(profile_key)
+    profile = get_analysis_profile(conn, key)
+    if profile is None:
+        return None
+
+    if key == DEFAULT_PROFILE_KEY:
+        raise AccessoryProfileError("Accessory profile cannot be deleted.")
+    if profile["is_builtin"]:
+        raise BuiltInProfileDeleteError("Built-in analysis types cannot be deleted.")
+    if profile["exercise_count"] > 0:
+        raise ProfileInUseError(
+            "Profile is used by exercises and cannot be deleted."
+        )
+
+    conn.execute(
+        "DELETE FROM analysis_profiles WHERE key = ?",
+        (key,),
+    )
+    return profile
 
 
 def backup_profile_rows(conn: sqlite3.Connection) -> list[dict[str, Any]]:

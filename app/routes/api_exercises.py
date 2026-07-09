@@ -6,18 +6,22 @@ from fastapi import APIRouter, HTTPException, Query
 from app.db import get_db
 from app.repositories.analysis_profiles import (
     AccessoryProfileError,
+    BuiltInProfileDeleteError,
     DuplicateProfileKeyError,
     DuplicateProfileLabelError,
     InvalidProfileKeyError,
     ProfileInUseError,
     create_analysis_profile,
+    delete_analysis_profile,
     list_analysis_profiles,
     update_analysis_profile,
 )
 from app.repositories.exercises import (
     ActiveExerciseWeightError,
+    ExerciseInUseError,
     InactiveExerciseProfileError,
     create_exercise,
+    delete_exercise_by_id,
     get_exercise,
     list_exercises,
     normalize_exercise_name,
@@ -27,6 +31,8 @@ from app.repositories.exercises import (
 )
 from app.services.stats_service import build_exercise_stats, parse_limit
 from app.schemas import (
+    DeleteExerciseProfileResponse,
+    DeleteExerciseResponse,
     ExerciseCreateRequest,
     ExerciseMutationResponse,
     ExerciseOrderUpdateRequest,
@@ -55,7 +61,9 @@ def profile_error_response(exc: Exception) -> HTTPException:
         return HTTPException(status_code=409, detail=str(exc))
     if isinstance(exc, ProfileInUseError):
         return HTTPException(status_code=409, detail=str(exc))
-    if isinstance(exc, (AccessoryProfileError, InvalidProfileKeyError, ValueError)):
+    if isinstance(exc, (AccessoryProfileError, BuiltInProfileDeleteError)):
+        return HTTPException(status_code=409, detail=str(exc))
+    if isinstance(exc, (InvalidProfileKeyError, ValueError)):
         return HTTPException(status_code=400, detail=str(exc))
     return HTTPException(status_code=400, detail="Profile action failed.")
 
@@ -203,6 +211,24 @@ def update_exercise_endpoint(
     return {"exercise": exercise}
 
 
+@router.delete("/{exercise_id}", response_model=DeleteExerciseResponse)
+def delete_exercise_endpoint(exercise_id: int) -> dict[str, Any]:
+    try:
+        deleted = delete_exercise_by_id(exercise_id)
+    except ExerciseInUseError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    if deleted is None:
+        raise HTTPException(status_code=404, detail="Exercise not found.")
+
+    return {
+        "deleted": True,
+        "exercise_id": exercise_id,
+        "exercise": deleted,
+        "usage": deleted.get("usage"),
+    }
+
+
 @router.put("/order", response_model=ExercisesResponse)
 def reorder_exercises_endpoint(
     payload: ExerciseOrderUpdateRequest,
@@ -306,3 +332,25 @@ def update_exercise_profile_endpoint(
         raise HTTPException(status_code=404, detail="Exercise profile not found.")
 
     return {"profile": profile}
+
+
+@profiles_router.delete(
+    "/{profile_key}",
+    response_model=DeleteExerciseProfileResponse,
+)
+def delete_exercise_profile_endpoint(profile_key: str) -> dict[str, Any]:
+    try:
+        with get_db() as conn:
+            profile = delete_analysis_profile(conn, profile_key)
+    except Exception as exc:
+        http_exc = profile_error_response(exc)
+        raise http_exc from exc
+
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Exercise profile not found.")
+
+    return {
+        "deleted": True,
+        "profile_key": profile["key"],
+        "profile": profile,
+    }

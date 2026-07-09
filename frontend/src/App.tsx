@@ -18,6 +18,7 @@ import { appBasePath } from "./utils/basePath";
 
 const ExerciseStatsPage = lazy(() => import("./pages/ExerciseStatsPage"));
 const GarminStatsPage = lazy(() => import("./pages/GarminStatsPage"));
+const LogPage = lazy(() => import("./pages/LogPage"));
 const StatsPage = lazy(() => import("./pages/StatsPage"));
 
 const queryClient = new QueryClient({
@@ -35,6 +36,7 @@ type PageKey =
   | "stats"
   | "exercise-stats"
   | "garmin"
+  | "log"
   | "backup"
   | "settings";
 
@@ -51,6 +53,7 @@ const pages: Array<{ key: PageKey; label: string }> = [
   { key: "history", label: "History" },
   { key: "stats", label: "Stats" },
   { key: "garmin", label: "Garmin" },
+  { key: "log", label: "Log" },
   { key: "backup", label: "Backup" },
   { key: "settings", label: "Settings" },
 ];
@@ -110,6 +113,9 @@ function routeInfoFromPath(pathname: string): RouteInfo {
   if (cleanPath === "/garmin") {
     return { page: "garmin" };
   }
+  if (cleanPath === "/log") {
+    return { page: "log" };
+  }
   if (cleanPath === "/backup") {
     return { page: "backup" };
   }
@@ -163,6 +169,7 @@ function AppLayout() {
   const isEditWorkout =
     activePage === "history" && workoutId !== null && routeInfo.editMode;
   const isBackupPage = activePage === "backup";
+  const isLogPage = activePage === "log";
   const isExerciseStats = activePage === "exercise-stats";
   const isNotFound = activePage === "not-found";
   const headerTitle = isHistoryList
@@ -173,20 +180,24 @@ function AppLayout() {
         ? `Edit Workout #${workoutId}`
         : isBackupPage
           ? "Backup"
-          : isExerciseStats
-            ? "Exercise stats"
-            : isNotFound
-              ? "Not found"
-              : "Training Log";
+          : isLogPage
+            ? "Log"
+            : isExerciseStats
+              ? "Exercise stats"
+              : isNotFound
+                ? "Not found"
+                : "Training Log";
   const headerSubtitle = isHistoryList
     ? "Last 30 workouts"
     : isReadonlyWorkout || isEditWorkout || isNotFound
       ? null
       : isBackupPage
         ? "Export, restore, or reset training history"
-        : isExerciseStats
-          ? "Stats"
-          : pages.find((page) => page.key === activePage)?.label;
+        : isLogPage
+          ? "Application logs"
+          : isExerciseStats
+            ? "Stats"
+            : pages.find((page) => page.key === activePage)?.label;
   const navItems = pages.map((page) => ({
     key: page.key,
     label: page.label,
@@ -242,6 +253,7 @@ function AppLayout() {
             element={<ExerciseStatsRoute />}
           />
           <Route path="/garmin" element={<GarminStatsPage />} />
+          <Route path="/log" element={<LogPage />} />
           <Route path="/backup" element={<BackupPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<NotFoundPage />} />
