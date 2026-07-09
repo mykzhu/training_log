@@ -12,6 +12,7 @@ from app.routes.api_backup import (
     import_backup_payload,
     reset_backup_data,
 )
+from app.services.backup_service import BACKUP_SCHEMA_VERSION
 from app.services.draft_service import (
     clear_active_workout_draft,
     get_active_workout_draft,
@@ -141,7 +142,7 @@ class BackupApiTests(unittest.TestCase):
         response = get_backup()
 
         self.assertEqual(response["app"], "training-log")
-        self.assertEqual(response["schema_version"], 8)
+        self.assertEqual(response["schema_version"], BACKUP_SCHEMA_VERSION)
         self.assertIn("analysis_profiles", response["tables"])
         self.assertIn("default_reps", response["tables"]["exercises"][0])
         self.assertIn("measurement_type", response["tables"]["exercises"][0])
@@ -149,6 +150,11 @@ class BackupApiTests(unittest.TestCase):
         self.assertGreater(len(response["tables"]["exercise_weight_options"]), 0)
         self.assertEqual(len(response["tables"]["workouts"]), 1)
         self.assertEqual(len(response["tables"]["workout_exercises"]), 1)
+        self.assertIn(
+            "measurement_type",
+            response["tables"]["workout_exercises"][0],
+        )
+        self.assertIn("reps_unit", response["tables"]["workout_exercises"][0])
         self.assertEqual(len(response["tables"]["set_entries"]), 1)
         self.assertIn("garmin_daily_metrics", response["tables"])
 

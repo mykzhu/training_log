@@ -8,9 +8,9 @@ from app.repositories.exercises import (
     derive_set_metrics,
     get_float_options,
     get_int_options,
-    get_measurement_settings_by_exercise_ids,
     get_option_settings_by_exercise_ids,
     get_weight_options_by_exercise_ids,
+    normalize_measurement_settings,
 )
 from app.repositories import drafts as draft_repository
 from app.repositories.workouts import get_previous_set_for_exercise
@@ -359,20 +359,14 @@ def get_draft_workout_details(draft: dict[str, Any]) -> list[dict[str, Any]]:
             for item in draft["workout_exercises"]
         ]
     )
-    measurements_by_exercise = get_measurement_settings_by_exercise_ids(
-        [
-            int(item["exercise_id"])
-            for item in draft["workout_exercises"]
-        ]
-    )
-
     for item in sorted(draft["workout_exercises"], key=lambda x: (x["position"], x["id"])):
         sets = item["sets"]
         total_volume = sum(float(s["weight"]) * int(s["reps"]) for s in sets)
         total_reps = sum(int(s["reps"]) for s in sets)
-        measurement = measurements_by_exercise.get(
-            int(item["exercise_id"]),
-            {"measurement_type": "weighted_reps", "reps_unit": "reps"},
+        measurement = normalize_measurement_settings(
+            measurement_type=item.get("measurement_type"),
+            reps_unit=item.get("reps_unit"),
+            exercise_name=str(item.get("exercise_name", "")),
         )
         derived_metrics = derive_set_metrics(
             sets,
@@ -500,13 +494,21 @@ def save_workout_draft_to_db(draft: dict[str, Any]) -> int:
         ):
             workout_exercise_cursor = conn.execute(
                 """
-                INSERT INTO workout_exercises (workout_id, exercise_id, position)
-                VALUES (?, ?, ?)
+                INSERT INTO workout_exercises (
+                    workout_id,
+                    exercise_id,
+                    position,
+                    measurement_type,
+                    reps_unit
+                )
+                VALUES (?, ?, ?, ?, ?)
                 """,
                 (
                     workout_id,
                     int(draft_exercise["exercise_id"]),
                     int(draft_exercise["position"]),
+                    draft_exercise.get("measurement_type") or "weighted_reps",
+                    draft_exercise.get("reps_unit") or "reps",
                 ),
             )
 

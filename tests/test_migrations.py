@@ -6,6 +6,7 @@ from pathlib import Path
 from app import config
 from app.db import get_db, init_db
 from app.migrations import v010_exercise_measurement_type
+from app.migrations import v011_snapshot_exercise_measurements
 from app.migrations.runner import run_migrations
 
 
@@ -70,6 +71,14 @@ class MigrationTests(unittest.TestCase):
             workout_columns = {
                 row["name"] for row in conn.execute("PRAGMA table_info(workouts)")
             }
+            workout_exercise_columns = {
+                row["name"]
+                for row in conn.execute("PRAGMA table_info(workout_exercises)")
+            }
+            active_draft_exercise_columns = {
+                row["name"]
+                for row in conn.execute("PRAGMA table_info(active_draft_exercises)")
+            }
             garmin_columns = {
                 row["name"]
                 for row in conn.execute("PRAGMA table_info(garmin_daily_metrics)")
@@ -77,7 +86,7 @@ class MigrationTests(unittest.TestCase):
 
         self.assertEqual(
             [int(row["version"]) for row in rows],
-            [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+            [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
         )
         self.assertEqual(
             [row["name"] for row in rows],
@@ -92,6 +101,7 @@ class MigrationTests(unittest.TestCase):
                 "garmin_auto_sync_settings",
                 "exercise_option_settings",
                 "exercise_measurement_type",
+                "snapshot_exercise_measurements",
             ],
         )
         self.assertGreater(exercise_count, 0)
@@ -104,6 +114,10 @@ class MigrationTests(unittest.TestCase):
         self.assertIn("session_rpe", workout_columns)
         self.assertIn("lower_back_pain", workout_columns)
         self.assertIn("duration_seconds", workout_columns)
+        self.assertIn("measurement_type", workout_exercise_columns)
+        self.assertIn("reps_unit", workout_exercise_columns)
+        self.assertIn("measurement_type", active_draft_exercise_columns)
+        self.assertIn("reps_unit", active_draft_exercise_columns)
         self.assertIn("date", garmin_columns)
         self.assertIn("resting_heart_rate", garmin_columns)
         self.assertIn("raw_diagnostics", garmin_columns)
@@ -144,7 +158,7 @@ class MigrationTests(unittest.TestCase):
                 ("Deadlift",),
             ).fetchone()[0]
 
-        self.assertEqual(versions, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+        self.assertEqual(versions, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
         self.assertEqual(exercise["name"], "Romanian Deadlift")
         self.assertEqual(exercise["profile_key"], "deadlift")
         self.assertEqual(exercise["is_active"], 1)
@@ -198,6 +212,106 @@ class MigrationTests(unittest.TestCase):
         self.assertEqual(rows["Suitcase carry"]["reps_unit"], "sec")
         self.assertEqual(rows["Bench Press"]["measurement_type"], "weighted_reps")
         self.assertEqual(rows["Bench Press"]["reps_unit"], "reps")
+
+    def test_v011_backfills_workout_and_active_draft_measurement_snapshots(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        try:
+            conn.executescript(
+                """
+                CREATE TABLE exercises (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL UNIQUE,
+                    measurement_type TEXT,
+                    reps_unit TEXT
+                );
+                CREATE TABLE workouts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    workout_date TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    finished_at TEXT
+                );
+                CREATE TABLE workout_exercises (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    workout_id INTEGER NOT NULL,
+                    exercise_id INTEGER NOT NULL,
+                    position INTEGER NOT NULL
+                );
+                CREATE TABLE active_workout_draft (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    started_at TEXT NOT NULL,
+                    next_workout_exercise_id INTEGER NOT NULL,
+                    next_set_id INTEGER NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE TABLE active_draft_exercises (
+                    id INTEGER PRIMARY KEY,
+                    draft_id INTEGER NOT NULL DEFAULT 1,
+                    exercise_id INTEGER NOT NULL,
+                    position INTEGER NOT NULL
+                );
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO exercises (id, name, measurement_type, reps_unit)
+                VALUES (1, 'Suitcase carry', 'loaded_carry_time', 'sec')
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO workouts (id, workout_date, created_at, finished_at)
+                VALUES (1, '2026-06-01', '2026-06-01T10:00:00', NULL)
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO workout_exercises (id, workout_id, exercise_id, position)
+                VALUES (1, 1, 1, 1)
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO active_workout_draft (
+                    id,
+                    started_at,
+                    next_workout_exercise_id,
+                    next_set_id,
+                    updated_at
+                )
+                VALUES (1, '2026-06-02T10:00:00', 2, 1, '2026-06-02T10:00:00')
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO active_draft_exercises (id, draft_id, exercise_id, position)
+                VALUES (1, 1, 1, 1)
+                """
+            )
+
+            v011_snapshot_exercise_measurements.up(conn)
+
+            workout_snapshot = conn.execute(
+                """
+                SELECT measurement_type, reps_unit
+                FROM workout_exercises
+                WHERE id = 1
+                """
+            ).fetchone()
+            draft_snapshot = conn.execute(
+                """
+                SELECT measurement_type, reps_unit
+                FROM active_draft_exercises
+                WHERE id = 1
+                """
+            ).fetchone()
+        finally:
+            conn.close()
+
+        self.assertEqual(workout_snapshot["measurement_type"], "loaded_carry_time")
+        self.assertEqual(workout_snapshot["reps_unit"], "sec")
+        self.assertEqual(draft_snapshot["measurement_type"], "loaded_carry_time")
+        self.assertEqual(draft_snapshot["reps_unit"], "sec")
 
     def test_migration_runner_records_only_successful_migrations(self) -> None:
         conn = sqlite3.connect(":memory:")

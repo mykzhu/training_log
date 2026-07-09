@@ -56,10 +56,23 @@ class BackupServiceTests(unittest.TestCase):
 
             workout_exercise_cursor = conn.execute(
                 """
-                INSERT INTO workout_exercises (workout_id, exercise_id, position)
-                VALUES (?, ?, ?)
+                INSERT INTO workout_exercises (
+                    workout_id,
+                    exercise_id,
+                    position,
+                    measurement_type,
+                    reps_unit
+                )
+                SELECT
+                    ?,
+                    e.id,
+                    ?,
+                    e.measurement_type,
+                    e.reps_unit
+                FROM exercises e
+                WHERE e.id = ?
                 """,
-                (workout_id, exercise_id, 1),
+                (workout_id, 1, exercise_id),
             )
             workout_exercise_id = int(workout_exercise_cursor.lastrowid)
 
@@ -131,6 +144,11 @@ class BackupServiceTests(unittest.TestCase):
         self.assertIn("max_reps", payload["tables"]["exercises"][0])
         self.assertIn("measurement_type", payload["tables"]["exercises"][0])
         self.assertIn("reps_unit", payload["tables"]["exercises"][0])
+        self.assertIn(
+            "measurement_type",
+            payload["tables"]["workout_exercises"][0],
+        )
+        self.assertIn("reps_unit", payload["tables"]["workout_exercises"][0])
         self.assertEqual(len(payload["tables"]["garmin_daily_metrics"]), 1)
         self.assertNotIn(
             "raw_diagnostics",
@@ -162,6 +180,14 @@ class BackupServiceTests(unittest.TestCase):
                 """,
                 ("2026-06-26",),
             ).fetchone()
+            workout_exercise = conn.execute(
+                """
+                SELECT measurement_type, reps_unit
+                FROM workout_exercises
+                WHERE workout_id = ?
+                """,
+                (workout_id,),
+            ).fetchone()
 
         self.assertEqual(workout["session_rpe"], 7)
         self.assertEqual(workout["lower_back_pain"], 2)
@@ -171,6 +197,8 @@ class BackupServiceTests(unittest.TestCase):
         self.assertEqual(garmin_metric["resting_heart_rate"], 52)
         self.assertEqual(garmin_metric["steps"], 12345)
         self.assertEqual(garmin_metric["raw_diagnostics"], "{}")
+        self.assertEqual(workout_exercise["measurement_type"], "weighted_reps")
+        self.assertEqual(workout_exercise["reps_unit"], "reps")
 
     def test_schema_v6_restore_defaults_missing_exercise_measurement_fields(self) -> None:
         self.insert_workout()
@@ -236,6 +264,30 @@ class BackupServiceTests(unittest.TestCase):
         self.assertEqual(rows["Crunches"]["reps_unit"], "reps")
         self.assertEqual(rows["Deadlift"]["measurement_type"], "weighted_reps")
         self.assertEqual(rows["Deadlift"]["reps_unit"], "reps")
+
+    def test_schema_v8_restore_defaults_workout_exercise_measurement_snapshot(self) -> None:
+        self.insert_workout()
+        payload = build_backup_payload()
+        payload["schema_version"] = 8
+        for workout_exercise in payload["tables"]["workout_exercises"]:
+            workout_exercise.pop("measurement_type", None)
+            workout_exercise.pop("reps_unit", None)
+
+        reset_database_data()
+        restore_backup_payload(payload)
+
+        with get_db() as conn:
+            row = conn.execute(
+                """
+                SELECT we.measurement_type, we.reps_unit
+                FROM workout_exercises we
+                JOIN exercises e ON e.id = we.exercise_id
+                WHERE e.name = 'Deadlift'
+                """
+            ).fetchone()
+
+        self.assertEqual(row["measurement_type"], "weighted_reps")
+        self.assertEqual(row["reps_unit"], "reps")
 
     def test_schema_v5_restore_accepts_raw_diagnostics(self) -> None:
         self.insert_workout()

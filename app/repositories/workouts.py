@@ -148,11 +148,26 @@ def add_workout_exercise(workout_id: int, exercise_id: int) -> int:
 
                 cursor = conn.execute(
                     """
-                    INSERT INTO workout_exercises (workout_id, exercise_id, position)
-                    VALUES (?, ?, ?)
+                    INSERT INTO workout_exercises (
+                        workout_id,
+                        exercise_id,
+                        position,
+                        measurement_type,
+                        reps_unit
+                    )
+                    SELECT
+                        ?,
+                        e.id,
+                        ?,
+                        COALESCE(e.measurement_type, 'weighted_reps'),
+                        COALESCE(e.reps_unit, 'reps')
+                    FROM exercises e
+                    WHERE e.id = ?
                     """,
-                    (workout_id, exercise_id, next_position),
+                    (workout_id, next_position, exercise_id),
                 )
+                if cursor.rowcount == 0:
+                    raise sqlite3.IntegrityError("Exercise does not exist.")
 
                 return int(cursor.lastrowid)
         except sqlite3.IntegrityError as exc:
@@ -595,8 +610,8 @@ def get_workout_details_batch(
                 e.id AS exercise_id,
                 e.name AS exercise_name,
                 e.profile_key,
-                e.measurement_type,
-                e.reps_unit,
+                COALESCE(we.measurement_type, e.measurement_type, 'weighted_reps') AS measurement_type,
+                COALESCE(we.reps_unit, e.reps_unit, 'reps') AS reps_unit,
                 e.default_weight,
                 e.min_weight,
                 e.max_weight,

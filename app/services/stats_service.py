@@ -1677,7 +1677,6 @@ def build_exercise_pr_baselines(
     exercise_id: int,
     selected_workout_ids: set[int],
     max_workout: Any | None,
-    measurement_type: str = "weighted_reps",
 ) -> dict[int, dict[str, Any]]:
     if max_workout is None or not selected_workout_ids:
         return {}
@@ -1688,10 +1687,12 @@ def build_exercise_pr_baselines(
             SELECT
                 w.id AS workout_id,
                 w.created_at,
+                COALESCE(we.measurement_type, e.measurement_type, 'weighted_reps') AS measurement_type,
                 se.weight,
                 se.reps
             FROM set_entries se
             JOIN workout_exercises we ON we.id = se.workout_exercise_id
+            JOIN exercises e ON e.id = we.exercise_id
             JOIN workouts w ON w.id = we.workout_id
             WHERE we.exercise_id = ?
               AND (
@@ -1727,6 +1728,7 @@ def build_exercise_pr_baselines(
 
         weight = float(row["weight"])
         reps = int(row["reps"])
+        measurement_type = str(row["measurement_type"] or "weighted_reps")
         workout["total_volume"] += weight * reps
         if measurement_type in {"bodyweight_reps", "reps_only"}:
             workout["bodyweight_reps"] += reps
@@ -1882,7 +1884,6 @@ def build_exercise_stats(
         exercise_id=exercise_id,
         selected_workout_ids=selected_workout_ids,
         max_workout=workouts[-1] if workouts else None,
-        measurement_type=measurement_type,
     )
 
     profile_key = str(exercise["profile_key"] or "accessory")
@@ -1921,8 +1922,17 @@ def build_exercise_stats(
             for set_row in item["sets"]
         ]
         set_payloads = [exercise_set_payload(set_row) for set_row in sets]
+        workout_measurement = (
+            exercise_items[0]
+            if exercise_items
+            else {"measurement_type": measurement_type, "reps_unit": reps_unit}
+        )
+        workout_measurement_type = str(
+            workout_measurement.get("measurement_type") or measurement_type
+        )
+        workout_reps_unit = str(workout_measurement.get("reps_unit") or reps_unit)
 
-        derived_metrics = derive_set_metrics(sets, measurement_type)
+        derived_metrics = derive_set_metrics(sets, workout_measurement_type)
         total_volume = float(derived_metrics["total_volume_kg"])
         total_volume_kg = total_volume
         total_reps = sum(int(set_row["reps"]) for set_row in sets)
@@ -2024,28 +2034,28 @@ def build_exercise_stats(
         ):
             pr_flags.append("e1RM PR")
 
-        if measurement_type == "weighted_reps" and (
+        if workout_measurement_type == "weighted_reps" and (
             total_volume > 0
             and prior.get("best_volume") is not None
             and total_volume > float(prior["best_volume"]) + 1e-9
         ):
             pr_flags.append("Volume PR")
 
-        if measurement_type in {"bodyweight_reps", "reps_only"} and (
+        if workout_measurement_type in {"bodyweight_reps", "reps_only"} and (
             bodyweight_reps > 0
             and prior.get("best_bodyweight_reps") is not None
             and bodyweight_reps > int(prior["best_bodyweight_reps"])
         ):
             pr_flags.append("Total reps PR")
 
-        if measurement_type == "loaded_carry_time" and (
+        if workout_measurement_type == "loaded_carry_time" and (
             duration_seconds > 0
             and prior.get("best_duration_seconds") is not None
             and duration_seconds > int(prior["best_duration_seconds"])
         ):
             pr_flags.append("Duration PR")
 
-        if measurement_type == "loaded_carry_distance" and (
+        if workout_measurement_type == "loaded_carry_distance" and (
             distance_m > 0
             and prior.get("best_distance_m") is not None
             and distance_m > int(prior["best_distance_m"])
@@ -2080,8 +2090,8 @@ def build_exercise_stats(
             "weighted_reps": weighted_reps,
             "avg_kg_per_rep": avg_kg_per_rep,
             "avg_intensity": total_volume / total_reps if total_reps else None,
-            "measurement_type": measurement_type,
-            "reps_unit": reps_unit,
+            "measurement_type": workout_measurement_type,
+            "reps_unit": workout_reps_unit,
             "best_weight": best_weight,
             "best_reps": best_reps,
             "best_e1rm": best_e1rm,

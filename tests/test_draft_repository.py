@@ -49,6 +49,8 @@ class DraftRepositoryTests(unittest.TestCase):
                     "exercise_id": self.exercise_id("Deadlift"),
                     "exercise_name": "Deadlift",
                     "profile_key": "deadlift",
+                    "measurement_type": "weighted_reps",
+                    "reps_unit": "reps",
                     "position": 1,
                     "sets": [
                         {

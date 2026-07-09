@@ -87,19 +87,29 @@ class WorkoutsApiTests(unittest.TestCase):
             workout_id = int(workout_cursor.lastrowid)
 
             for position, exercise in enumerate(exercises, start=1):
+                exercise_id = self.exercise_id(str(exercise["name"]))
                 workout_exercise_cursor = conn.execute(
                     """
                     INSERT INTO workout_exercises (
                         workout_id,
                         exercise_id,
-                        position
+                        position,
+                        measurement_type,
+                        reps_unit
                     )
-                    VALUES (?, ?, ?)
+                    SELECT
+                        ?,
+                        e.id,
+                        ?,
+                        e.measurement_type,
+                        e.reps_unit
+                    FROM exercises e
+                    WHERE e.id = ?
                     """,
                     (
                         workout_id,
-                        self.exercise_id(str(exercise["name"])),
                         position,
+                        exercise_id,
                     ),
                 )
                 workout_exercise_id = int(workout_exercise_cursor.lastrowid)
@@ -423,6 +433,62 @@ class WorkoutsApiTests(unittest.TestCase):
         self.assertEqual(carry["total_volume_kg"], 0.0)
         self.assertEqual(carry["duration_seconds"], 0)
         self.assertEqual(carry["distance_m"], 40)
+
+    def test_workout_detail_preserves_measurement_snapshot_after_exercise_change(self) -> None:
+        create_exercise(
+            "Farmer carry",
+            is_active=False,
+            weights=[24],
+            measurement_settings={
+                "measurement_type": "loaded_carry_time",
+                "reps_unit": "sec",
+            },
+        )
+        first_workout_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            session_rpe=5,
+            lower_back_pain=2,
+            exercises=[
+                {
+                    "name": "Farmer carry",
+                    "sets": [{"weight": 24, "reps": 45}],
+                },
+            ],
+        )
+
+        with get_db() as conn:
+            conn.execute(
+                """
+                UPDATE exercises
+                SET measurement_type = 'loaded_carry_distance',
+                    reps_unit = 'm'
+                WHERE name = 'Farmer carry'
+                """
+            )
+
+        second_workout_id = self.insert_workout(
+            created_at="2026-06-02T10:00:00",
+            session_rpe=5,
+            lower_back_pain=2,
+            exercises=[
+                {
+                    "name": "Farmer carry",
+                    "sets": [{"weight": 24, "reps": 40}],
+                },
+            ],
+        )
+
+        first = get_workout_detail(first_workout_id)["exercises"][0]
+        second = get_workout_detail(second_workout_id)["exercises"][0]
+
+        self.assertEqual(first["measurement_type"], "loaded_carry_time")
+        self.assertEqual(first["reps_unit"], "sec")
+        self.assertEqual(first["duration_seconds"], 45)
+        self.assertEqual(first["distance_m"], 0)
+        self.assertEqual(second["measurement_type"], "loaded_carry_distance")
+        self.assertEqual(second["reps_unit"], "m")
+        self.assertEqual(second["duration_seconds"], 0)
+        self.assertEqual(second["distance_m"], 40)
 
     def test_get_workout_detail_returns_404_for_missing_workout(self) -> None:
         with self.assertRaises(HTTPException) as exc:

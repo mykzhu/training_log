@@ -27,7 +27,7 @@ from app.services.default_analysis_profiles import (
 
 logger = logging.getLogger("training_log")
 
-BACKUP_SCHEMA_VERSION = 8
+BACKUP_SCHEMA_VERSION = 9
 EXERCISE_BACKUP_COLUMNS_V1_V6: tuple[str, ...] = (
     "id",
     "name",
@@ -68,6 +68,17 @@ ANALYSIS_PROFILE_BACKUP_COLUMNS: tuple[str, ...] = (
     "is_active",
     "sort_order",
 )
+WORKOUT_EXERCISE_BACKUP_COLUMNS_V1_V8: tuple[str, ...] = (
+    "id",
+    "workout_id",
+    "exercise_id",
+    "position",
+)
+WORKOUT_EXERCISE_BACKUP_COLUMNS: tuple[str, ...] = (
+    *WORKOUT_EXERCISE_BACKUP_COLUMNS_V1_V8,
+    "measurement_type",
+    "reps_unit",
+)
 BASE_BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
     "exercises": EXERCISE_BACKUP_COLUMNS,
     "exercise_weight_options": ("id", "exercise_id", "weight", "sort_order"),
@@ -80,7 +91,7 @@ BASE_BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
         "lower_back_pain",
         "duration_seconds",
     ),
-    "workout_exercises": ("id", "workout_id", "exercise_id", "position"),
+    "workout_exercises": WORKOUT_EXERCISE_BACKUP_COLUMNS,
     "set_entries": (
         "id",
         "workout_exercise_id",
@@ -125,6 +136,7 @@ SCHEMA_V5_BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
     **{
         **BASE_BACKUP_TABLE_COLUMNS,
         "exercises": EXERCISE_BACKUP_COLUMNS_V1_V6,
+        "workout_exercises": WORKOUT_EXERCISE_BACKUP_COLUMNS_V1_V8,
     },
     "garmin_daily_metrics": GARMIN_BACKUP_TABLE_COLUMNS_V4_V5,
 }
@@ -132,6 +144,7 @@ SCHEMA_V4_BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
     **{
         **BASE_BACKUP_TABLE_COLUMNS,
         "exercises": EXERCISE_BACKUP_COLUMNS_V1_V6,
+        "workout_exercises": WORKOUT_EXERCISE_BACKUP_COLUMNS_V1_V8,
     },
     "garmin_daily_metrics": GARMIN_BACKUP_TABLE_COLUMNS_V4_V5,
 }
@@ -139,6 +152,7 @@ SCHEMA_V3_BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
     **{
         **BASE_BACKUP_TABLE_COLUMNS,
         "exercises": EXERCISE_BACKUP_COLUMNS_V1_V6,
+        "workout_exercises": WORKOUT_EXERCISE_BACKUP_COLUMNS_V1_V8,
     },
 }
 SCHEMA_V6_BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
@@ -146,6 +160,7 @@ SCHEMA_V6_BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
     **{
         **BASE_BACKUP_TABLE_COLUMNS,
         "exercises": EXERCISE_BACKUP_COLUMNS_V1_V6,
+        "workout_exercises": WORKOUT_EXERCISE_BACKUP_COLUMNS_V1_V8,
     },
     "garmin_daily_metrics": GARMIN_BACKUP_TABLE_COLUMNS,
 }
@@ -154,6 +169,15 @@ SCHEMA_V7_BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
     **{
         **BASE_BACKUP_TABLE_COLUMNS,
         "exercises": EXERCISE_BACKUP_COLUMNS_V7,
+        "workout_exercises": WORKOUT_EXERCISE_BACKUP_COLUMNS_V1_V8,
+    },
+    "garmin_daily_metrics": GARMIN_BACKUP_TABLE_COLUMNS,
+}
+SCHEMA_V8_BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
+    "analysis_profiles": ANALYSIS_PROFILE_BACKUP_COLUMNS,
+    **{
+        **BASE_BACKUP_TABLE_COLUMNS,
+        "workout_exercises": WORKOUT_EXERCISE_BACKUP_COLUMNS_V1_V8,
     },
     "garmin_daily_metrics": GARMIN_BACKUP_TABLE_COLUMNS,
 }
@@ -162,7 +186,7 @@ BACKUP_SEQUENCE_TABLES = tuple(BASE_BACKUP_TABLE_COLUMNS)
 LEGACY_BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
     "exercises": ("id", "name"),
     "workouts": BASE_BACKUP_TABLE_COLUMNS["workouts"],
-    "workout_exercises": BASE_BACKUP_TABLE_COLUMNS["workout_exercises"],
+    "workout_exercises": WORKOUT_EXERCISE_BACKUP_COLUMNS_V1_V8,
     "set_entries": BASE_BACKUP_TABLE_COLUMNS["set_entries"],
 }
 DRAFT_TABLES = (
@@ -243,9 +267,9 @@ def validate_backup_payload(payload: Any) -> dict[str, list[dict[str, Any]]]:
         raise ValueError("Backup file must contain a JSON object.")
 
     schema_version = payload.get("schema_version")
-    if schema_version not in (1, 2, 3, 4, 5, 6, 7, BACKUP_SCHEMA_VERSION):
+    if schema_version not in (1, 2, 3, 4, 5, 6, 7, 8, BACKUP_SCHEMA_VERSION):
         raise ValueError(
-            "Unsupported backup schema version. Expected 1, 2, 3, 4, 5, 6, 7 or "
+            "Unsupported backup schema version. Expected 1, 2, 3, 4, 5, 6, 7, 8 or "
             f"{BACKUP_SCHEMA_VERSION}."
         )
 
@@ -257,6 +281,8 @@ def validate_backup_payload(payload: Any) -> dict[str, list[dict[str, Any]]]:
 
     if schema_version == BACKUP_SCHEMA_VERSION:
         table_columns = BACKUP_TABLE_COLUMNS
+    elif schema_version == 8:
+        table_columns = SCHEMA_V8_BACKUP_TABLE_COLUMNS
     elif schema_version == 7:
         table_columns = SCHEMA_V7_BACKUP_TABLE_COLUMNS
     elif schema_version == 6:
@@ -336,10 +362,11 @@ def validate_backup_payload(payload: Any) -> dict[str, list[dict[str, Any]]]:
     validate_analysis_profiles(validated["analysis_profiles"])
     profile_keys = {str(row["key"]) for row in validated["analysis_profiles"]}
     validate_exercises(validated["exercises"], profile_keys)
+    normalize_workout_exercise_snapshots(validated)
     validate_exercise_weight_options(
         validated["exercise_weight_options"],
         validated,
-        enforce_active_weights=schema_version in (3, 4, 5, 7, BACKUP_SCHEMA_VERSION),
+        enforce_active_weights=schema_version in (3, 4, 5, 7, 8, BACKUP_SCHEMA_VERSION),
     )
     validate_workout_graph(validated)
     validate_garmin_daily_metrics(validated["garmin_daily_metrics"])
@@ -527,6 +554,31 @@ def validate_exercises(
             measurement_type=row["measurement_type"],
             reps_unit=row["reps_unit"],
             exercise_name=name,
+        )
+        row["measurement_type"] = measurement["measurement_type"]
+        row["reps_unit"] = measurement["reps_unit"]
+
+
+def normalize_workout_exercise_snapshots(
+    tables: dict[str, list[dict[str, Any]]],
+) -> None:
+    exercises_by_id = {
+        int(row["id"]): row
+        for row in tables["exercises"]
+    }
+
+    for row in tables["workout_exercises"]:
+        exercise = exercises_by_id.get(int(row["exercise_id"]))
+        measurement = normalize_measurement_settings(
+            measurement_type=row.get(
+                "measurement_type",
+                exercise.get("measurement_type") if exercise else None,
+            ),
+            reps_unit=row.get(
+                "reps_unit",
+                exercise.get("reps_unit") if exercise else None,
+            ),
+            exercise_name=str(exercise.get("name", "")) if exercise else "",
         )
         row["measurement_type"] = measurement["measurement_type"]
         row["reps_unit"] = measurement["reps_unit"]
@@ -834,7 +886,7 @@ def restore_backup_payload(payload: Any) -> None:
                 conn.execute(insert_sql, tuple(row[column] for column in columns))
 
         reset_sqlite_sequences(conn)
-        if schema_version in (3, 4, 5, 6, 7, BACKUP_SCHEMA_VERSION):
+        if schema_version in (3, 4, 5, 6, 7, 8, BACKUP_SCHEMA_VERSION):
             set_metadata(conn, EXERCISE_SETTINGS_WEIGHT_MIGRATION_KEY, "1")
         else:
             initialize_exercise_settings(conn, force_weight_migration=True)

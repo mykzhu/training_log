@@ -31,6 +31,8 @@ def load_active_draft(conn) -> dict[str, Any] | None:
             ade.exercise_id,
             e.name AS exercise_name,
             e.profile_key,
+            COALESCE(ade.measurement_type, e.measurement_type, 'weighted_reps') AS measurement_type,
+            COALESCE(ade.reps_unit, e.reps_unit, 'reps') AS reps_unit,
             ade.position
         FROM active_draft_exercises ade
         JOIN exercises e ON e.id = ade.exercise_id
@@ -70,6 +72,8 @@ def load_active_draft(conn) -> dict[str, Any] | None:
                 "exercise_id": int(row["exercise_id"]),
                 "exercise_name": row["exercise_name"],
                 "profile_key": row["profile_key"] or "accessory",
+                "measurement_type": row["measurement_type"] or "weighted_reps",
+                "reps_unit": row["reps_unit"] or "reps",
                 "position": int(row["position"]),
                 "sets": sets_by_exercise.get(int(row["id"]), []),
             }
@@ -172,18 +176,31 @@ def insert_draft_exercise(
                 """
             ).fetchone()[0]
         )
-        conn.execute(
+        cursor = conn.execute(
             """
             INSERT INTO active_draft_exercises (
                 id,
                 draft_id,
                 exercise_id,
-                position
+                position,
+                measurement_type,
+                reps_unit
             )
-            VALUES (?, 1, ?, ?)
+            SELECT
+                ?,
+                1,
+                e.id,
+                ?,
+                COALESCE(e.measurement_type, 'weighted_reps'),
+                COALESCE(e.reps_unit, 'reps')
+            FROM exercises e
+            WHERE e.id = ?
             """,
-            (draft_exercise_id, exercise_id, position),
+            (draft_exercise_id, position, exercise_id),
         )
+        if cursor.rowcount == 0:
+            return None
+
         conn.execute(
             """
             UPDATE active_workout_draft
@@ -463,13 +480,21 @@ def insert_completed_exercises_and_sets(
     ):
         workout_exercise_cursor = conn.execute(
             """
-            INSERT INTO workout_exercises (workout_id, exercise_id, position)
-            VALUES (?, ?, ?)
+            INSERT INTO workout_exercises (
+                workout_id,
+                exercise_id,
+                position,
+                measurement_type,
+                reps_unit
+            )
+            VALUES (?, ?, ?, ?, ?)
             """,
             (
                 workout_id,
                 int(draft_exercise["exercise_id"]),
                 int(draft_exercise["position"]),
+                draft_exercise.get("measurement_type") or "weighted_reps",
+                draft_exercise.get("reps_unit") or "reps",
             ),
         )
 

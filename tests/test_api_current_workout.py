@@ -179,6 +179,44 @@ class CurrentWorkoutApiTests(unittest.TestCase):
         self.assertEqual(exercise["duration_seconds"], 0)
         self.assertEqual(exercise["distance_m"], 0)
 
+    def test_active_draft_preserves_measurement_snapshot_after_exercise_change(self) -> None:
+        created = create_exercise_endpoint(
+            ExerciseCreateRequest(
+                name="Farmer carry",
+                is_active=True,
+                weights=[24],
+                measurement_type="loaded_carry_time",
+                reps_unit="sec",
+            )
+        )
+        exercise_id = int(created["exercise"]["id"])
+
+        start_current_workout()
+        response = add_current_workout_exercise(
+            AddExerciseRequest(exercise_id=exercise_id)
+        )
+        draft_exercise_id = response["exercises"][0]["draft_exercise_id"]
+
+        update_exercise_endpoint(
+            exercise_id,
+            ExerciseUpdateRequest(
+                measurement_type="loaded_carry_distance",
+                reps_unit="m",
+            ),
+        )
+
+        response = add_current_workout_set(
+            draft_exercise_id,
+            AddSetRequest(weight=24, reps=45),
+        )
+        exercise = response["exercises"][0]
+
+        self.assertEqual(exercise["measurement_type"], "loaded_carry_time")
+        self.assertEqual(exercise["reps_unit"], "sec")
+        self.assertEqual(exercise["total_volume_kg"], 0)
+        self.assertEqual(exercise["duration_seconds"], 45)
+        self.assertEqual(exercise["distance_m"], 0)
+
     def test_metadata_patch_preserves_omitted_fields(self) -> None:
         start_current_workout()
         response = update_current_workout_metadata(
