@@ -4,6 +4,24 @@ All notable changes to this project.
 
 ## Unreleased
 
+## 1.6.0 - 2026-07-09
+
+### Added
+
+* Added per-exercise set option settings for default, minimum, maximum, and step values for weight and reps.
+* Added generated per-exercise weight and reps choices to active workout and edit workout flows.
+* Added folded-by-default Settings cards for Analysis Types and Exercises and Weights.
+
+### Changed
+
+* Backup schema version is now 7 and includes per-exercise set option settings.
+* Settings now keeps dense analysis and exercise configuration hidden until the user expands a card.
+
+### Fixed
+
+* Fixed Crunches and other high-rep exercises so saved reps ranges appear in new workouts.
+* Fixed reps option stepping so a step of 5 produces clean increments such as 20, 25, 30, and 35.
+
 ## 1.5.0 - 2026-07-06
 
 ### Improved
