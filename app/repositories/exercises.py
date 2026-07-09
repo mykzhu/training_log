@@ -100,15 +100,33 @@ def derive_set_metrics(
     sets: list[Any],
     measurement_type: str,
 ) -> dict[str, float | int]:
-    total_volume_kg = sum(float(s["weight"]) * int(s["reps"]) for s in sets)
+    weighted_volume = sum(float(s["weight"]) * int(s["reps"]) for s in sets)
     total_reps = sum(int(s["reps"]) for s in sets)
-    bodyweight_reps = (
-        total_reps
-        if measurement_type in {"bodyweight_reps", "reps_only"}
-        else 0
-    )
-    duration_seconds = total_reps if measurement_type == "loaded_carry_time" else 0
-    distance_m = total_reps if measurement_type == "loaded_carry_distance" else 0
+    if measurement_type == "weighted_reps":
+        total_volume_kg = weighted_volume
+        bodyweight_reps = 0
+        duration_seconds = 0
+        distance_m = 0
+    elif measurement_type in {"bodyweight_reps", "reps_only"}:
+        total_volume_kg = 0.0
+        bodyweight_reps = total_reps
+        duration_seconds = 0
+        distance_m = 0
+    elif measurement_type == "loaded_carry_time":
+        total_volume_kg = 0.0
+        bodyweight_reps = 0
+        duration_seconds = total_reps
+        distance_m = 0
+    elif measurement_type == "loaded_carry_distance":
+        total_volume_kg = 0.0
+        bodyweight_reps = 0
+        duration_seconds = 0
+        distance_m = total_reps
+    else:
+        total_volume_kg = weighted_volume
+        bodyweight_reps = 0
+        duration_seconds = 0
+        distance_m = 0
 
     return {
         "total_volume_kg": total_volume_kg,

@@ -9,6 +9,7 @@ from unittest.mock import patch
 from app import config
 from app.db import get_db, init_db
 from app.repositories import garmin as garmin_repository
+from app.repositories.exercises import create_exercise
 import app.main as main
 from app.routes.api_stats import get_stats
 
@@ -258,6 +259,40 @@ class StatsApiTests(unittest.TestCase):
         self.assertIn("total_back_stress_score", summary)
         self.assertIn("load", scatter["points"][0])
         self.assertIn("total_volume_kg", scatter["points"][0])
+
+    def test_stats_excludes_loaded_carries_from_kg_volume(self) -> None:
+        create_exercise(
+            "Suitcase carry",
+            is_active=False,
+            weights=[24],
+        )
+        workout_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            session_rpe=5,
+            lower_back_pain=2,
+            exercises=[
+                {
+                    "name": "Suitcase carry",
+                    "sets": [{"weight": 24, "reps": 30}],
+                },
+            ],
+        )
+
+        response = get_stats(limit="all")
+        workout = response["stats"]["workouts"][0]
+        summary = response["stats"]["summary"]
+        carry = response["stats"]["exercise_stats"][0]
+        scatter = response["charts"]["scatter"]
+
+        self.assertEqual(workout["id"], workout_id)
+        self.assertEqual(workout["total_volume"], 720.0)
+        self.assertEqual(workout["total_volume_kg"], 0.0)
+        self.assertEqual(workout["duration_seconds"], 30)
+        self.assertEqual(summary["total_volume"], 720.0)
+        self.assertEqual(summary["total_volume_kg"], 0.0)
+        self.assertEqual(carry["total_volume_kg"], 0.0)
+        self.assertEqual(carry["duration_seconds"], 30)
+        self.assertEqual(scatter["points"][0]["total_volume_kg"], 0.0)
 
     def test_stats_response_does_not_expose_set_timestamp_analytics(self) -> None:
         self.insert_workout(

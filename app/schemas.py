@@ -310,6 +310,7 @@ class LogsResponse(AppBaseModel):
     limit: int
     count: int
     total_available: int
+    filtered_available: int
     truncated: bool
     entries: list[LogEntryResponse]
 

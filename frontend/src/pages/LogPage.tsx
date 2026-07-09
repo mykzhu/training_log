@@ -71,9 +71,13 @@ export default function LogPage() {
           <h2>Latest logs</h2>
           <p className="muted">
             {logs
-              ? `${logs.count} shown, ${logs.total_available} available${
-                  logs.truncated ? ", truncated by limit" : ""
-                }`
+              ? hasFilters
+                ? `${logs.count} shown, ${logs.filtered_available} matching, ${logs.total_available} total${
+                    logs.truncated ? ", truncated by limit" : ""
+                  }`
+                : `${logs.count} shown, ${logs.total_available} available${
+                    logs.truncated ? ", truncated by limit" : ""
+                  }`
               : "Loading logs"}
           </p>
         </div>

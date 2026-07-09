@@ -1,7 +1,11 @@
+import asyncio
 import logging
 import tempfile
 import unittest
 from pathlib import Path
+
+from fastapi import Response
+from starlette.requests import Request
 
 from app import config
 from app.db import init_db
@@ -68,8 +72,63 @@ class LogsApiTests(unittest.TestCase):
 
         self.assertEqual(response["count"], 2)
         self.assertEqual(response["total_available"], 3)
+        self.assertEqual(response["filtered_available"], 3)
         self.assertTrue(response["truncated"])
         self.assertIn("third", response["entries"][0]["message"])
+
+    def test_log_endpoint_reports_filtered_count_without_false_truncation(self) -> None:
+        logger = logging.getLogger("training_log.test.filter_count")
+        logger.info("alpha")
+        logger.warning("beta")
+        logger.warning("gamma")
+        logger.error("delta")
+
+        response = get_logs_endpoint(limit=10, level="WARNING")
+
+        self.assertEqual(response["count"], 2)
+        self.assertEqual(response["filtered_available"], 2)
+        self.assertEqual(response["total_available"], 4)
+        self.assertFalse(response["truncated"])
+
+    def test_log_endpoint_reports_filtered_truncation(self) -> None:
+        logger = logging.getLogger("training_log.test.filter_truncate")
+        logger.info("alpha")
+        logger.warning("beta")
+        logger.warning("gamma")
+        logger.error("delta")
+
+        response = get_logs_endpoint(limit=1, level="WARNING")
+
+        self.assertEqual(response["count"], 1)
+        self.assertEqual(response["filtered_available"], 2)
+        self.assertEqual(response["total_available"], 4)
+        self.assertTrue(response["truncated"])
+
+    def test_logs_endpoint_does_not_log_itself(self) -> None:
+        async def call_next(_: Request) -> Response:
+            return Response(content="{}", media_type="application/json")
+
+        request = Request(
+            {
+                "type": "http",
+                "method": "GET",
+                "path": "/api/v1/logs",
+                "headers": [],
+                "client": ("testclient", 123),
+                "scheme": "http",
+                "server": ("testserver", 80),
+                "query_string": b"",
+            }
+        )
+
+        response = asyncio.run(main.log_requests(request, call_next))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("X-Request-ID", response.headers)
+        logs = get_logs_endpoint(limit=50)
+        self.assertFalse(
+            any("/api/v1/logs" in entry["message"] for entry in logs["entries"])
+        )
 
     def test_log_endpoint_redacts_sensitive_values(self) -> None:
         logger = logging.getLogger("training_log.test.redact")

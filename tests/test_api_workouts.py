@@ -386,10 +386,43 @@ class WorkoutsApiTests(unittest.TestCase):
         carry = details["Suitcase carry"]
         self.assertEqual(carry["measurement_type"], "loaded_carry_time")
         self.assertEqual(carry["reps_unit"], "sec")
-        self.assertEqual(carry["total_volume_kg"], 1080.0)
+        self.assertEqual(carry["total_volume"], 1080.0)
+        self.assertEqual(carry["total_volume_kg"], 0.0)
         self.assertEqual(carry["bodyweight_reps"], 0)
         self.assertEqual(carry["duration_seconds"], 45)
         self.assertEqual(carry["distance_m"], 0)
+
+    def test_workout_detail_excludes_loaded_carry_distance_from_kg_volume(self) -> None:
+        create_exercise(
+            "Farmer carry",
+            is_active=False,
+            weights=[24],
+            measurement_settings={
+                "measurement_type": "loaded_carry_distance",
+                "reps_unit": "m",
+            },
+        )
+        workout_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            session_rpe=5,
+            lower_back_pain=2,
+            exercises=[
+                {
+                    "name": "Farmer carry",
+                    "sets": [{"weight": 24, "reps": 40}],
+                },
+            ],
+        )
+
+        response = get_workout_detail(workout_id)
+        carry = response["exercises"][0]
+
+        self.assertEqual(carry["measurement_type"], "loaded_carry_distance")
+        self.assertEqual(carry["reps_unit"], "m")
+        self.assertEqual(carry["total_volume"], 960.0)
+        self.assertEqual(carry["total_volume_kg"], 0.0)
+        self.assertEqual(carry["duration_seconds"], 0)
+        self.assertEqual(carry["distance_m"], 40)
 
     def test_get_workout_detail_returns_404_for_missing_workout(self) -> None:
         with self.assertRaises(HTTPException) as exc:

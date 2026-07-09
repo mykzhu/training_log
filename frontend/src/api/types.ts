@@ -275,6 +275,7 @@ export type LogsResponse = {
   limit: number;
   count: number;
   total_available: number;
+  filtered_available: number;
   truncated: boolean;
   entries: LogEntry[];
 };

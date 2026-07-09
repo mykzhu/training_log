@@ -139,6 +139,12 @@ async def log_requests(request: Request, call_next):
     client_host = request.client.host if request.client else "-"
     method = request.method
     path = request.url.path
+    stripped_path = strip_runtime_url_prefix(path)
+
+    if stripped_path == "/api/v1/logs":
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        return response
 
     access_logger.info(
         "request.start request_id=%s method=%s path=%s client=%s",

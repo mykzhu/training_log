@@ -466,6 +466,7 @@ export type LogEntryResponse = {
 export type LogsResponse = {
   count: number;
   entries: Array<LogEntryResponse>;
+  filtered_available: number;
   limit: number;
   total_available: number;
   truncated: boolean;

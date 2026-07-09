@@ -52,6 +52,14 @@ const measurementTypeOptions: Array<{
   { value: "reps_only", label: "Reps only" },
 ];
 
+const defaultUnitByMeasurement: Record<ExerciseMeasurementType, string> = {
+  weighted_reps: "reps",
+  bodyweight_reps: "reps",
+  loaded_carry_time: "sec",
+  loaded_carry_distance: "m",
+  reps_only: "reps",
+};
+
 function normalizeWeights(weights: number[]) {
   return uniqueSortedNumbers(
     weights
@@ -433,6 +441,30 @@ export default function SettingsPage() {
       [exerciseId]: {
         ...(current[exerciseId] ?? optionSettingsDraft(exercise)),
         [field]: value,
+      },
+    }));
+  }
+
+  function updateMeasurementTypeDraft(
+    exercise: Exercise,
+    nextType: ExerciseMeasurementType,
+  ) {
+    const currentDraft =
+      optionSettingsDrafts[exercise.id] ?? optionSettingsDraft(exercise);
+    const previousDefaultUnit =
+      defaultUnitByMeasurement[currentDraft.measurement_type] ?? "reps";
+    const shouldReplaceUnit =
+      !currentDraft.reps_unit.trim() ||
+      currentDraft.reps_unit === previousDefaultUnit;
+
+    setOptionSettingsDrafts((current) => ({
+      ...current,
+      [exercise.id]: {
+        ...currentDraft,
+        measurement_type: nextType,
+        reps_unit: shouldReplaceUnit
+          ? defaultUnitByMeasurement[nextType] ?? "reps"
+          : currentDraft.reps_unit,
       },
     }));
   }
@@ -1275,9 +1307,8 @@ export default function SettingsPage() {
                       <select
                         disabled={optionsPending}
                         onChange={(event) =>
-                          updateOptionDraft(
-                            exercise.id,
-                            "measurement_type",
+                          updateMeasurementTypeDraft(
+                            exercise,
                             event.target.value as ExerciseMeasurementType,
                           )
                         }

@@ -1991,6 +1991,10 @@
             "title": "Entries",
             "type": "array"
           },
+          "filtered_available": {
+            "title": "Filtered Available",
+            "type": "integer"
+          },
           "limit": {
             "title": "Limit",
             "type": "integer"
@@ -2008,6 +2012,7 @@
           "limit",
           "count",
           "total_available",
+          "filtered_available",
           "truncated",
           "entries"
         ],

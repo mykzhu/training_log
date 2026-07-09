@@ -86,7 +86,7 @@ class RingBufferLogHandler(logging.Handler):
         logger_name: str | None = None,
         query: str | None = None,
         order: str = "desc",
-    ) -> list[dict[str, Any]]:
+    ) -> tuple[list[dict[str, Any]], int]:
         normalized_level = str(level or "").strip().upper()
         normalized_logger = str(logger_name or "").strip()
         normalized_query = str(query or "").strip().lower()
@@ -97,7 +97,7 @@ class RingBufferLogHandler(logging.Handler):
         if order == "desc":
             records.reverse()
 
-        filtered: list[dict[str, Any]] = []
+        matched: list[dict[str, Any]] = []
         for record in records:
             if normalized_level and record["level"] != normalized_level:
                 continue
@@ -113,11 +113,9 @@ class RingBufferLogHandler(logging.Handler):
                 ).lower()
                 if normalized_query not in searchable:
                     continue
-            filtered.append(dict(record))
-            if len(filtered) >= limit:
-                break
+            matched.append(dict(record))
 
-        return filtered
+        return matched[:limit], len(matched)
 
     def total_available(self) -> int:
         with self.records_lock:
@@ -209,11 +207,12 @@ def list_log_entries(
             "limit": limit,
             "count": 0,
             "total_available": 0,
+            "filtered_available": 0,
             "truncated": False,
             "entries": [],
         }
 
-    entries = _ring_handler.list_records(
+    entries, filtered_available = _ring_handler.list_records(
         limit=limit,
         level=level,
         logger_name=logger_name,
@@ -225,7 +224,8 @@ def list_log_entries(
         "limit": limit,
         "count": len(entries),
         "total_available": total_available,
-        "truncated": len(entries) < total_available,
+        "filtered_available": filtered_available,
+        "truncated": len(entries) < filtered_available,
         "entries": entries,
     }
 
