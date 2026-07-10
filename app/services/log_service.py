@@ -9,10 +9,29 @@ from typing import Any
 
 
 SENSITIVE_PATTERNS = [
-    re.compile(r"(password=)[^&\s]+", re.I),
-    re.compile(r"(token=)[^&\s]+", re.I),
-    re.compile(r"(authorization:?\s+)(?:bearer\s+)?[^&\s]+", re.I),
-    re.compile(r"(cookie:?\s+).+", re.I),
+    (re.compile(r"(password=)[^&\s]+", re.I), r"\1[REDACTED]"),
+    (re.compile(r"(token=)[^&\s]+", re.I), r"\1[REDACTED]"),
+    (re.compile(r"(api_key=)[^&\s]+", re.I), r"\1[REDACTED]"),
+    (re.compile(r"(secret=)[^&\s]+", re.I), r"\1[REDACTED]"),
+    (
+        re.compile(r"(authorization:?\s+)(?:bearer\s+)?[^&\s]+", re.I),
+        r"\1[REDACTED]",
+    ),
+    (re.compile(r"(cookie:?\s+).+", re.I), r"\1[REDACTED]"),
+    (
+        re.compile(
+            r'("(?:password|token|access_token|refresh_token|id_token|mfa_token|api_key|secret)"\s*:\s*")[^"]+(")',
+            re.I,
+        ),
+        r"\1[REDACTED]\2",
+    ),
+    (
+        re.compile(
+            r"('(?:password|token|access_token|refresh_token|id_token|mfa_token|api_key|secret)'\s*:\s*')[^']+(')",
+            re.I,
+        ),
+        r"\1[REDACTED]\2",
+    ),
 ]
 
 _record_id = 0
@@ -30,8 +49,8 @@ def next_record_id() -> int:
 
 def redact_log_message(value: str) -> str:
     redacted = value
-    for pattern in SENSITIVE_PATTERNS:
-        redacted = pattern.sub(r"\1[REDACTED]", redacted)
+    for pattern, replacement in SENSITIVE_PATTERNS:
+        redacted = pattern.sub(replacement, redacted)
     return redacted
 
 

@@ -135,17 +135,39 @@ class LogsApiTests(unittest.TestCase):
         logger.error(
             "failed password=secret token=abc authorization: Bearer xyz cookie: sid=123"
         )
+        logger.error(
+            'json {"password": "json-secret", "access_token": "access123", '
+            '"refresh_token": "refresh456", "mfa_token": "mfa789"}'
+        )
+        logger.error(
+            "single {'id_token': 'id123', 'api_key': 'json-key', 'secret': 'json-sec'}"
+        )
+        logger.error("query api_key=key123 secret=sec456 visible=ok")
 
         response = get_logs_endpoint(limit=10)
         serialized = "\n".join(entry["message"] for entry in response["entries"])
 
-        self.assertNotIn("secret", serialized)
+        self.assertNotIn("password=secret", serialized)
         self.assertNotIn("abc", serialized)
+        self.assertNotIn("json-secret", serialized)
+        self.assertNotIn("access123", serialized)
+        self.assertNotIn("refresh456", serialized)
+        self.assertNotIn("mfa789", serialized)
+        self.assertNotIn("id123", serialized)
+        self.assertNotIn("json-key", serialized)
+        self.assertNotIn("json-sec", serialized)
+        self.assertNotIn("key123", serialized)
+        self.assertNotIn("sec456", serialized)
         self.assertNotIn("Bearer xyz", serialized)
         self.assertNotIn("xyz", serialized)
         self.assertNotIn("sid=123", serialized)
         self.assertIn("password=[REDACTED]", serialized)
         self.assertIn("token=[REDACTED]", serialized)
+        self.assertIn('"access_token": "[REDACTED]"', serialized)
+        self.assertIn("'id_token': '[REDACTED]'", serialized)
+        self.assertIn("api_key=[REDACTED]", serialized)
+        self.assertIn("secret=[REDACTED]", serialized)
+        self.assertIn("visible=ok", serialized)
 
 
 if __name__ == "__main__":
