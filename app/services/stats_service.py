@@ -75,10 +75,12 @@ def get_best_e1rm_by_exercise(
             f"""
             SELECT
                 we.exercise_id,
+                COALESCE(we.measurement_type, e.measurement_type, 'weighted_reps') AS measurement_type,
                 se.weight,
                 se.reps
             FROM set_entries se
             JOIN workout_exercises we ON we.id = se.workout_exercise_id
+            JOIN exercises e ON e.id = we.exercise_id
             JOIN workouts w ON w.id = we.workout_id
             WHERE we.exercise_id IN ({placeholders})
               {workout_filter}
@@ -92,7 +94,7 @@ def get_best_e1rm_by_exercise(
         exercise_id = int(row["exercise_id"])
         weight = float(row["weight"])
         reps = int(row["reps"])
-        e1rm = estimated_1rm(weight, reps)
+        e1rm = estimated_1rm(weight, reps, row["measurement_type"])
 
         if e1rm is None:
             continue
@@ -224,10 +226,12 @@ def build_e1rm_baselines_by_workout(
                 we.exercise_id,
                 w.id AS workout_id,
                 w.created_at,
+                COALESCE(we.measurement_type, e.measurement_type, 'weighted_reps') AS measurement_type,
                 se.weight,
                 se.reps
             FROM set_entries se
             JOIN workout_exercises we ON we.id = se.workout_exercise_id
+            JOIN exercises e ON e.id = we.exercise_id
             JOIN workouts w ON w.id = we.workout_id
             WHERE we.exercise_id IN ({placeholders})
               AND (
@@ -249,7 +253,11 @@ def build_e1rm_baselines_by_workout(
         ):
             row = rows[row_index]
             exercise_id = int(row["exercise_id"])
-            e1rm = estimated_1rm(float(row["weight"]), int(row["reps"]))
+            e1rm = estimated_1rm(
+                float(row["weight"]),
+                int(row["reps"]),
+                row["measurement_type"],
+            )
             if e1rm is not None:
                 if exercise_id not in best_by_exercise or e1rm > best_by_exercise[exercise_id]:
                     best_by_exercise[exercise_id] = e1rm
@@ -388,6 +396,7 @@ def build_workout_analysis(
         for item in workout_exercises:
             exercise_id = int(item["exercise_id"])
             exercise_name = str(item["exercise_name"])
+            measurement_type = str(item.get("measurement_type") or "weighted_reps")
             sets = item["sets"]
 
             current_max_weight: float | None = None
@@ -409,7 +418,7 @@ def build_workout_analysis(
                 if current_max_reps is None or reps > current_max_reps:
                     current_max_reps = reps
 
-                e1rm = estimated_1rm(weight, reps)
+                e1rm = estimated_1rm(weight, reps, measurement_type)
                 if e1rm is not None:
                     if current_best_e1rm is None or e1rm > current_best_e1rm:
                         current_best_e1rm = e1rm
@@ -437,10 +446,12 @@ def build_workout_analysis(
                 SELECT
                     w.id AS workout_id,
                     w.created_at,
+                    COALESCE(we.measurement_type, e.measurement_type, 'weighted_reps') AS measurement_type,
                     se.weight,
                     se.reps
                 FROM set_entries se
                 JOIN workout_exercises we ON we.id = se.workout_exercise_id
+                JOIN exercises e ON e.id = we.exercise_id
                 JOIN workouts w ON w.id = we.workout_id
                 WHERE we.exercise_id = ?
                   AND (
@@ -471,7 +482,7 @@ def build_workout_analysis(
                 if previous_max_reps is None or reps > previous_max_reps:
                     previous_max_reps = reps
 
-                e1rm = estimated_1rm(weight, reps)
+                e1rm = estimated_1rm(weight, reps, row["measurement_type"])
                 if e1rm is not None:
                     if previous_best_e1rm is None or e1rm > previous_best_e1rm:
                         previous_best_e1rm = e1rm
@@ -1259,6 +1270,7 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
         for item in details:
             exercise_id = int(item["exercise_id"])
             exercise_name = item["exercise_name"]
+            measurement_type = str(item.get("measurement_type") or "weighted_reps")
 
             if exercise_id not in exercise_stats:
                 exercise_stats[exercise_id] = {
@@ -1344,7 +1356,7 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
                     if previous_weight is None or weight > previous_weight:
                         exercise_rep_best["targets"][reps] = weight
 
-                e1rm = estimated_1rm(weight, reps)
+                e1rm = estimated_1rm(weight, reps, measurement_type)
 
                 if e1rm is None:
                     continue
@@ -1641,8 +1653,12 @@ def exercise_set_payload(set_row: Any) -> dict[str, Any]:
     }
 
 
-def score_exercise_set(weight: float, reps: int) -> float:
-    e1rm = estimated_1rm(weight, reps)
+def score_exercise_set(
+    weight: float,
+    reps: int,
+    measurement_type: str = "weighted_reps",
+) -> float:
+    e1rm = estimated_1rm(weight, reps, measurement_type)
     if e1rm is not None:
         return e1rm
     if weight > 0:
@@ -1743,7 +1759,7 @@ def build_exercise_pr_baselines(
         if workout["max_reps"] is None or reps > workout["max_reps"]:
             workout["max_reps"] = reps
 
-        e1rm = estimated_1rm(weight, reps)
+        e1rm = estimated_1rm(weight, reps, measurement_type)
         if e1rm is not None:
             if workout["best_e1rm"] is None or e1rm > workout["best_e1rm"]:
                 workout["best_e1rm"] = e1rm
@@ -1961,12 +1977,12 @@ def build_exercise_stats(
             if best_reps is None or reps > best_reps:
                 best_reps = reps
 
-            e1rm = estimated_1rm(weight, reps)
+            e1rm = estimated_1rm(weight, reps, workout_measurement_type)
             if e1rm is not None:
                 if best_e1rm is None or e1rm > best_e1rm:
                     best_e1rm = e1rm
 
-            set_score = score_exercise_set(weight, reps)
+            set_score = score_exercise_set(weight, reps, workout_measurement_type)
             if set_score > workout_best_score:
                 workout_best_score = set_score
                 best_set = {

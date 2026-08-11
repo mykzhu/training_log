@@ -851,6 +851,15 @@ Rehab-only workout does not create heavy back stress.
 Stats page remains stable with rehab-only history.
 ```
 
+Implementation status:
+
+```text
+Completed 2026-08-11:
+- Made e1RM/intensity calculations measurement-aware so only weighted_reps sets can produce e1RM.
+- Preserved low load and zero/default-low back stress for back_rehab, mobility, and core_stability profiles.
+- Added regression coverage for rehab-only workouts, duration-only Side Plank stats, and non-strength intensity exclusion.
+```
+
 ---
 
 ## 32.7 Backup/restore compatibility for rehab measurement type

@@ -101,7 +101,21 @@ def get_exercise_load_profile(
     return profile_from_map(runtime_profiles_by_key(), exercise_name, profile_key)
 
 
-def estimated_1rm(weight: float, reps: int) -> float | None:
+E1RM_MEASUREMENT_TYPES = {"weighted_reps"}
+
+
+def measurement_supports_e1rm(measurement_type: Any) -> bool:
+    return str(measurement_type or "weighted_reps") in E1RM_MEASUREMENT_TYPES
+
+
+def estimated_1rm(
+    weight: float,
+    reps: int,
+    measurement_type: Any = "weighted_reps",
+) -> float | None:
+    if not measurement_supports_e1rm(measurement_type):
+        return None
+
     if weight <= 0:
         return None
 
@@ -177,6 +191,7 @@ def calculate_workout_load_metrics(
     for item in workout_exercises:
         exercise_id = int(item["exercise_id"])
         exercise_name = str(item["exercise_name"])
+        measurement_type = item.get("measurement_type", "weighted_reps")
         profile = profile_from_map(
             profiles_by_key,
             exercise_name,
@@ -203,7 +218,7 @@ def calculate_workout_load_metrics(
             if reps <= 0:
                 continue
 
-            set_e1rm = estimated_1rm(weight, reps)
+            set_e1rm = estimated_1rm(weight, reps, measurement_type)
             relative_intensity = None
 
             if best_e1rm and best_e1rm > 0 and set_e1rm is not None:

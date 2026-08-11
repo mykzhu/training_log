@@ -144,6 +144,96 @@ class AnalysisServiceTests(unittest.TestCase):
         self.assertLess(metrics["back_stress_score"], 0.2)
         self.assertIsNone(metrics["intensity_score"])
 
+    def test_back_rehab_profile_adds_minimal_load_and_zero_back_stress(self) -> None:
+        metrics = calculate_workout_load_metrics(
+            workout_exercises=[
+                {
+                    "exercise_id": 21,
+                    "exercise_name": "McGill Curl-up",
+                    "profile_key": "back_rehab",
+                    "measurement_type": "reps_only",
+                    "sets": [{"weight": 0, "reps": 8}],
+                },
+            ],
+            session_rpe=5,
+            profiles_by_key={
+                "back_rehab": DEFAULT_LOAD_PROFILES_BY_KEY["back_rehab"],
+                "accessory": DEFAULT_LOAD_PROFILE,
+            },
+        )
+
+        self.assertEqual(metrics["load_label"], "Light")
+        self.assertLess(metrics["load_score"], 0.2)
+        self.assertEqual(metrics["back_stress_score"], 0.0)
+        self.assertIsNone(metrics["intensity_score"])
+
+    def test_mobility_profile_adds_minimal_load_and_zero_back_stress(self) -> None:
+        metrics = calculate_workout_load_metrics(
+            workout_exercises=[
+                {
+                    "exercise_id": 22,
+                    "exercise_name": "Cat-Cow",
+                    "profile_key": "mobility",
+                    "measurement_type": "reps_only",
+                    "sets": [{"weight": 0, "reps": 10}],
+                },
+            ],
+            session_rpe=5,
+            profiles_by_key={
+                "mobility": DEFAULT_LOAD_PROFILES_BY_KEY["mobility"],
+                "accessory": DEFAULT_LOAD_PROFILE,
+            },
+        )
+
+        self.assertEqual(metrics["load_label"], "Light")
+        self.assertLess(metrics["load_score"], 0.2)
+        self.assertEqual(metrics["back_stress_score"], 0.0)
+        self.assertIsNone(metrics["intensity_score"])
+
+    def test_core_stability_adds_small_load(self) -> None:
+        metrics = calculate_workout_load_metrics(
+            workout_exercises=[
+                {
+                    "exercise_id": 23,
+                    "exercise_name": "Side Plank",
+                    "profile_key": "core_stability",
+                    "measurement_type": "duration_only",
+                    "sets": [{"weight": 0, "reps": 30}],
+                },
+            ],
+            session_rpe=5,
+            profiles_by_key={
+                "core_stability": DEFAULT_LOAD_PROFILES_BY_KEY["core_stability"],
+                "accessory": DEFAULT_LOAD_PROFILE,
+            },
+        )
+
+        self.assertEqual(metrics["load_label"], "Light")
+        self.assertGreater(metrics["load_score"], 0)
+        self.assertLess(metrics["load_score"], 0.3)
+        self.assertGreater(metrics["back_stress_score"], 0)
+        self.assertLess(metrics["back_stress_score"], 0.1)
+        self.assertIsNone(metrics["intensity_score"])
+
+    def test_non_strength_measurement_does_not_compute_relative_intensity(self) -> None:
+        metrics = calculate_workout_load_metrics(
+            workout_exercises=[
+                {
+                    "exercise_id": 24,
+                    "exercise_name": "Loaded Carry",
+                    "profile_key": "accessory",
+                    "measurement_type": "loaded_carry_time",
+                    "sets": [{"weight": 24, "reps": 8}],
+                },
+            ],
+            best_e1rm_by_exercise={24: 40.0},
+            profiles_by_key={"accessory": DEFAULT_LOAD_PROFILE},
+        )
+
+        self.assertEqual(metrics["scored_sets"], 1)
+        self.assertIsNone(metrics["intensity_score"])
+        self.assertIsNone(metrics["exercise_breakdown"][0]["intensity_score"])
+
     def test_calculate_workout_load_metrics_scores_known_and_unknown_profiles(self) -> None:
         workout_exercises = [
             {

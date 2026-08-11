@@ -294,6 +294,95 @@ class StatsApiTests(unittest.TestCase):
         self.assertEqual(carry["duration_seconds"], 30)
         self.assertEqual(scatter["points"][0]["total_volume_kg"], 0.0)
 
+    def test_duration_only_side_plank_does_not_compute_e1rm(self) -> None:
+        create_exercise(
+            "Side Plank",
+            is_active=False,
+            profile_key="core_stability",
+            measurement_settings={
+                "measurement_type": "duration_only",
+                "reps_unit": "sec",
+            },
+        )
+        workout_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            session_rpe=5,
+            lower_back_pain=1,
+            exercises=[
+                {
+                    "name": "Side Plank",
+                    "sets": [{"weight": 0, "reps": 30}],
+                },
+            ],
+        )
+
+        response = get_stats(limit="all")
+        workout = response["stats"]["workouts"][0]
+        side_plank = response["stats"]["exercise_stats"][0]
+
+        self.assertEqual(workout["id"], workout_id)
+        self.assertEqual(workout["load_label"], "Light")
+        self.assertLess(workout["load_score"], 0.3)
+        self.assertLess(workout["back_stress_score"], 0.1)
+        self.assertEqual(workout["total_volume_kg"], 0.0)
+        self.assertEqual(workout["duration_seconds"], 30)
+        self.assertIsNone(workout["intensity_score"])
+
+        self.assertEqual(side_plank["name"], "Side Plank")
+        self.assertEqual(side_plank["total_volume_kg"], 0.0)
+        self.assertEqual(side_plank["duration_seconds"], 30)
+        self.assertIsNone(side_plank["best_e1rm"])
+        self.assertFalse(response["stats"]["exercise_progress"])
+
+    def test_rehab_only_workout_has_light_load(self) -> None:
+        create_exercise(
+            "Dead Bug",
+            is_active=False,
+            profile_key="core_stability",
+            measurement_settings={
+                "measurement_type": "reps_only",
+                "reps_unit": "reps",
+            },
+        )
+        create_exercise(
+            "Cat-Cow",
+            is_active=False,
+            profile_key="mobility",
+            measurement_settings={
+                "measurement_type": "reps_only",
+                "reps_unit": "reps",
+            },
+        )
+
+        self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            session_rpe=5,
+            lower_back_pain=1,
+            exercises=[
+                {
+                    "name": "Dead Bug",
+                    "sets": [{"weight": 0, "reps": 10}],
+                },
+                {
+                    "name": "Cat-Cow",
+                    "sets": [{"weight": 0, "reps": 10}],
+                },
+            ],
+        )
+
+        response = get_stats(limit="all")
+        workout = response["stats"]["workouts"][0]
+        summary = response["stats"]["summary"]
+
+        self.assertEqual(workout["load_label"], "Light")
+        self.assertLess(workout["load_score"], 0.4)
+        self.assertLess(workout["back_stress_score"], 0.1)
+        self.assertEqual(workout["total_volume_kg"], 0.0)
+        self.assertEqual(workout["bodyweight_reps"], 20)
+        self.assertIsNone(workout["intensity_score"])
+        self.assertLess(summary["total_load_score"], 0.4)
+        self.assertLess(summary["total_back_stress_score"], 0.1)
+
     def test_stats_response_does_not_expose_set_timestamp_analytics(self) -> None:
         self.insert_workout(
             created_at="2026-06-01T10:00:00",
