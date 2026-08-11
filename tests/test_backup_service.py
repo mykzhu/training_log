@@ -136,6 +136,13 @@ class BackupServiceTests(unittest.TestCase):
         self.assertEqual(payload["schema_version"], BACKUP_SCHEMA_VERSION)
         self.assertIn("exercise_weight_options", payload["tables"])
         self.assertIn("analysis_profiles", payload["tables"])
+        profile_keys = {
+            profile["key"]
+            for profile in payload["tables"]["analysis_profiles"]
+        }
+        self.assertIn("back_rehab", profile_keys)
+        self.assertIn("core_stability", profile_keys)
+        self.assertIn("mobility", profile_keys)
         self.assertEqual(len(payload["tables"]["workouts"]), 1)
         self.assertEqual(len(payload["tables"]["workout_exercises"]), 1)
         self.assertEqual(len(payload["tables"]["set_entries"]), 1)
@@ -456,12 +463,21 @@ class BackupServiceTests(unittest.TestCase):
             profile_count = conn.execute(
                 "SELECT COUNT(*) FROM analysis_profiles"
             ).fetchone()[0]
+            profile_keys = {
+                row["key"]
+                for row in conn.execute(
+                    "SELECT key FROM analysis_profiles"
+                ).fetchall()
+            }
 
         self.assertEqual(
             garmin_metric["raw_diagnostics"],
             '{"summary":{"ok":true}}',
         )
         self.assertGreater(profile_count, 0)
+        self.assertIn("back_rehab", profile_keys)
+        self.assertIn("core_stability", profile_keys)
+        self.assertIn("mobility", profile_keys)
 
     def test_schema_v6_restore_rejects_missing_required_garmin_fields(self) -> None:
         self.insert_garmin_metric()

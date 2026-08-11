@@ -153,11 +153,26 @@ class ExercisesApiTests(unittest.TestCase):
 
     def test_get_exercise_profiles_returns_friendly_catalog(self) -> None:
         response = get_exercise_profiles()
-        keys = [profile["key"] for profile in response["profiles"]]
+        profiles = {
+            profile["key"]: profile
+            for profile in response["profiles"]
+        }
 
-        self.assertIn("deadlift", keys)
-        self.assertIn("accessory", keys)
+        self.assertIn("deadlift", profiles)
+        self.assertIn("accessory", profiles)
+        self.assertIn("back_rehab", profiles)
+        self.assertIn("core_stability", profiles)
+        self.assertIn("mobility", profiles)
         self.assertIn("Deadlift", [profile["label"] for profile in response["profiles"]])
+        self.assertEqual(profiles["back_rehab"]["label"], "Back rehab")
+        self.assertEqual(profiles["core_stability"]["label"], "Core stability")
+        self.assertEqual(profiles["mobility"]["label"], "Mobility")
+        self.assertTrue(profiles["back_rehab"]["is_builtin"])
+        self.assertTrue(profiles["back_rehab"]["is_active"])
+        self.assertTrue(profiles["core_stability"]["is_builtin"])
+        self.assertTrue(profiles["core_stability"]["is_active"])
+        self.assertTrue(profiles["mobility"]["is_builtin"])
+        self.assertTrue(profiles["mobility"]["is_active"])
 
     def test_exercise_stats_returns_history_summary_and_pr_markers(self) -> None:
         deadlift_id = self.exercise_id("Deadlift")
@@ -549,6 +564,33 @@ class ExercisesApiTests(unittest.TestCase):
 
         self.assertEqual(response["exercise"]["measurement_type"], "loaded_carry_time")
         self.assertEqual(response["exercise"]["reps_unit"], "sec")
+
+    def test_create_dead_bug_infers_core_stability_and_reps_only(self) -> None:
+        response = create_exercise_endpoint(ExerciseCreateRequest(name="Dead Bug"))
+
+        exercise = response["exercise"]
+        self.assertEqual(exercise["profile_key"], "core_stability")
+        self.assertEqual(exercise["measurement_type"], "reps_only")
+        self.assertEqual(exercise["reps_unit"], "reps")
+        self.assertEqual(exercise["weights"], [])
+
+    def test_create_cat_cow_infers_mobility_and_reps_only(self) -> None:
+        response = create_exercise_endpoint(ExerciseCreateRequest(name="Cat-Cow"))
+
+        exercise = response["exercise"]
+        self.assertEqual(exercise["profile_key"], "mobility")
+        self.assertEqual(exercise["measurement_type"], "reps_only")
+        self.assertEqual(exercise["reps_unit"], "reps")
+        self.assertEqual(exercise["weights"], [])
+
+    def test_create_side_plank_infers_core_stability_and_duration_only(self) -> None:
+        response = create_exercise_endpoint(ExerciseCreateRequest(name="Side Plank"))
+
+        exercise = response["exercise"]
+        self.assertEqual(exercise["profile_key"], "core_stability")
+        self.assertEqual(exercise["measurement_type"], "duration_only")
+        self.assertEqual(exercise["reps_unit"], "sec")
+        self.assertEqual(exercise["weights"], [])
 
     def test_update_exercise_expands_reps_range_to_save_high_default(self) -> None:
         exercise_id = self.exercise_id("Crunches")

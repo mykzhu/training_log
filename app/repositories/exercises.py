@@ -65,6 +65,25 @@ def default_measurement_settings_for_name(name: str) -> dict[str, str]:
     normalized_name = normalize_exercise_name(name).lower()
     if "carry" in normalized_name:
         return {"measurement_type": "loaded_carry_time", "reps_unit": "sec"}
+    if (
+        "side plank" in normalized_name
+        or "front plank" in normalized_name
+        or normalized_name == "plank"
+    ):
+        return {"measurement_type": "duration_only", "reps_unit": "sec"}
+    if any(
+        fragment in normalized_name
+        for fragment in (
+            "dead bug",
+            "cat cow",
+            "cat-cow",
+            "bird dog",
+            "mcgill curl",
+            "pelvic tilt",
+            "glute bridge",
+        )
+    ):
+        return {"measurement_type": "reps_only", "reps_unit": "reps"}
     if "crunch" in normalized_name:
         return {"measurement_type": "bodyweight_reps", "reps_unit": "reps"}
     return {

@@ -88,6 +88,24 @@ DEFAULT_LOAD_PROFILES_BY_KEY: dict[str, dict[str, float | str]] = {
         "compound_factor": 0.2,
         "back_factor": 0.05,
     },
+    "back_rehab": {
+        "category": "back rehab",
+        "exercise_factor": 0.15,
+        "compound_factor": 0.0,
+        "back_factor": 0.0,
+    },
+    "core_stability": {
+        "category": "core stability",
+        "exercise_factor": 0.25,
+        "compound_factor": 0.1,
+        "back_factor": 0.05,
+    },
+    "mobility": {
+        "category": "mobility",
+        "exercise_factor": 0.10,
+        "compound_factor": 0.0,
+        "back_factor": 0.0,
+    },
 }
 
 DEFAULT_LOAD_PROFILE = {
@@ -113,6 +131,9 @@ DEFAULT_PROFILE_LABELS_BY_KEY = {
     "db_row": "DB row",
     "triceps_extension": "Triceps extension",
     "lateral_raise": "Lateral raise",
+    "back_rehab": "Back rehab",
+    "core_stability": "Core stability",
+    "mobility": "Mobility",
     "accessory": "Accessory",
 }
 
@@ -136,6 +157,20 @@ DEFAULT_EXERCISE_PROFILE_KEYS_BY_NAME = {
     "deadlift": "deadlift",
     "crunches": "crunches",
     "squats": "squats",
+    "dead bug": "core_stability",
+    "cat cow": "mobility",
+    "cat-cow": "mobility",
+    "bird dog": "core_stability",
+    "mcgill curl-up": "back_rehab",
+    "mcgill curlup": "back_rehab",
+    "pelvic tilt": "mobility",
+    "side plank": "core_stability",
+    "front plank": "core_stability",
+    "plank": "core_stability",
+    "glute bridge": "core_stability",
+    "child pose": "mobility",
+    "cobra": "mobility",
+    "prone press up": "mobility",
 }
 
 

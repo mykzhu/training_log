@@ -451,6 +451,16 @@ Rehab profiles appear in Settings analysis profile list.
 Rehab movements add little/no back stress by default.
 ```
 
+Implementation status:
+
+```text
+Completed 2026-08-11:
+- Added built-in back_rehab, core_stability, and mobility profiles.
+- Added rehab/mobility/core stability profile inference for common back-pain exercises.
+- Added reps_only/duration_only measurement inference for Dead Bug, Cat-Cow, Side Plank, and related rehab movements.
+- Backup export/old-schema restore paths include the new built-in profiles.
+```
+
 ---
 
 ## 32.4 Make Settings exercise creation measurement-aware

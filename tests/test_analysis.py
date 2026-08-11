@@ -3,6 +3,7 @@ import unittest
 
 from app.services.analysis_service import (
     DEFAULT_LOAD_PROFILE,
+    DEFAULT_LOAD_PROFILES_BY_KEY,
     calculate_workout_load_metrics,
     estimated_1rm,
     get_exercise_load_profile,
@@ -11,6 +12,7 @@ from app.services.analysis_service import (
     rpe_factor,
     workout_load_label,
 )
+from app.services.default_analysis_profiles import profile_key_for_exercise_name
 
 
 class AnalysisServiceTests(unittest.TestCase):
@@ -91,6 +93,56 @@ class AnalysisServiceTests(unittest.TestCase):
         )
 
         self.assertEqual(fallback, DEFAULT_LOAD_PROFILE)
+
+    def test_rehab_profile_name_inference(self) -> None:
+        self.assertEqual(profile_key_for_exercise_name("Dead Bug"), "core_stability")
+        self.assertEqual(profile_key_for_exercise_name("Cat-Cow"), "mobility")
+        self.assertEqual(profile_key_for_exercise_name("Side Plank"), "core_stability")
+        self.assertEqual(profile_key_for_exercise_name("McGill Curl-up"), "back_rehab")
+
+    def test_rehab_profile_load_factors_are_low(self) -> None:
+        back_rehab = DEFAULT_LOAD_PROFILES_BY_KEY["back_rehab"]
+        core_stability = DEFAULT_LOAD_PROFILES_BY_KEY["core_stability"]
+        mobility = DEFAULT_LOAD_PROFILES_BY_KEY["mobility"]
+
+        self.assertEqual(back_rehab["exercise_factor"], 0.15)
+        self.assertEqual(back_rehab["compound_factor"], 0.0)
+        self.assertEqual(back_rehab["back_factor"], 0.0)
+        self.assertEqual(core_stability["exercise_factor"], 0.25)
+        self.assertEqual(core_stability["compound_factor"], 0.1)
+        self.assertEqual(core_stability["back_factor"], 0.05)
+        self.assertEqual(mobility["exercise_factor"], 0.10)
+        self.assertEqual(mobility["compound_factor"], 0.0)
+        self.assertEqual(mobility["back_factor"], 0.0)
+
+    def test_rehab_profile_scores_light_load_and_low_back_stress(self) -> None:
+        metrics = calculate_workout_load_metrics(
+            workout_exercises=[
+                {
+                    "exercise_id": 1,
+                    "exercise_name": "Dead Bug",
+                    "profile_key": "core_stability",
+                    "sets": [{"weight": 0, "reps": 10}],
+                },
+                {
+                    "exercise_id": 2,
+                    "exercise_name": "Cat-Cow",
+                    "profile_key": "mobility",
+                    "sets": [{"weight": 0, "reps": 10}],
+                },
+            ],
+            session_rpe=5,
+            profiles_by_key={
+                "core_stability": DEFAULT_LOAD_PROFILES_BY_KEY["core_stability"],
+                "mobility": DEFAULT_LOAD_PROFILES_BY_KEY["mobility"],
+                "accessory": DEFAULT_LOAD_PROFILE,
+            },
+        )
+
+        self.assertEqual(metrics["load_label"], "Light")
+        self.assertLess(metrics["load_score"], 1)
+        self.assertLess(metrics["back_stress_score"], 0.2)
+        self.assertIsNone(metrics["intensity_score"])
 
     def test_calculate_workout_load_metrics_scores_known_and_unknown_profiles(self) -> None:
         workout_exercises = [
