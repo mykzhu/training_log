@@ -4,6 +4,8 @@ All notable changes to this project.
 
 ## Unreleased
 
+## 1.8.0 - 2026-08-11
+
 ### Added
 
 * Added manual duration entry for duration-only exercises with readable values such as `30 sec` and `1:15`.

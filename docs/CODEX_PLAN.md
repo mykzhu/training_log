@@ -1,7 +1,7 @@
 # Training Log — Duration-Only Manual Logging + Live Timer
 
 Created: 2026-08-11
-Current observed app version: 1.7.0
+Current observed app version: 1.8.0
 
 This is the active Codex roadmap for duration-only exercise logging polish.
 
@@ -152,9 +152,9 @@ Do not add a side/laterality field unless the user explicitly requests that late
 ## Status
 
 ```text
-Planned after Phase 36
+Completed 2026-08-11
 ```
 
 ## Notes
 
-Release verification should happen separately. Do not bump `config.yaml` or prepare release metadata as part of Phase 36.
+Release metadata for the duration timer was updated separately from Phase 36.
