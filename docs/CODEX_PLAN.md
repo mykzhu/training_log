@@ -891,6 +891,16 @@ def test_old_backup_defaults_missing_measurement_fields()
 def test_current_backup_contains_no_garmin_raw_diagnostics()
 ```
 
+Implementation status:
+
+```text
+Completed 2026-08-11:
+- Confirmed current backup exports duration_only exercise/workout snapshots and rehab analysis profiles.
+- Confirmed restore preserves duration_only measurement settings and rehab profile assignments.
+- Confirmed older backup schemas default missing measurement fields safely.
+- Added explicit regression coverage that current Garmin backup exports omit raw_diagnostics.
+```
+
 ---
 
 ## 32.8 Phase 32 verification

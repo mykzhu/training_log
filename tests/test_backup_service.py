@@ -322,6 +322,126 @@ class BackupServiceTests(unittest.TestCase):
         self.assertEqual(workout_exercise["measurement_type"], "duration_only")
         self.assertEqual(workout_exercise["reps_unit"], "sec")
 
+    def test_backup_restore_preserves_rehab_profiles(self) -> None:
+        with get_db() as conn:
+            conn.execute(
+                """
+                INSERT INTO exercises (
+                    name,
+                    is_active,
+                    sort_order,
+                    profile_key,
+                    measurement_type,
+                    reps_unit,
+                    default_weight,
+                    min_weight,
+                    max_weight,
+                    weight_step,
+                    default_reps,
+                    min_reps,
+                    max_reps,
+                    reps_step
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "Dead Bug",
+                    1,
+                    1001,
+                    "core_stability",
+                    "reps_only",
+                    "reps",
+                    0,
+                    0,
+                    0,
+                    1,
+                    10,
+                    1,
+                    50,
+                    1,
+                ),
+            )
+            conn.execute(
+                """
+                INSERT INTO exercises (
+                    name,
+                    is_active,
+                    sort_order,
+                    profile_key,
+                    measurement_type,
+                    reps_unit,
+                    default_weight,
+                    min_weight,
+                    max_weight,
+                    weight_step,
+                    default_reps,
+                    min_reps,
+                    max_reps,
+                    reps_step
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "Cat-Cow",
+                    1,
+                    1002,
+                    "mobility",
+                    "reps_only",
+                    "reps",
+                    0,
+                    0,
+                    0,
+                    1,
+                    10,
+                    1,
+                    50,
+                    1,
+                ),
+            )
+
+        payload = build_backup_payload()
+        reset_database_data()
+        restore_backup_payload(payload)
+
+        with get_db() as conn:
+            exercise_profiles = {
+                row["name"]: row["profile_key"]
+                for row in conn.execute(
+                    """
+                    SELECT name, profile_key
+                    FROM exercises
+                    WHERE name IN ('Dead Bug', 'Cat-Cow')
+                    """
+                )
+            }
+            profile_keys = {
+                row["key"]
+                for row in conn.execute(
+                    """
+                    SELECT key
+                    FROM analysis_profiles
+                    WHERE key IN ('back_rehab', 'core_stability', 'mobility')
+                    """
+                )
+            }
+
+        self.assertEqual(exercise_profiles["Dead Bug"], "core_stability")
+        self.assertEqual(exercise_profiles["Cat-Cow"], "mobility")
+        self.assertEqual(
+            profile_keys,
+            {"back_rehab", "core_stability", "mobility"},
+        )
+
+    def test_current_backup_contains_no_garmin_raw_diagnostics(self) -> None:
+        self.insert_garmin_metric()
+
+        payload = build_backup_payload()
+        garmin_metrics = payload["tables"]["garmin_daily_metrics"]
+
+        self.assertEqual(len(garmin_metrics), 1)
+        self.assertNotIn("raw_diagnostics", garmin_metrics[0])
+        self.assertNotIn("garmin_sync_settings", payload["tables"])
+
     def test_schema_v6_restore_defaults_missing_exercise_measurement_fields(self) -> None:
         self.insert_workout()
         payload = build_backup_payload()
