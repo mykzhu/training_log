@@ -5,6 +5,12 @@ Current observed app version: 1.7.0
 
 This is the active Codex roadmap for duration-only exercise logging polish.
 
+Roadmap history before the short Phase 36 plan is archived at:
+
+```text
+docs/archive/CODEX_PLAN_REHAB_ROADMAP_PRE_PHASE36_2026-08-11.md
+```
+
 ---
 
 ## Current Context
@@ -100,9 +106,11 @@ Backend tests were not run for Phase 36 because no backend, generated API, DB sc
 ## Manual Checks Still Needed
 
 ```text
+Duration parser rejects invalid minute-second inputs such as 1:99, 1m99s, and 1 min 99 sec.
 Side Plank manual 30 sec saves and displays 30 sec.
 Side Plank manual 1:15 saves and displays 1:15.
 Side Plank timer Stop & Add saves elapsed seconds.
+Failed duration saves keep the typed manual value or running timer state and show an inline error.
 Reset timer returns display to 0:00.
 History/Edit still shows Side Plank duration rows readably.
 Exercise Stats for Side Plank shows duration instead of kg.

@@ -47,6 +47,7 @@ export default function DurationSetLogger({
 }: DurationSetLoggerProps) {
   const [manualValue, setManualValue] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [timerStartedAt, setTimerStartedAt] = useState<number | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
   const isRunning = timerStartedAt !== null;
@@ -68,24 +69,35 @@ export default function DurationSetLogger({
     return () => window.clearInterval(intervalId);
   }, [timerStartedAt]);
 
-  function addDuration(seconds: number) {
+  async function addDuration(seconds: number) {
     const clamped = clampDurationSeconds(seconds, {
       min: minSeconds,
       max: maxSeconds,
     });
     setError(null);
-    void onAddDuration(clamped);
+    setIsSaving(true);
+    try {
+      await onAddDuration(clamped);
+      return true;
+    } catch {
+      setError("Could not save duration. Try again.");
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
   }
 
-  function addManualDuration() {
+  async function addManualDuration() {
     const parsed = parseDurationInput(manualValue);
     if (parsed === null) {
       setError("Enter a duration like 30 sec or 1:15.");
       return;
     }
 
-    addDuration(parsed);
-    setManualValue("");
+    const saved = await addDuration(parsed);
+    if (saved) {
+      setManualValue("");
+    }
   }
 
   function startTimer() {
@@ -100,7 +112,7 @@ export default function DurationSetLogger({
     setError(null);
   }
 
-  function stopAndAddTimer() {
+  async function stopAndAddTimer() {
     const currentElapsedMs =
       timerStartedAt === null ? elapsedMs : performance.now() - timerStartedAt;
     const seconds = Math.round(currentElapsedMs / 1000);
@@ -109,9 +121,11 @@ export default function DurationSetLogger({
       return;
     }
 
-    addDuration(seconds);
-    setTimerStartedAt(null);
-    setElapsedMs(0);
+    const saved = await addDuration(seconds);
+    if (saved) {
+      setTimerStartedAt(null);
+      setElapsedMs(0);
+    }
   }
 
   return (
@@ -130,7 +144,7 @@ export default function DurationSetLogger({
             onKeyDown={(event) => {
               if (event.key === "Enter") {
                 event.preventDefault();
-                addManualDuration();
+                void addManualDuration();
               }
             }}
             placeholder="0:30 or 75"
@@ -139,11 +153,11 @@ export default function DurationSetLogger({
         </label>
         <button
           className="secondary-button"
-          disabled={disabled}
-          onClick={addManualDuration}
+          disabled={disabled || isSaving}
+          onClick={() => void addManualDuration()}
           type="button"
         >
-          Add
+          {isSaving ? "Saving..." : "Add"}
         </button>
       </div>
 
@@ -151,9 +165,9 @@ export default function DurationSetLogger({
         {quickOptions.map((seconds) => (
           <button
             className="ghost-button compact-button"
-            disabled={disabled}
+            disabled={disabled || isSaving}
             key={seconds}
-            onClick={() => addDuration(seconds)}
+            onClick={() => void addDuration(seconds)}
             type="button"
           >
             {formatDurationSeconds(seconds)}
@@ -170,7 +184,7 @@ export default function DurationSetLogger({
         </div>
         <button
           className="primary-button"
-          disabled={disabled || isRunning}
+          disabled={disabled || isRunning || isSaving}
           onClick={startTimer}
           type="button"
         >
@@ -178,15 +192,15 @@ export default function DurationSetLogger({
         </button>
         <button
           className="secondary-button"
-          disabled={disabled || !isRunning}
-          onClick={stopAndAddTimer}
+          disabled={disabled || !isRunning || isSaving}
+          onClick={() => void stopAndAddTimer()}
           type="button"
         >
-          Stop & Add
+          {isSaving ? "Saving..." : "Stop & Add"}
         </button>
         <button
           className="ghost-button"
-          disabled={disabled || (!isRunning && elapsedMs === 0)}
+          disabled={disabled || isSaving || (!isRunning && elapsedMs === 0)}
           onClick={resetTimer}
           type="button"
         >

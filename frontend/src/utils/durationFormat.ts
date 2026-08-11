@@ -44,9 +44,13 @@ export function parseDurationInput(value: string): number | null {
 
   const compactMinuteSecondMatch = normalized.match(/^(\d+)\s*m(?:in)?\s*(\d+)\s*s(?:ec)?(?:onds?)?$/);
   if (compactMinuteSecondMatch) {
+    const seconds = Number(compactMinuteSecondMatch[2]);
+    if (seconds > 59) {
+      return null;
+    }
     const totalSeconds =
       Number(compactMinuteSecondMatch[1]) * 60 +
-      Number(compactMinuteSecondMatch[2]);
+      seconds;
     return totalSeconds >= 1 ? totalSeconds : null;
   }
 
@@ -54,9 +58,13 @@ export function parseDurationInput(value: string): number | null {
     /^(\d+)\s*min(?:ute)?s?\s+(\d+)\s*sec(?:ond)?s?$/,
   );
   if (wordMinuteSecondMatch) {
+    const seconds = Number(wordMinuteSecondMatch[2]);
+    if (seconds > 59) {
+      return null;
+    }
     const totalSeconds =
       Number(wordMinuteSecondMatch[1]) * 60 +
-      Number(wordMinuteSecondMatch[2]);
+      seconds;
     return totalSeconds >= 1 ? totalSeconds : null;
   }
 

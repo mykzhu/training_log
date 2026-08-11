@@ -1473,6 +1473,8 @@ a.compact-button {
 }
 
 .metric-zone-info {
+  left: 0;
+  width: 100%;
   background: rgba(10, 132, 255, 0.45);
 }
 

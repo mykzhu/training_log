@@ -4,6 +4,11 @@ All notable changes to this project.
 
 ## Unreleased
 
+### Added
+
+* Added manual duration entry for duration-only exercises with readable values such as `30 sec` and `1:15`.
+* Added a local live timer for duration-only exercise sets with Stop & Add logging.
+
 ## 1.7.0 - 2026-07-09
 
 ### Added

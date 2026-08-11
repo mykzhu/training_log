@@ -25,7 +25,11 @@ type ExerciseCardProps = {
   bestE1rm?: number | null;
   setEditorMode?: "input" | "select";
   variant?: ExerciseCardVariant;
-  onAddSet: (exerciseId: number, weight: number, reps: number) => void;
+  onAddSet: (
+    exerciseId: number,
+    weight: number,
+    reps: number,
+  ) => Promise<void> | void;
   onDeleteExercise: (exerciseId: number) => void;
   onDeleteSet: (setId: number) => void;
   onDuplicateSet: (exerciseId: number) => void;
