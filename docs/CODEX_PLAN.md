@@ -954,7 +954,7 @@ Phase 32: support rehab exercise measurement and logging UX
 
 # Phase 33 — Per-exercise back-pain response tracking
 
-Status: Planned
+Status: Completed 2026-08-11
 
 ## Goal
 
@@ -1297,6 +1297,16 @@ Suggested commit:
 
 ```text
 Phase 33: add back-pain response tracking for rehab exercises
+```
+
+Implementation status:
+
+```text
+Completed 2026-08-11:
+- python3 -m unittest discover -s tests passed.
+- frontend npm run typecheck passed.
+- frontend npm run build passed.
+- Manual browser checklist remains to be performed in the running app.
 ```
 
 ---
