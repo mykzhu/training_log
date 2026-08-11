@@ -99,7 +99,7 @@ This is needed for Side Plank, Front Plank, McGill hold, breathing holds, and ot
 
 # Phase 32 — Rehab exercise measurement model and logging UX
 
-Status: In progress
+Status: Completed 2026-08-11
 
 ## Goal
 
@@ -932,6 +932,16 @@ Open Exercise Stats for each.
 Export backup.
 Restore into empty DB.
 Verify exercises and history survive.
+```
+
+Implementation status:
+
+```text
+Completed 2026-08-11:
+- python3 -m unittest discover -s tests passed.
+- frontend npm run typecheck passed.
+- frontend npm run build passed.
+- Manual browser checklist remains to be performed in the running app.
 ```
 
 Suggested commit:
