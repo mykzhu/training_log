@@ -1,4 +1,5 @@
 import type { ExerciseMeasurementType } from "../api/types";
+import { formatDurationSeconds } from "./durationFormat";
 
 export type MeasurementUi = {
   usesWeight: boolean;
@@ -39,24 +40,28 @@ export function measurementUi(
       return {
         usesWeight: false,
         weightLabel: "",
-        quantityLabel: "Seconds",
+        quantityLabel: "Duration",
         quantityUnit: repsUnit || "sec",
         addButtonLabel: "Add time",
         setSummaryLabel: "sec",
         totalSummary: ({ totalSets, durationSeconds }) =>
-          `${totalSets} sets · ${durationSeconds} sec`,
+          `${totalSets} sets · ${formatDurationSeconds(durationSeconds, {
+            totalSuffix: true,
+          })}`,
       };
 
     case "loaded_carry_time":
       return {
         usesWeight: true,
         weightLabel: "Kg",
-        quantityLabel: "Seconds",
+        quantityLabel: "Duration",
         quantityUnit: repsUnit || "sec",
         addButtonLabel: "Add carry",
         setSummaryLabel: "sec",
         totalSummary: ({ totalSets, durationSeconds }) =>
-          `${totalSets} sets · ${durationSeconds} sec`,
+          `${totalSets} sets · ${formatDurationSeconds(durationSeconds, {
+            totalSuffix: true,
+          })}`,
       };
 
     case "loaded_carry_distance":

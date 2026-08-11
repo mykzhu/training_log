@@ -388,6 +388,55 @@ label {
   padding: 14px;
 }
 
+.duration-set-logger {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.duration-manual-row,
+.duration-timer-row {
+  display: flex;
+  gap: 8px;
+  align-items: end;
+  flex-wrap: wrap;
+}
+
+.duration-manual-row label {
+  flex: 1 1 160px;
+}
+
+.duration-quick-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.duration-timer-display {
+  min-width: 88px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.duration-timer-note,
+.duration-input-error {
+  margin: 0;
+  font-size: 12px;
+}
+
+.duration-timer-note {
+  color: var(--muted);
+}
+
+.duration-input-error {
+  color: var(--red);
+}
+
 .exercise-header,
 .list-row {
   display: flex;
@@ -2756,6 +2805,21 @@ button.load-calendar-cell:focus-visible {
   .garmin-actions button {
     flex-basis: 100%;
   }
+
+  .duration-manual-row,
+  .duration-timer-row {
+    align-items: stretch;
+  }
+
+  .duration-timer-display {
+    width: 100%;
+    min-width: 0;
+    padding: 10px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.04);
+    text-align: center;
+  }
+
   .recovery-grid,
   .dashboard-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));

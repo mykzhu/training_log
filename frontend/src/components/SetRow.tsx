@@ -7,6 +7,10 @@ import {
   formatSetOption,
 } from "../utils/setOptions";
 import { measurementUi } from "../utils/measurementUi";
+import {
+  formatDurationSeconds,
+  parseDurationInput,
+} from "../utils/durationFormat";
 
 type SetEditorMode = "input" | "select";
 type SetRowVariant = "default" | "legacy-edit";
@@ -42,16 +46,24 @@ export default function SetRow({
   const [reps, setReps] = useState(String(setEntry.reps));
   const isLegacyEdit = variant === "legacy-edit";
   const ui = measurementUi(measurementType, repsUnit);
+  const isDurationOnly = measurementType === "duration_only";
 
   useEffect(() => {
     setWeight(String(setEntry.weight));
-    setReps(String(setEntry.reps));
-  }, [setEntry.weight, setEntry.reps]);
+    setReps(
+      isDurationOnly
+        ? formatDurationSeconds(setEntry.reps)
+        : String(setEntry.reps),
+    );
+  }, [isDurationOnly, setEntry.weight, setEntry.reps]);
 
   const parsedWeight = Number(weight);
-  const parsedReps = Number(reps);
+  const parsedReps = isDurationOnly
+    ? parseDurationInput(reps)
+    : Number(reps);
   const valuesAreValid =
     (ui.usesWeight ? Number.isFinite(parsedWeight) : true) &&
+    parsedReps !== null &&
     Number.isInteger(parsedReps) &&
     (ui.usesWeight ? parsedWeight >= 0 : true) &&
     parsedReps >= 1;
@@ -67,10 +79,13 @@ export default function SetRow({
 
   function updateSet(nextWeight: string, nextReps: string) {
     const nextParsedWeight = ui.usesWeight ? Number(nextWeight) : 0;
-    const nextParsedReps = Number(nextReps);
+    const nextParsedReps = isDurationOnly
+      ? parseDurationInput(nextReps)
+      : Number(nextReps);
     if (
       onUpdate &&
       Number.isFinite(nextParsedWeight) &&
+      nextParsedReps !== null &&
       Number.isInteger(nextParsedReps) &&
       nextParsedWeight >= 0 &&
       nextParsedReps >= 1
@@ -134,7 +149,27 @@ export default function SetRow({
       )}
       <label>
         {ui.quantityLabel}
-        {editorMode === "select" ? (
+        {isDurationOnly ? (
+          <input
+            aria-invalid={valuesAreValid ? "false" : "true"}
+            disabled={disabled || !onUpdate}
+            inputMode="numeric"
+            onBlur={() => {
+              if (parsedReps !== null) {
+                setReps(formatDurationSeconds(parsedReps));
+              }
+            }}
+            onChange={(event) => {
+              const value = event.target.value;
+              setReps(value);
+              if (updateOnChange && parseDurationInput(value) !== null) {
+                updateSet("0", value);
+              }
+            }}
+            placeholder="0:30"
+            value={reps}
+          />
+        ) : editorMode === "select" ? (
           <select
             aria-label={isLegacyEdit ? `Set ${setEntry.set_number} ${ui.quantityLabel.toLowerCase()}` : undefined}
             className="scroll-select"
@@ -150,7 +185,9 @@ export default function SetRow({
           >
             {selectRepsOptions.map((option) => (
               <option key={option} value={formatSetOption(option)}>
-                {formatSetOption(option)} {ui.quantityUnit}
+                {isDurationOnly
+                  ? formatDurationSeconds(option)
+                  : `${formatSetOption(option)} ${ui.quantityUnit}`}
               </option>
             ))}
           </select>
@@ -173,7 +210,7 @@ export default function SetRow({
           onClick={() =>
             onUpdate(setEntry.id, {
               weight: ui.usesWeight ? parsedWeight : 0,
-              reps: parsedReps,
+              reps: parsedReps ?? setEntry.reps,
             })
           }
           type="button"

@@ -541,6 +541,10 @@ function BackRehabStatsCard({
           <strong>{backRehab.total_sets}</strong>
           <span>sets</span>
         </div>
+        <div className="back-rehab-stat">
+          <strong>{formatNumber(backRehab.total_quantity, 0)}</strong>
+          <span>logged work</span>
+        </div>
       </div>
       <div className="back-rehab-response-row">
         <span>Helped: {backRehab.helped_count}</span>

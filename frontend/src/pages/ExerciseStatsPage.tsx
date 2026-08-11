@@ -23,6 +23,7 @@ import {
   formatChartDateTick,
   formatChartDateTooltip,
 } from "../utils/chartDateFormat";
+import { formatDurationSeconds } from "../utils/durationFormat";
 import { getResponsiveXAxisProps, useMediaQuery } from "../hooks/useMediaQuery";
 
 const chartColors = {
@@ -142,7 +143,7 @@ function formatPrimaryMetric(
   }
 
   if (kind === "duration_seconds") {
-    return `${formatNumber(value)} sec`;
+    return formatDurationSeconds(value);
   }
 
   if (kind === "distance_m") {
@@ -177,13 +178,14 @@ function formatSet(set: ExerciseStatsSet, measurementType = "weighted_reps", uni
   }
 
   if (measurementType === "duration_only") {
-    return formatReps(set.reps, unit || "sec");
+    return formatDurationSeconds(set.reps);
   }
 
-  if (
-    measurementType === "loaded_carry_time" ||
-    measurementType === "loaded_carry_distance"
-  ) {
+  if (measurementType === "loaded_carry_time") {
+    return `${formatNumber(set.weight, 1)} kg x ${formatDurationSeconds(set.reps)}`;
+  }
+
+  if (measurementType === "loaded_carry_distance") {
     return `${formatNumber(set.weight, 1)} kg x ${formatReps(set.reps, unit)}`;
   }
 
@@ -196,7 +198,7 @@ function workoutIdFromChartClick(state: unknown) {
   return typeof id === "number" && Number.isFinite(id) ? id : null;
 }
 
-function commonTooltipProps() {
+function commonTooltipProps(primaryKind: PrimaryMetricKind) {
   return {
     contentStyle: {
       background: chartColors.card,
@@ -219,7 +221,11 @@ function commonTooltipProps() {
       };
       const key = String(name);
       const numericValue =
-        typeof value === "number" ? formatNumber(value, 1) : String(value);
+        typeof value === "number" && key === "work"
+          ? formatPrimaryMetric(primaryKind, value)
+          : typeof value === "number"
+            ? formatNumber(value, 1)
+            : String(value);
 
       return [numericValue, labels[key] ?? key];
     },
@@ -339,6 +345,7 @@ export default function ExerciseStatsPage({ exerciseId }: { exerciseId: number }
   );
   const primaryLabel = primaryMetricLabel(primaryKind);
   const isWeightedExercise = stats?.exercise.measurement_type === "weighted_reps";
+  const isDurationExercise = stats?.exercise.measurement_type === "duration_only";
   const trendData = useMemo(
     () => buildTrendData(stats?.history ?? [], primaryKind),
     [primaryKind, stats],
@@ -414,7 +421,13 @@ export default function ExerciseStatsPage({ exerciseId }: { exerciseId: number }
               <section className="dashboard-grid">
                 <SummaryCard
                   label={primaryLabel}
-                  subvalue={`${formatNumber(stats.summary.total_reps)} reps`}
+                  subvalue={
+                    isDurationExercise
+                      ? formatDurationSeconds(stats.summary.duration_seconds, {
+                          totalSuffix: true,
+                        })
+                      : `${formatNumber(stats.summary.total_reps)} reps`
+                  }
                   value={formatPrimaryMetric(
                     primaryKind,
                     primaryKind === "bodyweight_reps"
@@ -440,7 +453,9 @@ export default function ExerciseStatsPage({ exerciseId }: { exerciseId: number }
                   value={
                     isWeightedExercise
                       ? formatKg(stats.summary.best_e1rm, 1)
-                      : formatReps(stats.summary.best_reps, stats.exercise.reps_unit)
+                      : isDurationExercise
+                        ? formatDurationSeconds(stats.summary.best_reps)
+                        : formatReps(stats.summary.best_reps, stats.exercise.reps_unit)
                   }
                 />
                 <SummaryCard
@@ -511,7 +526,7 @@ export default function ExerciseStatsPage({ exerciseId }: { exerciseId: number }
                         )}
                       />
                       <YAxis stroke={chartColors.muted} tick={{ fontSize: 12 }} />
-                      <Tooltip {...commonTooltipProps()} />
+                      <Tooltip {...commonTooltipProps(primaryKind)} />
                       <Legend wrapperStyle={{ color: chartColors.muted }} />
                       <Line
                         activeDot={{ r: 5 }}
@@ -584,7 +599,9 @@ export default function ExerciseStatsPage({ exerciseId }: { exerciseId: number }
                           <td className="strength-table-value">
                             {isWeightedExercise
                               ? formatKg(entry.best_e1rm, 1)
-                              : formatReps(entry.best_reps, entry.reps_unit)}
+                              : entry.measurement_type === "duration_only"
+                                ? formatDurationSeconds(entry.best_reps)
+                                : formatReps(entry.best_reps, entry.reps_unit)}
                           </td>
                           <td>{formatPrimaryMetric(primaryKind, primaryMetricValue(entry, primaryKind))}</td>
                           <td>

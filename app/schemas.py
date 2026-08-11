@@ -1,6 +1,6 @@
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 
 
 class AppBaseModel(BaseModel):
@@ -101,11 +101,16 @@ class UpdateSetRequest(AppBaseModel):
 class ExerciseFeedbackUpdate(AppBaseModel):
     back_pain_before: int | None = Field(default=None, ge=0, le=10)
     back_pain_after: int | None = Field(default=None, ge=0, le=10)
-    response: str | None = Field(
-        default=None,
-        regex="^(helped|same|worse|unknown)$",
-    )
+    response: str | None = None
     notes: str | None = Field(default=None, max_length=1000)
+
+    @validator("response")
+    def validate_response(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        if value not in {"helped", "same", "worse", "unknown"}:
+            raise ValueError("response must be helped, same, worse, or unknown")
+        return value
 
 
 class ExerciseFeedbackResponse(AppBaseModel):

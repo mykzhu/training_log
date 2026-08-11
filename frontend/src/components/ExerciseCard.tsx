@@ -11,6 +11,7 @@ import {
   formatSetOption,
 } from "../utils/setOptions";
 import { measurementUi } from "../utils/measurementUi";
+import DurationSetLogger from "./DurationSetLogger";
 import ExerciseFeedbackEditor from "./ExerciseFeedbackEditor";
 import SetRow from "./SetRow";
 
@@ -56,6 +57,7 @@ export default function ExerciseCard({
       : exercise.workout_exercise_id;
   const isLegacyEdit = variant === "legacy-edit";
   const ui = measurementUi(exercise.measurement_type, exercise.reps_unit);
+  const isDurationOnly = exercise.measurement_type === "duration_only";
   const weightOptions = buildWeightOptions(defaultWeight, [
     ...(exercise.weight_options ?? []),
     ...(exercise.configured_weights ?? []),
@@ -159,67 +161,89 @@ export default function ExerciseCard({
         />
       )}
 
-      <div className={isLegacyEdit ? "edit-set-add-row" : "set-actions"}>
-        {ui.usesWeight && (
+      {isDurationOnly ? (
+        <>
+          <DurationSetLogger
+            defaultSeconds={defaultReps}
+            disabled={disabled}
+            maxSeconds={Math.max(...repsOptions)}
+            minSeconds={Math.min(...repsOptions)}
+            onAddDuration={(seconds) => onAddSet(actionExerciseId, 0, seconds)}
+          />
+          {!isLegacyEdit && (
+            <button
+              className="ghost-button"
+              disabled={disabled}
+              onClick={() => onDuplicateSet(actionExerciseId)}
+              type="button"
+            >
+              Duplicate
+            </button>
+          )}
+        </>
+      ) : (
+        <div className={isLegacyEdit ? "edit-set-add-row" : "set-actions"}>
+          {ui.usesWeight && (
+            <label>
+              {ui.weightLabel}
+              <select
+                aria-label={isLegacyEdit ? "Weight" : undefined}
+                className="scroll-select"
+                disabled={disabled}
+                onChange={(event) => setAddWeight(event.target.value)}
+                value={addWeight}
+              >
+                {weightOptions.map((option) => (
+                  <option key={option} value={formatSetOption(option)}>
+                    {formatSetOption(option)} kg
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <label>
-            {ui.weightLabel}
+            {ui.quantityLabel}
             <select
-              aria-label={isLegacyEdit ? "Weight" : undefined}
+              aria-label={isLegacyEdit ? ui.quantityLabel : undefined}
               className="scroll-select"
               disabled={disabled}
-              onChange={(event) => setAddWeight(event.target.value)}
-              value={addWeight}
+              onChange={(event) => setAddReps(event.target.value)}
+              value={addReps}
             >
-              {weightOptions.map((option) => (
+              {repsOptions.map((option) => (
                 <option key={option} value={formatSetOption(option)}>
-                  {formatSetOption(option)} kg
+                  {formatSetOption(option)} {ui.quantityUnit}
                 </option>
               ))}
             </select>
           </label>
-        )}
-        <label>
-          {ui.quantityLabel}
-          <select
-            aria-label={isLegacyEdit ? ui.quantityLabel : undefined}
-            className="scroll-select"
-            disabled={disabled}
-            onChange={(event) => setAddReps(event.target.value)}
-            value={addReps}
-          >
-            {repsOptions.map((option) => (
-              <option key={option} value={formatSetOption(option)}>
-                {formatSetOption(option)} {ui.quantityUnit}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          className="secondary-button"
-          disabled={disabled}
-          onClick={() =>
-            onAddSet(
-              actionExerciseId,
-              ui.usesWeight ? Number(addWeight) : 0,
-              Number(addReps),
-            )
-          }
-          aria-label={ui.addButtonLabel}
-          type="button"
-        >
-          +
-        </button>
-        {!isLegacyEdit && (
           <button
-            className="ghost-button"
+            className="secondary-button"
             disabled={disabled}
-            onClick={() => onDuplicateSet(actionExerciseId)}
+            onClick={() =>
+              onAddSet(
+                actionExerciseId,
+                ui.usesWeight ? Number(addWeight) : 0,
+                Number(addReps),
+              )
+            }
+            aria-label={ui.addButtonLabel}
             type="button"
           >
-            Duplicate
+            +
           </button>
-        )}
-      </div>
+          {!isLegacyEdit && (
+            <button
+              className="ghost-button"
+              disabled={disabled}
+              onClick={() => onDuplicateSet(actionExerciseId)}
+              type="button"
+            >
+              Duplicate
+            </button>
+          )}
+        </div>
+      )}
     </section>
   );
 }

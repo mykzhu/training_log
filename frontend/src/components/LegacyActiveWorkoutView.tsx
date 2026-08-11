@@ -8,11 +8,13 @@ import type {
 } from "../api/types";
 import { rpeOptionLabel } from "../utils/rpeLabels";
 import { measurementUi } from "../utils/measurementUi";
+import { formatDurationSeconds } from "../utils/durationFormat";
 import {
   buildRepsOptions,
   buildWeightOptions,
   formatSetOption,
 } from "../utils/setOptions";
+import DurationSetLogger from "./DurationSetLogger";
 import ExerciseFeedbackEditor from "./ExerciseFeedbackEditor";
 import "./LegacyActiveWorkoutView.css";
 
@@ -671,6 +673,7 @@ function LegacyActiveExerciseCard({
   const [addWeight, setAddWeight] = useState(String(defaultWeight));
   const [addReps, setAddReps] = useState(String(defaultReps));
   const ui = measurementUi(exercise.measurement_type, exercise.reps_unit);
+  const isDurationOnly = exercise.measurement_type === "duration_only";
   const strengthSummary = useMemo(
     () => buildStrengthSummary(exercise),
     [exercise],
@@ -747,7 +750,11 @@ function LegacyActiveExerciseCard({
                 <tr key={setEntry.id}>
                   <td>{setEntry.set_number}</td>
                   {ui.usesWeight && <td>{formatSetOption(setEntry.weight)}</td>}
-                  <td>{setEntry.reps}</td>
+                  <td>
+                    {isDurationOnly
+                      ? formatDurationSeconds(setEntry.reps)
+                      : setEntry.reps}
+                  </td>
                   <td>
                     <button
                       aria-label={`Remove set ${setEntry.set_number}`}
@@ -779,49 +786,61 @@ function LegacyActiveExerciseCard({
         saveStatus={feedbackSaveStatus}
       />
 
-      <div className="active-set-add-row">
-        {ui.usesWeight && (
+      {isDurationOnly ? (
+        <DurationSetLogger
+          defaultSeconds={defaultReps}
+          disabled={disabled}
+          maxSeconds={Math.max(...repsOptions)}
+          minSeconds={Math.min(...repsOptions)}
+          onAddDuration={(seconds) =>
+            onAddSet(exercise.draft_exercise_id, 0, seconds)
+          }
+        />
+      ) : (
+        <div className="active-set-add-row">
+          {ui.usesWeight && (
+            <select
+              aria-label={`${exercise.exercise_name} weight`}
+              disabled={disabled}
+              onChange={(event) => setAddWeight(event.target.value)}
+              value={addWeight}
+            >
+              {weightOptions.map((option) => (
+                <option key={option} value={formatSetOption(option)}>
+                  {formatSetOption(option)} kg
+                </option>
+              ))}
+            </select>
+          )}
           <select
-            aria-label={`${exercise.exercise_name} weight`}
+            aria-label={`${exercise.exercise_name} ${ui.quantityLabel.toLowerCase()}`}
             disabled={disabled}
-            onChange={(event) => setAddWeight(event.target.value)}
-            value={addWeight}
+            onChange={(event) => setAddReps(event.target.value)}
+            value={addReps}
           >
-            {weightOptions.map((option) => (
+            {repsOptions.map((option) => (
               <option key={option} value={formatSetOption(option)}>
-                {formatSetOption(option)} kg
+                {formatSetOption(option)} {ui.quantityUnit}
               </option>
             ))}
           </select>
-        )}
-        <select
-          aria-label={`${exercise.exercise_name} ${ui.quantityLabel.toLowerCase()}`}
-          disabled={disabled}
-          onChange={(event) => setAddReps(event.target.value)}
-          value={addReps}
-        >
-          {repsOptions.map((option) => (
-            <option key={option} value={formatSetOption(option)}>
-              {formatSetOption(option)} {ui.quantityUnit}
-            </option>
-          ))}
-        </select>
-        <button
-          className="primary-button"
-          disabled={disabled}
-          onClick={() =>
-            void onAddSet(
-              exercise.draft_exercise_id,
-              ui.usesWeight ? Number(addWeight) : 0,
-              Number(addReps),
-            )
-          }
-          aria-label={ui.addButtonLabel}
-          type="button"
-        >
-          +
-        </button>
-      </div>
+          <button
+            className="primary-button"
+            disabled={disabled}
+            onClick={() =>
+              void onAddSet(
+                exercise.draft_exercise_id,
+                ui.usesWeight ? Number(addWeight) : 0,
+                Number(addReps),
+              )
+            }
+            aria-label={ui.addButtonLabel}
+            type="button"
+          >
+            +
+          </button>
+        </div>
+      )}
     </article>
   );
 }
