@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 
-import type { CurrentWorkoutExercise, WorkoutExercise } from "../api/types";
+import type {
+  CurrentWorkoutExercise,
+  ExerciseMeasurementType,
+  WorkoutExercise,
+} from "../api/types";
 import {
   buildRepsOptions,
   buildWeightOptions,
@@ -25,6 +29,49 @@ type ExerciseCardProps = {
   onUpdateSet?: (setId: number, payload: { weight?: number; reps?: number }) => void;
 };
 
+function measurementUsesWeight(measurementType: ExerciseMeasurementType) {
+  return (
+    measurementType === "weighted_reps" ||
+    measurementType === "loaded_carry_time" ||
+    measurementType === "loaded_carry_distance"
+  );
+}
+
+function quantityLabel(measurementType: ExerciseMeasurementType) {
+  if (measurementType === "loaded_carry_time" || measurementType === "duration_only") {
+    return "Seconds";
+  }
+
+  if (measurementType === "loaded_carry_distance") {
+    return "Meters";
+  }
+
+  return "Reps";
+}
+
+function totalSummary(exercise: ExerciseLike) {
+  if (exercise.measurement_type === "duration_only") {
+    return `${exercise.total_sets} sets · ${exercise.duration_seconds} sec`;
+  }
+
+  if (
+    exercise.measurement_type === "bodyweight_reps" ||
+    exercise.measurement_type === "reps_only"
+  ) {
+    return `${exercise.total_sets} sets · ${exercise.bodyweight_reps} reps`;
+  }
+
+  if (exercise.measurement_type === "loaded_carry_time") {
+    return `${exercise.total_sets} sets · ${exercise.duration_seconds} sec`;
+  }
+
+  if (exercise.measurement_type === "loaded_carry_distance") {
+    return `${exercise.total_sets} sets · ${exercise.distance_m} m`;
+  }
+
+  return `${exercise.total_sets} sets · ${exercise.total_reps} reps · ${exercise.total_volume.toFixed(0)} kg`;
+}
+
 export default function ExerciseCard({
   badges = [],
   bestE1rm = null,
@@ -47,6 +94,8 @@ export default function ExerciseCard({
       ? exercise.draft_exercise_id
       : exercise.workout_exercise_id;
   const isLegacyEdit = variant === "legacy-edit";
+  const usesWeight = measurementUsesWeight(exercise.measurement_type);
+  const currentQuantityLabel = quantityLabel(exercise.measurement_type);
   const weightOptions = buildWeightOptions(defaultWeight, [
     ...(exercise.weight_options ?? []),
     ...(exercise.configured_weights ?? []),
@@ -94,8 +143,9 @@ export default function ExerciseCard({
               ))}
           </div>
           <p>
-            {exercise.total_sets} sets · {exercise.total_reps} reps ·{" "}
-            {exercise.total_volume.toFixed(isLegacyEdit ? 1 : 0)} kg
+            {isLegacyEdit && exercise.measurement_type === "weighted_reps"
+              ? `${exercise.total_sets} sets · ${exercise.total_reps} reps · ${exercise.total_volume.toFixed(1)} kg`
+              : totalSummary(exercise)}
             {bestE1rm !== null && <> · e1RM {bestE1rm.toFixed(1)} kg</>}
           </p>
         </div>
@@ -125,6 +175,8 @@ export default function ExerciseCard({
             updateOnChange={isLegacyEdit}
             variant={variant}
             weightOptions={weightOptions}
+            measurementType={exercise.measurement_type}
+            repsUnit={exercise.reps_unit}
             setEntry={setEntry}
             disabled={disabled}
           />
@@ -132,26 +184,28 @@ export default function ExerciseCard({
       </div>
 
       <div className={isLegacyEdit ? "edit-set-add-row" : "set-actions"}>
+        {usesWeight && (
+          <label>
+            Kg
+            <select
+              aria-label={isLegacyEdit ? "Weight" : undefined}
+              className="scroll-select"
+              disabled={disabled}
+              onChange={(event) => setAddWeight(event.target.value)}
+              value={addWeight}
+            >
+              {weightOptions.map((option) => (
+                <option key={option} value={formatSetOption(option)}>
+                  {formatSetOption(option)} kg
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label>
-          Kg
+          {currentQuantityLabel}
           <select
-            aria-label={isLegacyEdit ? "Weight" : undefined}
-            className="scroll-select"
-            disabled={disabled}
-            onChange={(event) => setAddWeight(event.target.value)}
-            value={addWeight}
-          >
-            {weightOptions.map((option) => (
-              <option key={option} value={formatSetOption(option)}>
-                {formatSetOption(option)} kg
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Reps
-          <select
-            aria-label={isLegacyEdit ? "Repetitions" : undefined}
+            aria-label={isLegacyEdit ? currentQuantityLabel : undefined}
             className="scroll-select"
             disabled={disabled}
             onChange={(event) => setAddReps(event.target.value)}
@@ -159,7 +213,7 @@ export default function ExerciseCard({
           >
             {repsOptions.map((option) => (
               <option key={option} value={formatSetOption(option)}>
-                {formatSetOption(option)} reps
+                {formatSetOption(option)} {exercise.reps_unit}
               </option>
             ))}
           </select>
@@ -168,7 +222,7 @@ export default function ExerciseCard({
           className="secondary-button"
           disabled={disabled}
           onClick={() =>
-            onAddSet(actionExerciseId, Number(addWeight), Number(addReps))
+            onAddSet(actionExerciseId, usesWeight ? Number(addWeight) : 0, Number(addReps))
           }
           type="button"
         >

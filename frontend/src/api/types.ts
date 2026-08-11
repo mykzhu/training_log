@@ -12,7 +12,8 @@ export type ExerciseMeasurementType =
   | "bodyweight_reps"
   | "loaded_carry_time"
   | "loaded_carry_distance"
-  | "reps_only";
+  | "reps_only"
+  | "duration_only";
 
 export type ExerciseUsage = {
   workout_count: number;

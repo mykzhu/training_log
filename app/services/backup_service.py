@@ -17,7 +17,10 @@ from app.repositories.analysis_profiles import (
     ensure_default_analysis_profiles,
     normalize_profile_key,
 )
-from app.repositories.exercises import normalize_measurement_settings
+from app.repositories.exercises import (
+    measurement_requires_weight_options,
+    normalize_measurement_settings,
+)
 from app.services.default_analysis_profiles import (
     DEFAULT_PROFILE_KEY,
     default_profile_rows,
@@ -595,6 +598,9 @@ def validate_exercise_weight_options(
         int(row["id"])
         for row in tables["exercises"]
         if int(row["is_active"]) == 1
+        and measurement_requires_weight_options(
+            str(row.get("measurement_type") or "weighted_reps")
+        )
     }
     weights_by_exercise: dict[int, list[float]] = {
         exercise_id: []

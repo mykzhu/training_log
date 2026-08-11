@@ -200,6 +200,121 @@ class BackupServiceTests(unittest.TestCase):
         self.assertEqual(workout_exercise["measurement_type"], "weighted_reps")
         self.assertEqual(workout_exercise["reps_unit"], "reps")
 
+    def test_backup_restore_preserves_duration_only_exercise(self) -> None:
+        with get_db() as conn:
+            exercise_cursor = conn.execute(
+                """
+                INSERT INTO exercises (
+                    name,
+                    is_active,
+                    sort_order,
+                    profile_key,
+                    measurement_type,
+                    reps_unit,
+                    default_weight,
+                    min_weight,
+                    max_weight,
+                    weight_step,
+                    default_reps,
+                    min_reps,
+                    max_reps,
+                    reps_step
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "Side Plank",
+                    1,
+                    999,
+                    "accessory",
+                    "duration_only",
+                    "sec",
+                    0,
+                    0,
+                    0,
+                    1,
+                    30,
+                    5,
+                    120,
+                    5,
+                ),
+            )
+            exercise_id = int(exercise_cursor.lastrowid)
+            workout_cursor = conn.execute(
+                """
+                INSERT INTO workouts (
+                    workout_date,
+                    created_at,
+                    finished_at,
+                    duration_seconds
+                )
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    "2026-07-01",
+                    "2026-07-01T10:00:00",
+                    "2026-07-01T10:30:00",
+                    1800,
+                ),
+            )
+            workout_id = int(workout_cursor.lastrowid)
+            workout_exercise_cursor = conn.execute(
+                """
+                INSERT INTO workout_exercises (
+                    workout_id,
+                    exercise_id,
+                    position,
+                    measurement_type,
+                    reps_unit
+                )
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (workout_id, exercise_id, 1, "duration_only", "sec"),
+            )
+            workout_exercise_id = int(workout_exercise_cursor.lastrowid)
+            conn.execute(
+                """
+                INSERT INTO set_entries (
+                    workout_exercise_id,
+                    set_number,
+                    weight,
+                    reps,
+                    created_at
+                )
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (workout_exercise_id, 1, 0, 45, "2026-07-01T10:05:00"),
+            )
+
+        payload = build_backup_payload()
+        reset_database_data()
+        restore_backup_payload(payload)
+
+        with get_db() as conn:
+            exercise = conn.execute(
+                """
+                SELECT measurement_type, reps_unit, default_weight, max_weight
+                FROM exercises
+                WHERE name = ?
+                """,
+                ("Side Plank",),
+            ).fetchone()
+            workout_exercise = conn.execute(
+                """
+                SELECT measurement_type, reps_unit
+                FROM workout_exercises
+                WHERE exercise_id = ?
+                """,
+                (exercise_id,),
+            ).fetchone()
+
+        self.assertEqual(exercise["measurement_type"], "duration_only")
+        self.assertEqual(exercise["reps_unit"], "sec")
+        self.assertEqual(exercise["default_weight"], 0)
+        self.assertEqual(exercise["max_weight"], 0)
+        self.assertEqual(workout_exercise["measurement_type"], "duration_only")
+        self.assertEqual(workout_exercise["reps_unit"], "sec")
+
     def test_schema_v6_restore_defaults_missing_exercise_measurement_fields(self) -> None:
         self.insert_workout()
         payload = build_backup_payload()

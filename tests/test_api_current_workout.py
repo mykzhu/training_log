@@ -179,6 +179,42 @@ class CurrentWorkoutApiTests(unittest.TestCase):
         self.assertEqual(exercise["duration_seconds"], 0)
         self.assertEqual(exercise["distance_m"], 0)
 
+    def test_duration_only_active_exercise_uses_seconds_without_weight_options(self) -> None:
+        created = create_exercise_endpoint(
+            ExerciseCreateRequest(
+                name="Side Plank",
+                is_active=True,
+                measurement_type="duration_only",
+                reps_unit="sec",
+                default_reps=30,
+                min_reps=5,
+                max_reps=120,
+                reps_step=5,
+            )
+        )
+        exercise_id = int(created["exercise"]["id"])
+
+        start_current_workout()
+        response = add_current_workout_exercise(
+            AddExerciseRequest(exercise_id=exercise_id)
+        )
+        exercise = response["exercises"][0]
+
+        self.assertEqual(exercise["measurement_type"], "duration_only")
+        self.assertEqual(exercise["reps_unit"], "sec")
+        self.assertEqual(exercise["configured_weights"], [])
+        self.assertEqual(exercise["weight_options"], [0.0])
+
+        response = add_current_workout_set(
+            exercise["draft_exercise_id"],
+            AddSetRequest(weight=0, reps=45),
+        )
+        exercise = response["exercises"][0]
+        self.assertEqual(exercise["total_volume_kg"], 0)
+        self.assertEqual(exercise["bodyweight_reps"], 0)
+        self.assertEqual(exercise["duration_seconds"], 45)
+        self.assertEqual(exercise["distance_m"], 0)
+
     def test_active_draft_preserves_measurement_snapshot_after_exercise_change(self) -> None:
         created = create_exercise_endpoint(
             ExerciseCreateRequest(

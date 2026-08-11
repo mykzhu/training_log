@@ -101,7 +101,7 @@ function primaryMetricKind(measurementType: string): PrimaryMetricKind {
     return "bodyweight_reps";
   }
 
-  if (measurementType === "loaded_carry_time") {
+  if (measurementType === "loaded_carry_time" || measurementType === "duration_only") {
     return "duration_seconds";
   }
 
@@ -169,6 +169,10 @@ function primaryMetricValue(
 function formatSet(set: ExerciseStatsSet, measurementType = "weighted_reps", unit = "reps") {
   if (measurementType === "bodyweight_reps" || measurementType === "reps_only") {
     return formatReps(set.reps, unit);
+  }
+
+  if (measurementType === "duration_only") {
+    return formatReps(set.reps, unit || "sec");
   }
 
   if (

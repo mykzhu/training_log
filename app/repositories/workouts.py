@@ -3,8 +3,8 @@ from typing import Any
 
 from app.db import get_db
 from app.repositories.exercises import (
+    build_effective_weight_options,
     derive_set_metrics,
-    get_float_options,
     get_int_options,
     get_weight_options_by_exercise_ids,
     normalize_measurement_settings,
@@ -742,15 +742,14 @@ def get_workout_details_batch(
             for set_entry in item["sets"]
         ]
         item["configured_weights"] = configured_weights
-        item["weight_options"] = get_float_options(
-            min_value=float(item.get("min_weight", 0)),
-            max_value=float(item.get("max_weight", 200)),
-            step=float(item.get("weight_step", 2.5)),
-            extra_values=[
-                *configured_weights,
-                *set_weights,
-                float(item["default_weight"]),
-            ],
+        item["weight_options"] = build_effective_weight_options(
+            measurement_type=str(item["measurement_type"]),
+            min_weight=float(item.get("min_weight", 0)),
+            max_weight=float(item.get("max_weight", 200)),
+            weight_step=float(item.get("weight_step", 2.5)),
+            configured_weights=configured_weights,
+            set_weights=set_weights,
+            default_weight=float(item["default_weight"]),
         )
         item["reps_options"] = get_int_options(
             min_value=int(item.get("min_reps", 1)),

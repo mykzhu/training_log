@@ -1732,7 +1732,7 @@ def build_exercise_pr_baselines(
         workout["total_volume"] += weight * reps
         if measurement_type in {"bodyweight_reps", "reps_only"}:
             workout["bodyweight_reps"] += reps
-        elif measurement_type == "loaded_carry_time":
+        elif measurement_type in {"loaded_carry_time", "duration_only"}:
             workout["duration_seconds"] += reps
         elif measurement_type == "loaded_carry_distance":
             workout["distance_m"] += reps
@@ -2048,7 +2048,7 @@ def build_exercise_stats(
         ):
             pr_flags.append("Total reps PR")
 
-        if workout_measurement_type == "loaded_carry_time" and (
+        if workout_measurement_type in {"loaded_carry_time", "duration_only"} and (
             duration_seconds > 0
             and prior.get("best_duration_seconds") is not None
             and duration_seconds > int(prior["best_duration_seconds"])

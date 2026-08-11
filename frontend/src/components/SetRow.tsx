@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import type { SetEntry } from "../api/types";
+import type { ExerciseMeasurementType, SetEntry } from "../api/types";
 import {
   buildRepsOptions,
   buildWeightOptions,
@@ -17,10 +17,32 @@ type SetRowProps = {
   setEntry: SetEntry;
   variant?: SetRowVariant;
   weightOptions?: number[];
+  measurementType?: ExerciseMeasurementType;
+  repsUnit?: string;
   onDelete: (setId: number) => void;
   onUpdate?: (setId: number, payload: { weight?: number; reps?: number }) => void;
   updateOnChange?: boolean;
 };
+
+function measurementUsesWeight(measurementType: ExerciseMeasurementType) {
+  return (
+    measurementType === "weighted_reps" ||
+    measurementType === "loaded_carry_time" ||
+    measurementType === "loaded_carry_distance"
+  );
+}
+
+function quantityLabel(measurementType: ExerciseMeasurementType) {
+  if (measurementType === "loaded_carry_time" || measurementType === "duration_only") {
+    return "Seconds";
+  }
+
+  if (measurementType === "loaded_carry_distance") {
+    return "Meters";
+  }
+
+  return "Reps";
+}
 
 export default function SetRow({
   disabled,
@@ -28,14 +50,18 @@ export default function SetRow({
   onDelete,
   onUpdate,
   repsOptions,
+  repsUnit = "reps",
   setEntry,
   variant = "default",
   weightOptions,
+  measurementType = "weighted_reps",
   updateOnChange = false,
 }: SetRowProps) {
   const [weight, setWeight] = useState(String(setEntry.weight));
   const [reps, setReps] = useState(String(setEntry.reps));
   const isLegacyEdit = variant === "legacy-edit";
+  const usesWeight = measurementUsesWeight(measurementType);
+  const currentQuantityLabel = quantityLabel(measurementType);
 
   useEffect(() => {
     setWeight(String(setEntry.weight));
@@ -89,45 +115,47 @@ export default function SetRow({
   return (
     <div className={`set-row ${isLegacyEdit ? "edit-set-row" : ""}`.trim()}>
       <span>#{setEntry.set_number}</span>
+      {usesWeight && (
+        <label>
+          Kg
+          {editorMode === "select" ? (
+            <select
+              aria-label={isLegacyEdit ? `Set ${setEntry.set_number} weight` : undefined}
+              className="scroll-select"
+              disabled={disabled || !onUpdate}
+              onChange={(event) => {
+                const value = event.target.value;
+                setWeight(value);
+                if (updateOnChange) {
+                  updateSet(value, reps);
+                }
+              }}
+              value={weight}
+            >
+              {selectWeightOptions.map((option) => (
+                <option key={option} value={formatSetOption(option)}>
+                  {formatSetOption(option)}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              disabled={disabled || !onUpdate}
+              inputMode="decimal"
+              min="0"
+              onChange={(event) => setWeight(event.target.value)}
+              step="0.25"
+              type="number"
+              value={weight}
+            />
+          )}
+        </label>
+      )}
       <label>
-        Kg
+        {currentQuantityLabel}
         {editorMode === "select" ? (
           <select
-            aria-label={isLegacyEdit ? `Set ${setEntry.set_number} weight` : undefined}
-            className="scroll-select"
-            disabled={disabled || !onUpdate}
-            onChange={(event) => {
-              const value = event.target.value;
-              setWeight(value);
-              if (updateOnChange) {
-                updateSet(value, reps);
-              }
-            }}
-            value={weight}
-          >
-            {selectWeightOptions.map((option) => (
-              <option key={option} value={formatSetOption(option)}>
-                {formatSetOption(option)}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <input
-            disabled={disabled || !onUpdate}
-            inputMode="decimal"
-            min="0"
-            onChange={(event) => setWeight(event.target.value)}
-            step="0.25"
-            type="number"
-            value={weight}
-          />
-        )}
-      </label>
-      <label>
-        Reps
-        {editorMode === "select" ? (
-          <select
-            aria-label={isLegacyEdit ? `Set ${setEntry.set_number} repetitions` : undefined}
+            aria-label={isLegacyEdit ? `Set ${setEntry.set_number} ${currentQuantityLabel.toLowerCase()}` : undefined}
             className="scroll-select"
             disabled={disabled || !onUpdate}
             onChange={(event) => {
@@ -141,7 +169,7 @@ export default function SetRow({
           >
             {selectRepsOptions.map((option) => (
               <option key={option} value={formatSetOption(option)}>
-                {formatSetOption(option)}
+                {formatSetOption(option)} {repsUnit}
               </option>
             ))}
           </select>

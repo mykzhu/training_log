@@ -5,8 +5,8 @@ from typing import Any
 
 from app.db import get_db
 from app.repositories.exercises import (
+    build_effective_weight_options,
     derive_set_metrics,
-    get_float_options,
     get_int_options,
     get_option_settings_by_exercise_ids,
     get_weight_options_by_exercise_ids,
@@ -418,15 +418,14 @@ def get_draft_workout_details(draft: dict[str, Any]) -> list[dict[str, Any]]:
                 "default_weight": default_weight,
                 "default_reps": default_reps,
                 "configured_weights": configured_weights,
-                "weight_options": get_float_options(
-                    min_value=float(settings.get("min_weight", 0)),
-                    max_value=float(settings.get("max_weight", 200)),
-                    step=float(settings.get("weight_step", 2.5)),
-                    extra_values=[
-                        *configured_weights,
-                        *set_weights,
-                        default_weight,
-                    ],
+                "weight_options": build_effective_weight_options(
+                    measurement_type=measurement["measurement_type"],
+                    min_weight=float(settings.get("min_weight", 0)),
+                    max_weight=float(settings.get("max_weight", 200)),
+                    weight_step=float(settings.get("weight_step", 2.5)),
+                    configured_weights=configured_weights,
+                    set_weights=set_weights,
+                    default_weight=default_weight,
                 ),
                 "reps_options": get_int_options(
                     min_value=int(settings.get("min_reps", 1)),

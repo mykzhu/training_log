@@ -36,6 +36,12 @@ VALID_MEASUREMENT_TYPES = {
     "loaded_carry_time",
     "loaded_carry_distance",
     "reps_only",
+    "duration_only",
+}
+WEIGHTED_MEASUREMENT_TYPES = {
+    "weighted_reps",
+    "loaded_carry_time",
+    "loaded_carry_distance",
 }
 REPS_UNIT_DEFAULTS = {
     "weighted_reps": "reps",
@@ -43,11 +49,16 @@ REPS_UNIT_DEFAULTS = {
     "loaded_carry_time": "sec",
     "loaded_carry_distance": "m",
     "reps_only": "reps",
+    "duration_only": "sec",
 }
 
 
 def normalize_exercise_name(name: str) -> str:
     return " ".join(name.strip().split())
+
+
+def measurement_requires_weight_options(measurement_type: str) -> bool:
+    return measurement_type in WEIGHTED_MEASUREMENT_TYPES
 
 
 def default_measurement_settings_for_name(name: str) -> dict[str, str]:
@@ -113,6 +124,11 @@ def derive_set_metrics(
         duration_seconds = 0
         distance_m = 0
     elif measurement_type == "loaded_carry_time":
+        total_volume_kg = 0.0
+        bodyweight_reps = 0
+        duration_seconds = total_reps
+        distance_m = 0
+    elif measurement_type == "duration_only":
         total_volume_kg = 0.0
         bodyweight_reps = 0
         duration_seconds = total_reps
@@ -327,6 +343,59 @@ def normalize_exercise_option_settings(
         "max_reps": normalized_max_reps,
         "reps_step": normalized_reps_step,
     }
+
+
+def normalize_nonweighted_option_settings(
+    settings: dict[str, float | int],
+) -> dict[str, float | int]:
+    return {
+        **settings,
+        "default_weight": 0.0,
+        "min_weight": 0.0,
+        "max_weight": 0.0,
+        "weight_step": 1.0,
+    }
+
+
+def effective_weight_options(
+    measurement_type: str,
+    configured_weights: list[float],
+    set_weights: list[float] | None = None,
+    default_weight: float | None = None,
+) -> list[float]:
+    if measurement_requires_weight_options(measurement_type):
+        return [
+            *configured_weights,
+            *(set_weights or []),
+            *([] if default_weight is None else [default_weight]),
+        ]
+    return [0.0]
+
+
+def build_effective_weight_options(
+    *,
+    measurement_type: str,
+    min_weight: float | None,
+    max_weight: float | None,
+    weight_step: float | None,
+    configured_weights: list[float],
+    set_weights: list[float] | None = None,
+    default_weight: float | None = None,
+) -> list[float]:
+    if not measurement_requires_weight_options(measurement_type):
+        return [0.0]
+
+    return get_float_options(
+        min_value=min_weight,
+        max_value=max_weight,
+        step=weight_step,
+        extra_values=effective_weight_options(
+            measurement_type,
+            configured_weights,
+            set_weights,
+            default_weight,
+        ),
+    )
 
 
 def get_weight_options_by_exercise_ids(
@@ -623,9 +692,18 @@ def create_exercise(
         **(measurement_settings or {}),
         exercise_name=normalized_name,
     )
+    if not measurement_requires_weight_options(measurement["measurement_type"]):
+        normalized_weights = []
+        settings = normalize_nonweighted_option_settings(settings)
 
-    if is_active and not normalized_weights:
-        raise ActiveExerciseWeightError("Active exercise must have at least one weight.")
+    if (
+        is_active
+        and measurement_requires_weight_options(measurement["measurement_type"])
+        and not normalized_weights
+    ):
+        raise ActiveExerciseWeightError(
+            "Weighted active exercise must have at least one weight."
+        )
 
     with get_db() as conn:
         resolved_profile_key = resolve_profile_key(conn, profile_key, normalized_name)
@@ -734,6 +812,19 @@ def update_exercise(
         }
         current_measurement.update(measurement_settings)
         measurement = normalize_measurement_settings(**current_measurement)
+    effective_measurement_type = (
+        current["measurement_type"]
+        if measurement is None
+        else measurement["measurement_type"]
+    )
+    if not measurement_requires_weight_options(effective_measurement_type):
+        current_settings = {
+            key: current[key]
+            for key in EXERCISE_OPTION_SETTING_DEFAULTS
+        }
+        if settings is not None:
+            current_settings.update(settings)
+        settings = normalize_nonweighted_option_settings(current_settings)
 
     with get_db() as conn:
         if profile_key is not None:
@@ -751,7 +842,10 @@ def update_exercise(
         if existing is not None:
             raise sqlite3.IntegrityError("Exercise name already exists.")
 
-        if updated_active:
+        if (
+            updated_active
+            and measurement_requires_weight_options(effective_measurement_type)
+        ):
             weight_count = conn.execute(
                 """
                 SELECT COUNT(*)
@@ -762,7 +856,7 @@ def update_exercise(
             ).fetchone()[0]
             if int(weight_count) == 0:
                 raise ActiveExerciseWeightError(
-                    "Active exercise must have at least one weight."
+                    "Weighted active exercise must have at least one weight."
                 )
 
         try:
@@ -938,15 +1032,22 @@ def replace_exercise_weights(
 
     with get_db() as conn:
         exercise = conn.execute(
-            "SELECT id, is_active FROM exercises WHERE id = ?",
+            "SELECT id, is_active, measurement_type FROM exercises WHERE id = ?",
             (exercise_id,),
         ).fetchone()
         if exercise is None:
             raise KeyError("Exercise not found.")
-        if bool(exercise["is_active"]) and not normalized_weights:
+        measurement_type = str(exercise["measurement_type"] or MEASUREMENT_TYPE_DEFAULT)
+        if (
+            bool(exercise["is_active"])
+            and measurement_requires_weight_options(measurement_type)
+            and not normalized_weights
+        ):
             raise ActiveExerciseWeightError(
-                "Active exercise must have at least one weight."
+                "Weighted active exercise must have at least one weight."
             )
+        if not measurement_requires_weight_options(measurement_type):
+            normalized_weights = []
 
         conn.execute(
             "DELETE FROM exercise_weight_options WHERE exercise_id = ?",

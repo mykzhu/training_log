@@ -262,6 +262,56 @@ class ExercisesApiTests(unittest.TestCase):
             [100, 120],
         )
 
+    def test_duration_only_exercise_stats_use_seconds_instead_of_volume(self) -> None:
+        created = create_exercise_endpoint(
+            ExerciseCreateRequest(
+                name="Phase 32 Side Plank",
+                measurement_type="duration_only",
+                reps_unit="sec",
+            )
+        )
+        exercise_id = int(created["exercise"]["id"])
+        first_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            exercises=[
+                {
+                    "name": "Phase 32 Side Plank",
+                    "sets": [{"weight": 0, "reps": 30}],
+                },
+            ],
+        )
+        second_id = self.insert_workout(
+            created_at="2026-06-08T10:00:00",
+            exercises=[
+                {
+                    "name": "Phase 32 Side Plank",
+                    "sets": [{"weight": 0, "reps": 45}],
+                },
+            ],
+        )
+
+        response = get_exercise_stats_endpoint(exercise_id, limit="all")
+
+        self.assertEqual(response["exercise"]["measurement_type"], "duration_only")
+        self.assertEqual(response["exercise"]["reps_unit"], "sec")
+        self.assertEqual(response["source_workout_ids"], [first_id, second_id])
+        self.assertEqual(response["summary"]["total_volume_kg"], 0.0)
+        self.assertEqual(response["summary"]["bodyweight_reps"], 0)
+        self.assertEqual(response["summary"]["duration_seconds"], 75)
+        self.assertEqual(response["summary"]["weighted_reps"], 0)
+        self.assertIsNone(response["summary"]["avg_kg_per_rep"])
+        self.assertIsNone(response["summary"]["best_e1rm"])
+
+        latest = response["history"][1]
+        self.assertEqual(latest["measurement_type"], "duration_only")
+        self.assertEqual(latest["duration_seconds"], 45)
+        self.assertIn("Duration PR", latest["pr_flags"])
+        self.assertNotIn("Volume PR", latest["pr_flags"])
+        self.assertEqual(
+            [marker["value"] for marker in response["trend"]["duration_seconds"]["markers"]],
+            [30, 45],
+        )
+
     def test_exercise_stats_keep_inactive_exercise_history(self) -> None:
         deadlift_id = self.exercise_id("Deadlift")
         workout_id = self.insert_workout(
@@ -407,6 +457,87 @@ class ExercisesApiTests(unittest.TestCase):
         self.assertEqual(exercise["max_reps"], 200)
         self.assertEqual(exercise["measurement_type"], "bodyweight_reps")
         self.assertEqual(exercise["reps_unit"], "reps")
+
+    def test_create_active_duration_only_exercise_without_weights_succeeds(self) -> None:
+        response = create_exercise_endpoint(
+            ExerciseCreateRequest(
+                name="Side Plank",
+                measurement_type="duration_only",
+                reps_unit="sec",
+                default_reps=30,
+                min_reps=5,
+                max_reps=120,
+                reps_step=5,
+            )
+        )
+
+        exercise = response["exercise"]
+        self.assertTrue(exercise["is_active"])
+        self.assertEqual(exercise["measurement_type"], "duration_only")
+        self.assertEqual(exercise["reps_unit"], "sec")
+        self.assertEqual(exercise["weights"], [])
+        self.assertEqual(exercise["default_weight"], 0)
+        self.assertEqual(exercise["max_weight"], 0)
+
+    def test_create_active_reps_only_exercise_without_weights_succeeds(self) -> None:
+        response = create_exercise_endpoint(
+            ExerciseCreateRequest(
+                name="Phase 32 Dead Bug",
+                measurement_type="reps_only",
+                reps_unit="reps",
+            )
+        )
+
+        exercise = response["exercise"]
+        self.assertTrue(exercise["is_active"])
+        self.assertEqual(exercise["measurement_type"], "reps_only")
+        self.assertEqual(exercise["weights"], [])
+
+    def test_create_weighted_exercise_without_weights_still_rejected(self) -> None:
+        with self.assertRaises(HTTPException) as exc:
+            create_exercise_endpoint(
+                ExerciseCreateRequest(
+                    name="Phase 32 Weighted Row",
+                    measurement_type="weighted_reps",
+                    reps_unit="reps",
+                )
+            )
+
+        self.assertEqual(exc.exception.status_code, 409)
+
+    def test_update_nonweighted_to_weighted_without_weights_is_rejected(self) -> None:
+        created = create_exercise_endpoint(
+            ExerciseCreateRequest(
+                name="Phase 32 Reps Only Update",
+                measurement_type="reps_only",
+                reps_unit="reps",
+            )
+        )
+        exercise_id = int(created["exercise"]["id"])
+
+        with self.assertRaises(HTTPException) as exc:
+            update_exercise_endpoint(
+                exercise_id,
+                ExerciseUpdateRequest(measurement_type="weighted_reps", reps_unit="reps"),
+            )
+
+        self.assertEqual(exc.exception.status_code, 409)
+
+    def test_update_weighted_to_reps_only_is_allowed(self) -> None:
+        created = create_exercise_endpoint(
+            ExerciseCreateRequest(name="Phase 32 Weighted To Reps", weights=[20])
+        )
+        exercise_id = int(created["exercise"]["id"])
+
+        response = update_exercise_endpoint(
+            exercise_id,
+            ExerciseUpdateRequest(measurement_type="reps_only", reps_unit="reps"),
+        )
+
+        exercise = response["exercise"]
+        self.assertEqual(exercise["measurement_type"], "reps_only")
+        self.assertEqual(exercise["default_weight"], 0)
+        self.assertEqual(exercise["max_weight"], 0)
 
     def test_create_exercise_infers_measurement_from_name(self) -> None:
         response = create_exercise_endpoint(

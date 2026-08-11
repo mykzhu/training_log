@@ -50,6 +50,7 @@ const measurementTypeOptions: Array<{
   { value: "loaded_carry_time", label: "Loaded carry time" },
   { value: "loaded_carry_distance", label: "Loaded carry distance" },
   { value: "reps_only", label: "Reps only" },
+  { value: "duration_only", label: "Duration only" },
 ];
 
 const defaultUnitByMeasurement: Record<ExerciseMeasurementType, string> = {
@@ -58,6 +59,7 @@ const defaultUnitByMeasurement: Record<ExerciseMeasurementType, string> = {
   loaded_carry_time: "sec",
   loaded_carry_distance: "m",
   reps_only: "reps",
+  duration_only: "sec",
 };
 
 function normalizeWeights(weights: number[]) {
