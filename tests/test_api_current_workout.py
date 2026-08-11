@@ -17,6 +17,7 @@ from app.routes.api_current_workout import (
     finish_current_workout,
     get_current_workout,
     start_current_workout,
+    update_current_workout_exercise_feedback,
     update_current_workout_metadata,
     update_current_workout_set,
 )
@@ -25,6 +26,7 @@ from app.schemas import (
     AddExerciseRequest,
     AddSetRequest,
     CurrentWorkoutResponse,
+    ExerciseFeedbackUpdate,
     ExerciseCreateRequest,
     ExerciseUpdateRequest,
     UpdateSetRequest,
@@ -68,6 +70,13 @@ class CurrentWorkoutApiTests(unittest.TestCase):
         self.assertIn(("/api/v1/current-workout/start", ("POST",)), routes)
         self.assertIn(("/api/v1/current-workout/metadata", ("PATCH",)), routes)
         self.assertIn(("/api/v1/current-workout/exercises", ("POST",)), routes)
+        self.assertIn(
+            (
+                "/api/v1/current-workout/exercises/{draft_exercise_id}/feedback",
+                ("PATCH",),
+            ),
+            routes,
+        )
         self.assertIn(("/api/v1/current-workout/finish", ("POST",)), routes)
 
     def test_get_current_workout_returns_stable_inactive_response(self) -> None:
@@ -214,6 +223,67 @@ class CurrentWorkoutApiTests(unittest.TestCase):
         self.assertEqual(exercise["bodyweight_reps"], 0)
         self.assertEqual(exercise["duration_seconds"], 45)
         self.assertEqual(exercise["distance_m"], 0)
+
+    def test_patch_current_exercise_feedback_records_before_after(self) -> None:
+        deadlift_id = self.exercise_id("Deadlift")
+
+        start_current_workout()
+        response = add_current_workout_exercise(
+            AddExerciseRequest(exercise_id=deadlift_id)
+        )
+        draft_exercise_id = response["exercises"][0]["draft_exercise_id"]
+
+        response = update_current_workout_exercise_feedback(
+            draft_exercise_id,
+            ExerciseFeedbackUpdate(
+                back_pain_before=4,
+                back_pain_after=4,
+                notes="No change",
+            ),
+        )
+
+        feedback = response["exercises"][0]["feedback"]
+        self.assertEqual(feedback["back_pain_before"], 4)
+        self.assertEqual(feedback["back_pain_after"], 4)
+        self.assertEqual(feedback["response"], "same")
+        self.assertEqual(feedback["notes"], "No change")
+        self.assertIsNotNone(feedback["updated_at"])
+
+    def test_patch_current_exercise_feedback_derives_helped(self) -> None:
+        deadlift_id = self.exercise_id("Deadlift")
+
+        start_current_workout()
+        response = add_current_workout_exercise(
+            AddExerciseRequest(exercise_id=deadlift_id)
+        )
+        draft_exercise_id = response["exercises"][0]["draft_exercise_id"]
+
+        response = update_current_workout_exercise_feedback(
+            draft_exercise_id,
+            ExerciseFeedbackUpdate(back_pain_before=5, back_pain_after=2),
+        )
+
+        self.assertEqual(response["exercises"][0]["feedback"]["response"], "helped")
+
+    def test_patch_current_exercise_feedback_derives_worse(self) -> None:
+        deadlift_id = self.exercise_id("Deadlift")
+
+        start_current_workout()
+        response = add_current_workout_exercise(
+            AddExerciseRequest(exercise_id=deadlift_id)
+        )
+        draft_exercise_id = response["exercises"][0]["draft_exercise_id"]
+
+        response = update_current_workout_exercise_feedback(
+            draft_exercise_id,
+            ExerciseFeedbackUpdate(back_pain_before=2, back_pain_after=5),
+        )
+
+        self.assertEqual(response["exercises"][0]["feedback"]["response"], "worse")
+
+    def test_patch_current_exercise_feedback_rejects_invalid_response(self) -> None:
+        with self.assertRaises(Exception):
+            ExerciseFeedbackUpdate(response="better")
 
     def test_active_draft_preserves_measurement_snapshot_after_exercise_change(self) -> None:
         created = create_exercise_endpoint(
@@ -419,6 +489,14 @@ class CurrentWorkoutApiTests(unittest.TestCase):
         start_current_workout()
         add_current_workout_exercise(AddExerciseRequest(exercise_id=deadlift_id))
         add_current_workout_set(1, AddSetRequest(weight=100.0, reps=5))
+        update_current_workout_exercise_feedback(
+            1,
+            ExerciseFeedbackUpdate(
+                back_pain_before=4,
+                back_pain_after=2,
+                notes="Loosened up",
+            ),
+        )
 
         response = finish_current_workout()
 
@@ -429,9 +507,19 @@ class CurrentWorkoutApiTests(unittest.TestCase):
         with get_db() as conn:
             workout_count = conn.execute("SELECT COUNT(*) FROM workouts").fetchone()[0]
             set_count = conn.execute("SELECT COUNT(*) FROM set_entries").fetchone()[0]
+            feedback = conn.execute(
+                """
+                SELECT back_pain_before, back_pain_after, response, notes
+                FROM workout_exercise_feedback
+                """
+            ).fetchone()
 
         self.assertEqual(workout_count, 1)
         self.assertEqual(set_count, 1)
+        self.assertEqual(feedback["back_pain_before"], 4)
+        self.assertEqual(feedback["back_pain_after"], 2)
+        self.assertEqual(feedback["response"], "helped")
+        self.assertEqual(feedback["notes"], "Loosened up")
 
     def test_finish_current_workout_rejects_empty_draft_and_preserves_it(self) -> None:
         start_current_workout()

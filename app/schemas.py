@@ -98,6 +98,24 @@ class UpdateSetRequest(AppBaseModel):
     reps: int | None = Field(default=None, ge=1, le=1000)
 
 
+class ExerciseFeedbackUpdate(AppBaseModel):
+    back_pain_before: int | None = Field(default=None, ge=0, le=10)
+    back_pain_after: int | None = Field(default=None, ge=0, le=10)
+    response: str | None = Field(
+        default=None,
+        regex="^(helped|same|worse|unknown)$",
+    )
+    notes: str | None = Field(default=None, max_length=1000)
+
+
+class ExerciseFeedbackResponse(AppBaseModel):
+    back_pain_before: int | None
+    back_pain_after: int | None
+    response: str
+    notes: str | None
+    updated_at: str | None
+
+
 class SetEntryResponse(AppBaseModel):
     id: int
     workout_exercise_id: int
@@ -154,6 +172,7 @@ class WorkoutExerciseResponse(AppBaseModel):
     configured_weights: list[float]
     weight_options: list[float]
     reps_options: list[int]
+    feedback: ExerciseFeedbackResponse | None = None
 
 
 class CurrentWorkoutExerciseResponse(AppBaseModel):
@@ -177,6 +196,7 @@ class CurrentWorkoutExerciseResponse(AppBaseModel):
     configured_weights: list[float]
     weight_options: list[float]
     reps_options: list[int]
+    feedback: ExerciseFeedbackResponse | None = None
 
 
 class WorkoutAnalysisExerciseResponse(FlexibleResponse):

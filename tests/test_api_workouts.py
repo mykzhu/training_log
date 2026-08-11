@@ -20,12 +20,14 @@ from app.routes.api_workouts import (
     duplicate_workout_exercise_set_endpoint,
     get_workout_detail,
     get_workouts,
+    update_workout_exercise_feedback_endpoint,
     update_set_endpoint,
     update_workout_endpoint,
 )
 from app.schemas import (
     AddExerciseRequest,
     AddSetRequest,
+    ExerciseFeedbackUpdate,
     UpdateSetRequest,
     WorkoutUpdateRequest,
 )
@@ -164,6 +166,13 @@ class WorkoutsApiTests(unittest.TestCase):
             (
                 "/api/v1/workouts/{workout_id}/exercises/{workout_exercise_id}",
                 ("DELETE",),
+            ),
+            routes,
+        )
+        self.assertIn(
+            (
+                "/api/v1/workouts/{workout_id}/exercises/{workout_exercise_id}/feedback",
+                ("PATCH",),
             ),
             routes,
         )
@@ -346,6 +355,68 @@ class WorkoutsApiTests(unittest.TestCase):
             response["analysis"]["exercises"][0]["exercise_name"],
             "Deadlift",
         )
+
+    def test_patch_finished_workout_exercise_feedback(self) -> None:
+        workout_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            session_rpe=6,
+            lower_back_pain=1,
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [{"weight": 100, "reps": 5}],
+                },
+            ],
+        )
+        workout_exercise_id = self.get_workout_exercise_id(
+            get_workout_detail(workout_id),
+            "Deadlift",
+        )
+
+        response = update_workout_exercise_feedback_endpoint(
+            workout_id,
+            workout_exercise_id,
+            ExerciseFeedbackUpdate(
+                back_pain_before=3,
+                back_pain_after=1,
+                notes="Moved better after",
+            ),
+        )
+
+        feedback = response["exercises"][0]["feedback"]
+        self.assertEqual(feedback["back_pain_before"], 3)
+        self.assertEqual(feedback["back_pain_after"], 1)
+        self.assertEqual(feedback["response"], "helped")
+        self.assertEqual(feedback["notes"], "Moved better after")
+        self.assertIsNotNone(feedback["updated_at"])
+
+    def test_feedback_deleted_when_workout_exercise_deleted(self) -> None:
+        workout_id = self.insert_workout(
+            created_at="2026-06-01T10:00:00",
+            exercises=[
+                {
+                    "name": "Deadlift",
+                    "sets": [{"weight": 100, "reps": 5}],
+                },
+            ],
+        )
+        detail = get_workout_detail(workout_id)
+        workout_exercise_id = self.get_workout_exercise_id(detail, "Deadlift")
+        update_workout_exercise_feedback_endpoint(
+            workout_id,
+            workout_exercise_id,
+            ExerciseFeedbackUpdate(back_pain_before=2, back_pain_after=4),
+        )
+
+        response = delete_workout_exercise_endpoint(workout_id, workout_exercise_id)
+
+        with get_db() as conn:
+            feedback_count = conn.execute(
+                "SELECT COUNT(*) FROM workout_exercise_feedback"
+            ).fetchone()[0]
+
+        self.assertEqual(response["exercises"], [])
+        self.assertEqual(feedback_count, 0)
 
     def test_workout_detail_reports_measurement_specific_set_metrics(self) -> None:
         create_exercise(

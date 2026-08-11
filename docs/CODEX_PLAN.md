@@ -1090,6 +1090,17 @@ def test_patch_finished_workout_exercise_feedback()
 def test_feedback_deleted_when_workout_exercise_deleted()
 ```
 
+Implementation status:
+
+```text
+Completed 2026-08-11:
+- Added exercise feedback request/response schemas and optional feedback fields on current and finished workout exercises.
+- Added PATCH APIs for active draft exercise feedback and finished workout exercise feedback.
+- Added response derivation for helped/same/worse/unknown, with partial PATCH updates preserving omitted values.
+- Regenerated OpenAPI and generated frontend API types, and synced local frontend response types.
+- Added backend API tests for current feedback updates, response derivation, invalid response validation, finalize copy, finished workout feedback updates, and cascade delete behavior.
+```
+
 ---
 
 ## 33.3 Frontend feedback UI

@@ -3,11 +3,16 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 
 from app.db import get_db
+from app.repositories.exercise_feedback import (
+    active_draft_feedback_by_exercise_ids,
+    upsert_active_draft_exercise_feedback,
+)
 from app.repositories.drafts import EmptyDraftError
 from app.schemas import (
     AddExerciseRequest,
     AddSetRequest,
     CurrentWorkoutResponse,
+    ExerciseFeedbackUpdate,
     FinishCurrentWorkoutResponse,
     UpdateSetRequest,
     WorkoutMetadataUpdate,
@@ -65,6 +70,9 @@ def build_current_workout_response(
         }
 
     workout_exercises = get_draft_workout_details(draft)
+    feedback_by_exercise_id = active_draft_feedback_by_exercise_ids(
+        [int(item["workout_exercise_id"]) for item in workout_exercises]
+    )
     total_volume = sum(item["total_volume"] for item in workout_exercises)
     total_reps = sum(item["total_reps"] for item in workout_exercises)
     total_sets = sum(len(item["sets"]) for item in workout_exercises)
@@ -105,6 +113,9 @@ def build_current_workout_response(
                 "configured_weights": item["configured_weights"],
                 "weight_options": item["weight_options"],
                 "reps_options": item["reps_options"],
+                "feedback": feedback_by_exercise_id.get(
+                    int(item["workout_exercise_id"])
+                ),
             }
             for item in workout_exercises
         ],
@@ -191,6 +202,30 @@ def delete_current_workout_exercise(
         raise HTTPException(status_code=404, detail="Draft exercise not found.")
 
     delete_active_draft_exercise(draft_exercise_id)
+    return build_current_workout_response()
+
+
+@router.patch("/exercises/{draft_exercise_id}/feedback", response_model=CurrentWorkoutResponse)
+def update_current_workout_exercise_feedback(
+    draft_exercise_id: int,
+    payload: ExerciseFeedbackUpdate,
+) -> dict[str, Any]:
+    draft = require_active_draft()
+    if not payload.model_fields_set:
+        raise HTTPException(status_code=400, detail="No feedback fields provided.")
+
+    if get_draft_workout_exercise(draft, draft_exercise_id) is None:
+        raise HTTPException(status_code=404, detail="Draft exercise not found.")
+
+    upsert_active_draft_exercise_feedback(
+        draft_exercise_id,
+        changed_fields=payload.model_fields_set,
+        back_pain_before=payload.back_pain_before,
+        back_pain_after=payload.back_pain_after,
+        response=payload.response,
+        notes=payload.notes,
+    )
+
     return build_current_workout_response()
 
 

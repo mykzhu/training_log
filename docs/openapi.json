@@ -114,6 +114,9 @@
             "title": "Exercise Name",
             "type": "string"
           },
+          "feedback": {
+            "$ref": "#/components/schemas/ExerciseFeedbackResponse"
+          },
           "measurement_type": {
             "title": "Measurement Type",
             "type": "string"
@@ -478,6 +481,63 @@
           "name"
         ],
         "title": "ExerciseCreateRequest",
+        "type": "object"
+      },
+      "ExerciseFeedbackResponse": {
+        "properties": {
+          "back_pain_after": {
+            "title": "Back Pain After",
+            "type": "integer"
+          },
+          "back_pain_before": {
+            "title": "Back Pain Before",
+            "type": "integer"
+          },
+          "notes": {
+            "title": "Notes",
+            "type": "string"
+          },
+          "response": {
+            "title": "Response",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "response"
+        ],
+        "title": "ExerciseFeedbackResponse",
+        "type": "object"
+      },
+      "ExerciseFeedbackUpdate": {
+        "properties": {
+          "back_pain_after": {
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Back Pain After",
+            "type": "integer"
+          },
+          "back_pain_before": {
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Back Pain Before",
+            "type": "integer"
+          },
+          "notes": {
+            "maxLength": 1000,
+            "title": "Notes",
+            "type": "string"
+          },
+          "response": {
+            "pattern": "^(helped|same|worse|unknown)$",
+            "title": "Response",
+            "type": "string"
+          }
+        },
+        "title": "ExerciseFeedbackUpdate",
         "type": "object"
       },
       "ExerciseMutationResponse": {
@@ -2471,6 +2531,9 @@
             "title": "Exercise Name",
             "type": "string"
           },
+          "feedback": {
+            "$ref": "#/components/schemas/ExerciseFeedbackResponse"
+          },
           "measurement_type": {
             "title": "Measurement Type",
             "type": "string"
@@ -2890,6 +2953,58 @@
           }
         },
         "summary": "Delete Current Workout Exercise",
+        "tags": [
+          "current-workout"
+        ]
+      }
+    },
+    "/api/v1/current-workout/exercises/{draft_exercise_id}/feedback": {
+      "patch": {
+        "operationId": "update_current_workout_exercise_feedback_api_v1_current_workout_exercises__draft_exercise_id__feedback_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_exercise_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Exercise Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExerciseFeedbackUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentWorkoutResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Current Workout Exercise Feedback",
         "tags": [
           "current-workout"
         ]
@@ -4537,6 +4652,67 @@
           }
         },
         "summary": "Delete Workout Exercise Endpoint",
+        "tags": [
+          "workouts"
+        ]
+      }
+    },
+    "/api/v1/workouts/{workout_id}/exercises/{workout_exercise_id}/feedback": {
+      "patch": {
+        "operationId": "update_workout_exercise_feedback_endpoint_api_v1_workouts__workout_id__exercises__workout_exercise_id__feedback_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workout_id",
+            "required": true,
+            "schema": {
+              "title": "Workout Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workout_exercise_id",
+            "required": true,
+            "schema": {
+              "title": "Workout Exercise Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExerciseFeedbackUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkoutDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Workout Exercise Feedback Endpoint",
         "tags": [
           "workouts"
         ]

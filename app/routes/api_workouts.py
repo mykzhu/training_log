@@ -3,6 +3,10 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 
+from app.repositories.exercise_feedback import (
+    upsert_workout_exercise_feedback,
+    workout_feedback_by_exercise_ids,
+)
 from app.repositories.exercises import get_exercise
 from app.repositories.workouts import (
     NumberingConflictError,
@@ -25,6 +29,7 @@ from app.schemas import (
     AddExerciseRequest,
     AddSetRequest,
     DeleteWorkoutResponse,
+    ExerciseFeedbackUpdate,
     UpdateSetRequest,
     WorkoutDetailResponse,
     WorkoutsResponse,
@@ -53,7 +58,10 @@ def serialize_set(set_row: Any) -> dict[str, Any]:
     }
 
 
-def serialize_workout_exercise(item: dict[str, Any]) -> dict[str, Any]:
+def serialize_workout_exercise(
+    item: dict[str, Any],
+    feedback: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     sets = [serialize_set(set_row) for set_row in item["sets"]]
 
     return {
@@ -77,6 +85,7 @@ def serialize_workout_exercise(item: dict[str, Any]) -> dict[str, Any]:
         "configured_weights": item["configured_weights"],
         "weight_options": item["weight_options"],
         "reps_options": item["reps_options"],
+        "feedback": feedback,
     }
 
 
@@ -198,7 +207,16 @@ def get_workout_detail(workout_id: int) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail="Workout not found.")
 
     details = get_workout_details(workout_id)
-    exercises = [serialize_workout_exercise(item) for item in details]
+    feedback_by_exercise_id = workout_feedback_by_exercise_ids(
+        [int(item["workout_exercise_id"]) for item in details]
+    )
+    exercises = [
+        serialize_workout_exercise(
+            item,
+            feedback=feedback_by_exercise_id.get(int(item["workout_exercise_id"])),
+        )
+        for item in details
+    ]
     total_volume = sum(item["total_volume"] for item in details)
     total_reps = sum(item["total_reps"] for item in details)
     total_sets = sum(len(item["sets"]) for item in details)
@@ -324,6 +342,34 @@ def delete_workout_exercise_endpoint(
 
     if not delete_workout_exercise(workout_id, workout_exercise_id):
         raise HTTPException(status_code=404, detail="Workout exercise not found.")
+
+    return get_workout_detail(workout_id)
+
+
+@router.patch("/{workout_id}/exercises/{workout_exercise_id}/feedback", response_model=WorkoutDetailResponse)
+def update_workout_exercise_feedback_endpoint(
+    workout_id: int,
+    workout_exercise_id: int,
+    payload: ExerciseFeedbackUpdate,
+) -> dict[str, Any]:
+    if not payload.model_fields_set:
+        raise HTTPException(status_code=400, detail="No feedback fields provided.")
+
+    workout_exercise = get_workout_exercise(workout_exercise_id)
+    if (
+        workout_exercise is None
+        or int(workout_exercise["workout_id"]) != workout_id
+    ):
+        raise HTTPException(status_code=404, detail="Workout exercise not found.")
+
+    upsert_workout_exercise_feedback(
+        workout_exercise_id,
+        changed_fields=payload.model_fields_set,
+        back_pain_before=payload.back_pain_before,
+        back_pain_after=payload.back_pain_after,
+        response=payload.response,
+        notes=payload.notes,
+    )
 
     return get_workout_detail(workout_id)
 

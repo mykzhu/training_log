@@ -30,6 +30,7 @@ export type CurrentWorkoutExerciseResponse = {
   duration_seconds: number;
   exercise_id: number;
   exercise_name: string;
+  feedback?: ExerciseFeedbackResponse | null;
   measurement_type: string;
   position: number;
   profile_key: string;
@@ -109,6 +110,21 @@ export type ExerciseCreateRequest = {
   reps_unit?: string | null;
   weight_step?: number | null;
   weights?: Array<number> | null;
+};
+
+export type ExerciseFeedbackResponse = {
+  back_pain_after?: number | null;
+  back_pain_before?: number | null;
+  notes?: string | null;
+  response: string;
+  updated_at?: string | null;
+};
+
+export type ExerciseFeedbackUpdate = {
+  back_pain_after?: number | null;
+  back_pain_before?: number | null;
+  notes?: string | null;
+  response?: string | null;
 };
 
 export type ExerciseMutationResponse = {
@@ -580,6 +596,7 @@ export type WorkoutExerciseResponse = {
   duration_seconds: number;
   exercise_id: number;
   exercise_name: string;
+  feedback?: ExerciseFeedbackResponse | null;
   measurement_type: string;
   position: number;
   profile_key: string;
@@ -638,6 +655,8 @@ export type ApiSchemas = {
   DeleteWorkoutResponse: DeleteWorkoutResponse;
   DeletedExerciseResponse: DeletedExerciseResponse;
   ExerciseCreateRequest: ExerciseCreateRequest;
+  ExerciseFeedbackResponse: ExerciseFeedbackResponse;
+  ExerciseFeedbackUpdate: ExerciseFeedbackUpdate;
   ExerciseMutationResponse: ExerciseMutationResponse;
   ExerciseOrderUpdateRequest: ExerciseOrderUpdateRequest;
   ExerciseProfileCreateRequest: ExerciseProfileCreateRequest;

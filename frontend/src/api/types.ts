@@ -30,6 +30,14 @@ export type DeletedExercise = {
   usage: ExerciseUsage;
 };
 
+export type ExerciseFeedback = {
+  back_pain_before: number | null;
+  back_pain_after: number | null;
+  response: "helped" | "same" | "worse" | "unknown";
+  notes: string | null;
+  updated_at: string | null;
+};
+
 export type CurrentWorkoutExercise = {
   draft_exercise_id: number;
   exercise_id: number;
@@ -51,6 +59,7 @@ export type CurrentWorkoutExercise = {
   configured_weights: number[];
   weight_options: number[];
   reps_options: number[];
+  feedback: ExerciseFeedback | null;
 };
 
 export type WorkoutExercise = {
@@ -74,6 +83,7 @@ export type WorkoutExercise = {
   configured_weights: number[];
   weight_options: number[];
   reps_options: number[];
+  feedback: ExerciseFeedback | null;
 };
 
 export type LoadMetrics = {

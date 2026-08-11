@@ -639,6 +639,7 @@ export default function HistoryPage({
             exercise.reps_step,
             [exercise.default_reps],
           ),
+          feedback: null,
         },
       ],
     }));
