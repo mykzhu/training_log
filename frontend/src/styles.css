@@ -680,6 +680,23 @@ a.compact-button {
   grid-template-columns: minmax(150px, 1fr) minmax(140px, 0.7fr) minmax(110px, 0.45fr) auto;
 }
 
+.settings-add-detailed {
+  grid-template-columns: 1fr;
+  align-items: stretch;
+}
+
+.settings-preset-row,
+.settings-create-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.settings-create-footer {
+  justify-content: space-between;
+}
+
 .settings-row {
   grid-template-columns: minmax(150px, 1fr) minmax(140px, 0.7fr) auto;
 }

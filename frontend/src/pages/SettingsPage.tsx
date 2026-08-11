@@ -41,16 +41,45 @@ type ExerciseOptionSettingsDraft = {
   reps_step: number;
 };
 
+type NewExerciseDraft = {
+  name: string;
+  profile_key: string;
+  measurement_type: ExerciseMeasurementType;
+  reps_unit: string;
+  weights: string;
+  default_weight: number;
+  min_weight: number;
+  max_weight: number;
+  weight_step: number;
+  default_reps: number;
+  min_reps: number;
+  max_reps: number;
+  reps_step: number;
+};
+
+type RehabPreset = {
+  label: string;
+  name: string;
+  profile_key: string;
+  measurement_type: ExerciseMeasurementType;
+  reps_unit: string;
+  default_reps: number;
+  min_reps: number;
+  max_reps: number;
+  reps_step: number;
+};
+
 const measurementTypeOptions: Array<{
   value: ExerciseMeasurementType;
   label: string;
+  description: string;
 }> = [
-  { value: "weighted_reps", label: "Weighted reps" },
-  { value: "bodyweight_reps", label: "Bodyweight reps" },
-  { value: "loaded_carry_time", label: "Loaded carry time" },
-  { value: "loaded_carry_distance", label: "Loaded carry distance" },
-  { value: "reps_only", label: "Reps only" },
-  { value: "duration_only", label: "Duration only" },
+  { value: "weighted_reps", label: "Weighted reps", description: "Weight + reps" },
+  { value: "bodyweight_reps", label: "Bodyweight reps", description: "Reps only" },
+  { value: "reps_only", label: "Reps only", description: "Reps only" },
+  { value: "duration_only", label: "Duration only", description: "Seconds only" },
+  { value: "loaded_carry_time", label: "Loaded carry time", description: "Weight + seconds" },
+  { value: "loaded_carry_distance", label: "Loaded carry dist.", description: "Weight + meters" },
 ];
 
 const defaultUnitByMeasurement: Record<ExerciseMeasurementType, string> = {
@@ -61,6 +90,146 @@ const defaultUnitByMeasurement: Record<ExerciseMeasurementType, string> = {
   reps_only: "reps",
   duration_only: "sec",
 };
+
+const defaultNewExerciseDraft: NewExerciseDraft = {
+  name: "",
+  profile_key: "",
+  measurement_type: "weighted_reps",
+  reps_unit: "reps",
+  weights: "",
+  default_weight: 0,
+  min_weight: 0,
+  max_weight: 200,
+  weight_step: 2.5,
+  default_reps: 10,
+  min_reps: 1,
+  max_reps: 50,
+  reps_step: 1,
+};
+
+const rehabPresets: RehabPreset[] = [
+  {
+    label: "Dead Bug",
+    name: "Dead Bug",
+    profile_key: "core_stability",
+    measurement_type: "reps_only",
+    reps_unit: "reps",
+    default_reps: 10,
+    min_reps: 1,
+    max_reps: 30,
+    reps_step: 1,
+  },
+  {
+    label: "Cat-Cow",
+    name: "Cat-Cow",
+    profile_key: "mobility",
+    measurement_type: "reps_only",
+    reps_unit: "reps",
+    default_reps: 10,
+    min_reps: 1,
+    max_reps: 30,
+    reps_step: 1,
+  },
+  {
+    label: "Bird Dog",
+    name: "Bird Dog",
+    profile_key: "core_stability",
+    measurement_type: "reps_only",
+    reps_unit: "reps",
+    default_reps: 8,
+    min_reps: 1,
+    max_reps: 30,
+    reps_step: 1,
+  },
+  {
+    label: "McGill Curl-up",
+    name: "McGill Curl-up",
+    profile_key: "back_rehab",
+    measurement_type: "reps_only",
+    reps_unit: "reps",
+    default_reps: 6,
+    min_reps: 1,
+    max_reps: 20,
+    reps_step: 1,
+  },
+  {
+    label: "Side Plank",
+    name: "Side Plank",
+    profile_key: "core_stability",
+    measurement_type: "duration_only",
+    reps_unit: "sec",
+    default_reps: 20,
+    min_reps: 5,
+    max_reps: 120,
+    reps_step: 5,
+  },
+  {
+    label: "Pelvic Tilt",
+    name: "Pelvic Tilt",
+    profile_key: "mobility",
+    measurement_type: "reps_only",
+    reps_unit: "reps",
+    default_reps: 10,
+    min_reps: 1,
+    max_reps: 30,
+    reps_step: 1,
+  },
+  {
+    label: "Glute Bridge",
+    name: "Glute Bridge",
+    profile_key: "core_stability",
+    measurement_type: "reps_only",
+    reps_unit: "reps",
+    default_reps: 10,
+    min_reps: 1,
+    max_reps: 40,
+    reps_step: 1,
+  },
+];
+
+function measurementRequiresWeight(measurementType: ExerciseMeasurementType) {
+  return (
+    measurementType === "weighted_reps" ||
+    measurementType === "loaded_carry_time" ||
+    measurementType === "loaded_carry_distance"
+  );
+}
+
+function quantityLabels(measurementType: ExerciseMeasurementType) {
+  if (measurementType === "duration_only" || measurementType === "loaded_carry_time") {
+    return {
+      defaultLabel: "Default seconds",
+      minLabel: "Min seconds",
+      maxLabel: "Max seconds",
+      stepLabel: "Seconds step",
+    };
+  }
+
+  if (measurementType === "loaded_carry_distance") {
+    return {
+      defaultLabel: "Default meters",
+      minLabel: "Min meters",
+      maxLabel: "Max meters",
+      stepLabel: "Meter step",
+    };
+  }
+
+  return {
+    defaultLabel: "Default reps",
+    minLabel: "Min reps",
+    maxLabel: "Max reps",
+    stepLabel: "Reps step",
+  };
+}
+
+function parseWeightList(value: string) {
+  return normalizeWeights(
+    value
+      .split(/[,\s]+/)
+      .map((item) => Number(item))
+      .filter((item) => Number.isFinite(item) && item >= 0),
+  );
+}
 
 function normalizeWeights(weights: number[]) {
   return uniqueSortedNumbers(
@@ -188,9 +357,9 @@ export default function SettingsPage() {
     null,
   );
   const [newWeightDrafts, setNewWeightDrafts] = useState<Record<number, string>>({});
-  const [newExerciseName, setNewExerciseName] = useState("");
-  const [newExerciseProfile, setNewExerciseProfile] = useState("");
-  const [newExerciseWeight, setNewExerciseWeight] = useState("");
+  const [newExerciseDraft, setNewExerciseDraft] = useState<NewExerciseDraft>(
+    defaultNewExerciseDraft,
+  );
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -352,6 +521,20 @@ export default function SettingsPage() {
         garminAutoSync.sync_after_local_time ||
       garminAutoSyncDraft.sync_days !== garminAutoSync.sync_days);
 
+  const newExerciseUsesWeight = measurementRequiresWeight(
+    newExerciseDraft.measurement_type,
+  );
+  const newExerciseQuantityLabels = quantityLabels(
+    newExerciseDraft.measurement_type,
+  );
+  const newExerciseWeights = newExerciseUsesWeight
+    ? parseWeightList(newExerciseDraft.weights)
+    : [];
+  const selectedMeasurementOption =
+    measurementTypeOptions.find(
+      (option) => option.value === newExerciseDraft.measurement_type,
+    ) ?? measurementTypeOptions[0];
+
   async function runAction(
     actionKey: string,
     action: () => Promise<void>,
@@ -372,9 +555,8 @@ export default function SettingsPage() {
 
   async function addExercise(event?: FormEvent) {
     event?.preventDefault();
-    const name = newExerciseName.trim();
-    const initialWeight = parseWeight(newExerciseWeight);
-    if (!name || initialWeight === null) {
+    const name = newExerciseDraft.name.trim();
+    if (!name || (newExerciseUsesWeight && newExerciseWeights.length === 0)) {
       return;
     }
 
@@ -384,8 +566,20 @@ export default function SettingsPage() {
         const response = await createExercise({
           name,
           is_active: true,
-          profile_key: newExerciseProfile || undefined,
-          weights: [initialWeight],
+          profile_key: newExerciseDraft.profile_key || undefined,
+          measurement_type: newExerciseDraft.measurement_type,
+          reps_unit: newExerciseDraft.reps_unit,
+          weights: newExerciseWeights,
+          default_weight: newExerciseUsesWeight
+            ? newExerciseDraft.default_weight
+            : 0,
+          min_weight: newExerciseUsesWeight ? newExerciseDraft.min_weight : 0,
+          max_weight: newExerciseUsesWeight ? newExerciseDraft.max_weight : 0,
+          weight_step: newExerciseUsesWeight ? newExerciseDraft.weight_step : 1,
+          default_reps: newExerciseDraft.default_reps,
+          min_reps: newExerciseDraft.min_reps,
+          max_reps: newExerciseDraft.max_reps,
+          reps_step: newExerciseDraft.reps_step,
         });
         setExercises((current) => [...current, response.exercise]);
         setNameDrafts((current) => ({
@@ -404,12 +598,56 @@ export default function SettingsPage() {
           ...current,
           [response.exercise.id]: optionSettingsDraft(response.exercise),
         }));
-        setNewExerciseName("");
-        setNewExerciseProfile("");
-        setNewExerciseWeight("");
+        setNewExerciseDraft(defaultNewExerciseDraft);
       },
       "Exercise added",
     );
+  }
+
+  function updateNewExerciseDraft<K extends keyof NewExerciseDraft>(
+    field: K,
+    value: NewExerciseDraft[K],
+  ) {
+    setNewExerciseDraft((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
+
+  function updateNewExerciseMeasurementType(nextType: ExerciseMeasurementType) {
+    setNewExerciseDraft((current) => {
+      const previousDefaultUnit =
+        defaultUnitByMeasurement[current.measurement_type] ?? "reps";
+      const shouldReplaceUnit =
+        !current.reps_unit.trim() || current.reps_unit === previousDefaultUnit;
+
+      return {
+        ...current,
+        measurement_type: nextType,
+        reps_unit: shouldReplaceUnit
+          ? defaultUnitByMeasurement[nextType] ?? "reps"
+          : current.reps_unit,
+      };
+    });
+  }
+
+  function applyRehabPreset(preset: RehabPreset) {
+    setNewExerciseDraft((current) => ({
+      ...current,
+      name: preset.name,
+      profile_key: preset.profile_key,
+      measurement_type: preset.measurement_type,
+      reps_unit: preset.reps_unit,
+      weights: "",
+      default_weight: 0,
+      min_weight: 0,
+      max_weight: 0,
+      weight_step: 1,
+      default_reps: preset.default_reps,
+      min_reps: preset.min_reps,
+      max_reps: preset.max_reps,
+      reps_step: preset.reps_step,
+    }));
   }
 
   async function saveDetails(exercise: Exercise) {
@@ -1038,55 +1276,218 @@ export default function SettingsPage() {
           </div>
         </summary>
 
-        <form className="panel settings-add" onSubmit={addExercise}>
-          <label>
-            Exercise
-            <input
-              disabled={pendingAction === "create"}
-              onChange={(event) => setNewExerciseName(event.target.value)}
-              placeholder="Exercise name"
-              value={newExerciseName}
-            />
-          </label>
-          <label>
-            Analysis type
-            <select
-              disabled={pendingAction === "create"}
-              onChange={(event) => setNewExerciseProfile(event.target.value)}
-              value={newExerciseProfile}
+        <form className="panel settings-add settings-add-detailed" onSubmit={addExercise}>
+          <div className="settings-preset-row" aria-label="Rehab presets">
+            {rehabPresets.map((preset) => (
+              <button
+                className="ghost-button compact-button"
+                disabled={pendingAction === "create"}
+                key={preset.label}
+                onClick={() => applyRehabPreset(preset)}
+                type="button"
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="settings-options-grid">
+            <label>
+              Name
+              <input
+                disabled={pendingAction === "create"}
+                onChange={(event) =>
+                  updateNewExerciseDraft("name", event.target.value)
+                }
+                placeholder="Exercise name"
+                value={newExerciseDraft.name}
+              />
+            </label>
+            <label>
+              Profile
+              <select
+                disabled={pendingAction === "create"}
+                onChange={(event) =>
+                  updateNewExerciseDraft("profile_key", event.target.value)
+                }
+                value={newExerciseDraft.profile_key}
+              >
+                <option value="">Infer from name</option>
+                {activeProfiles.map((profile) => (
+                  <option key={profile.key} value={profile.key}>
+                    {profile.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Measurement type
+              <select
+                disabled={pendingAction === "create"}
+                onChange={(event) =>
+                  updateNewExerciseMeasurementType(
+                    event.target.value as ExerciseMeasurementType,
+                  )
+                }
+                value={newExerciseDraft.measurement_type}
+              >
+                {measurementTypeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label} - {option.description}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Unit
+              <input
+                disabled={pendingAction === "create"}
+                maxLength={16}
+                onChange={(event) =>
+                  updateNewExerciseDraft("reps_unit", event.target.value)
+                }
+                value={newExerciseDraft.reps_unit}
+              />
+            </label>
+            <label>
+              {newExerciseQuantityLabels.defaultLabel}
+              <input
+                disabled={pendingAction === "create"}
+                min="1"
+                onChange={(event) =>
+                  updateNewExerciseDraft("default_reps", Number(event.target.value))
+                }
+                step="1"
+                type="number"
+                value={newExerciseDraft.default_reps}
+              />
+            </label>
+            <label>
+              {newExerciseQuantityLabels.minLabel}
+              <input
+                disabled={pendingAction === "create"}
+                min="1"
+                onChange={(event) =>
+                  updateNewExerciseDraft("min_reps", Number(event.target.value))
+                }
+                step="1"
+                type="number"
+                value={newExerciseDraft.min_reps}
+              />
+            </label>
+            <label>
+              {newExerciseQuantityLabels.maxLabel}
+              <input
+                disabled={pendingAction === "create"}
+                min="1"
+                onChange={(event) =>
+                  updateNewExerciseDraft("max_reps", Number(event.target.value))
+                }
+                step="1"
+                type="number"
+                value={newExerciseDraft.max_reps}
+              />
+            </label>
+            <label>
+              {newExerciseQuantityLabels.stepLabel}
+              <input
+                disabled={pendingAction === "create"}
+                min="1"
+                onChange={(event) =>
+                  updateNewExerciseDraft("reps_step", Number(event.target.value))
+                }
+                step="1"
+                type="number"
+                value={newExerciseDraft.reps_step}
+              />
+            </label>
+          </div>
+
+          {newExerciseUsesWeight && (
+            <div className="settings-options-grid">
+              <label>
+                Weight options
+                <input
+                  disabled={pendingAction === "create"}
+                  onChange={(event) =>
+                    updateNewExerciseDraft("weights", event.target.value)
+                  }
+                  placeholder="20, 22.5, 25"
+                  value={newExerciseDraft.weights}
+                />
+              </label>
+              <label>
+                Default kg
+                <input
+                  disabled={pendingAction === "create"}
+                  min="0"
+                  onChange={(event) =>
+                    updateNewExerciseDraft(
+                      "default_weight",
+                      Number(event.target.value),
+                    )
+                  }
+                  step="0.25"
+                  type="number"
+                  value={newExerciseDraft.default_weight}
+                />
+              </label>
+              <label>
+                Min kg
+                <input
+                  disabled={pendingAction === "create"}
+                  min="0"
+                  onChange={(event) =>
+                    updateNewExerciseDraft("min_weight", Number(event.target.value))
+                  }
+                  step="0.25"
+                  type="number"
+                  value={newExerciseDraft.min_weight}
+                />
+              </label>
+              <label>
+                Max kg
+                <input
+                  disabled={pendingAction === "create"}
+                  min="0"
+                  onChange={(event) =>
+                    updateNewExerciseDraft("max_weight", Number(event.target.value))
+                  }
+                  step="0.25"
+                  type="number"
+                  value={newExerciseDraft.max_weight}
+                />
+              </label>
+              <label>
+                Kg step
+                <input
+                  disabled={pendingAction === "create"}
+                  min="0.25"
+                  onChange={(event) =>
+                    updateNewExerciseDraft("weight_step", Number(event.target.value))
+                  }
+                  step="0.25"
+                  type="number"
+                  value={newExerciseDraft.weight_step}
+                />
+              </label>
+            </div>
+          )}
+
+          <div className="settings-create-footer">
+            <span className="muted small">{selectedMeasurementOption.description}</span>
+            <button
+              className="primary-button"
+              disabled={
+                pendingAction === "create" ||
+                !newExerciseDraft.name.trim() ||
+                (newExerciseUsesWeight && newExerciseWeights.length === 0)
+              }
+              type="submit"
             >
-              <option value="">Infer from name</option>
-              {activeProfiles.map((profile) => (
-                <option key={profile.key} value={profile.key}>
-                  {profile.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Initial weight
-            <input
-              disabled={pendingAction === "create"}
-              inputMode="decimal"
-              min="0"
-              onChange={(event) => setNewExerciseWeight(event.target.value)}
-              placeholder="0"
-              step="0.25"
-              type="number"
-              value={newExerciseWeight}
-            />
-          </label>
-          <button
-            className="primary-button"
-            disabled={
-              pendingAction === "create" ||
-              !newExerciseName.trim() ||
-              parseWeight(newExerciseWeight) === null
-            }
-            type="submit"
-          >
-            Add
-          </button>
+              Create
+            </button>
+          </div>
         </form>
 
         {loading && <section className="panel muted">Loading settings...</section>}

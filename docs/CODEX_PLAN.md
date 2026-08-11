@@ -631,6 +631,15 @@ No fake 0 kg input appears for non-weighted exercise creation.
 New exercise appears active and selectable in Current Workout.
 ```
 
+Implementation status:
+
+```text
+Completed 2026-08-11:
+- Settings add-exercise form now exposes profile, measurement type, quantity defaults/ranges, and unit.
+- Weight options and kg defaults are hidden for non-weighted measurements and zeroed in create payloads.
+- Added rehab preset buttons for Dead Bug, Cat-Cow, Bird Dog, McGill Curl-up, Side Plank, Pelvic Tilt, and Glute Bridge.
+```
+
 ---
 
 ## 32.5 Make Current Workout and Edit Workout measurement-aware
