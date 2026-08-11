@@ -487,6 +487,83 @@ label {
   align-items: end;
 }
 
+.exercise-feedback {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.exercise-feedback-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.exercise-feedback-toggle {
+  min-height: 34px;
+  width: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 10px;
+  background: var(--card2);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.exercise-feedback.is-expanded .exercise-feedback-toggle {
+  border-color: rgba(10, 132, 255, 0.55);
+  color: var(--blue);
+}
+
+.exercise-feedback-status {
+  min-height: 18px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.exercise-feedback-status.saving {
+  color: var(--yellow);
+}
+
+.exercise-feedback-status.saved {
+  color: var(--green);
+}
+
+.exercise-feedback-status.error {
+  color: var(--red);
+}
+
+.exercise-feedback-body {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.exercise-feedback-body label {
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.exercise-feedback-body select,
+.exercise-feedback-body textarea {
+  width: 100%;
+}
+
+.exercise-feedback-notes {
+  grid-column: 1 / -1;
+}
+
+.exercise-feedback-notes textarea {
+  min-height: 74px;
+  resize: vertical;
+}
+
 .row-actions {
   justify-content: flex-end;
 }

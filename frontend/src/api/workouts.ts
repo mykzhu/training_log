@@ -1,5 +1,9 @@
 import { jsonBody, requestJson } from "./client";
-import type { WorkoutDetail, WorkoutSummary } from "./types";
+import type {
+  ExerciseFeedbackUpdate,
+  WorkoutDetail,
+  WorkoutSummary,
+} from "./types";
 
 export function getWorkouts(limit = 30) {
   return requestJson<{ limit: number; workouts: WorkoutSummary[] }>(
@@ -83,4 +87,18 @@ export function deleteWorkoutSet(setId: number) {
   return requestJson<WorkoutDetail>(`/api/v1/sets/${setId}`, {
     method: "DELETE",
   });
+}
+
+export function updateWorkoutExerciseFeedback(
+  workoutId: number,
+  workoutExerciseId: number,
+  payload: ExerciseFeedbackUpdate,
+) {
+  return requestJson<WorkoutDetail>(
+    `/api/v1/workouts/${workoutId}/exercises/${workoutExerciseId}/feedback`,
+    {
+      method: "PATCH",
+      body: jsonBody(payload),
+    },
+  );
 }

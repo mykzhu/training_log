@@ -1,5 +1,5 @@
 import { jsonBody, requestJson } from "./client";
-import type { CurrentWorkout } from "./types";
+import type { CurrentWorkout, ExerciseFeedbackUpdate } from "./types";
 
 const base = "/api/v1/current-workout";
 
@@ -72,6 +72,19 @@ export function deleteCurrentWorkoutSet(draftSetId: number) {
   return requestJson<CurrentWorkout>(`${base}/sets/${draftSetId}`, {
     method: "DELETE",
   });
+}
+
+export function updateCurrentWorkoutExerciseFeedback(
+  draftExerciseId: number,
+  payload: ExerciseFeedbackUpdate,
+) {
+  return requestJson<CurrentWorkout>(
+    `${base}/exercises/${draftExerciseId}/feedback`,
+    {
+      method: "PATCH",
+      body: jsonBody(payload),
+    },
+  );
 }
 
 export function finishCurrentWorkout() {

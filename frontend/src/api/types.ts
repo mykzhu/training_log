@@ -38,6 +38,13 @@ export type ExerciseFeedback = {
   updated_at: string | null;
 };
 
+export type ExerciseFeedbackUpdate = {
+  back_pain_before?: number | null;
+  back_pain_after?: number | null;
+  response?: ExerciseFeedback["response"] | null;
+  notes?: string | null;
+};
+
 export type CurrentWorkoutExercise = {
   draft_exercise_id: number;
   exercise_id: number;

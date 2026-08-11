@@ -4,6 +4,8 @@ import { useNavigate } from "react-router-dom";
 import { getExercises } from "../api/exercises";
 import type {
   Exercise,
+  ExerciseFeedback,
+  ExerciseFeedbackUpdate,
   SetEntry,
   WorkoutDetail,
   WorkoutExercise,
@@ -18,6 +20,7 @@ import {
   getWorkout,
   getWorkouts,
   updateWorkout,
+  updateWorkoutExerciseFeedback,
   updateWorkoutSet,
 } from "../api/workouts";
 import ExerciseCard from "../components/ExerciseCard";
@@ -146,6 +149,31 @@ function parseOptionalScore(value: string) {
   return value === "" ? null : Number(value);
 }
 
+function feedbackPayload(
+  feedback: ExerciseFeedback | null,
+): ExerciseFeedbackUpdate {
+  return {
+    back_pain_before: feedback?.back_pain_before ?? null,
+    back_pain_after: feedback?.back_pain_after ?? null,
+    response: feedback?.response ?? "unknown",
+    notes: feedback?.notes ?? null,
+  };
+}
+
+function feedbackChanged(
+  before: ExerciseFeedback | null | undefined,
+  after: ExerciseFeedback | null | undefined,
+) {
+  const beforePayload = feedbackPayload(before ?? null);
+  const afterPayload = feedbackPayload(after ?? null);
+  return (
+    beforePayload.back_pain_before !== afterPayload.back_pain_before ||
+    beforePayload.back_pain_after !== afterPayload.back_pain_after ||
+    beforePayload.response !== afterPayload.response ||
+    beforePayload.notes !== afterPayload.notes
+  );
+}
+
 function saveStatusLabel(status: SaveStatus) {
   if (status === "saving") {
     return "Saving...";
@@ -214,6 +242,7 @@ function cloneDetail(detail: WorkoutDetail): WorkoutDetail {
     workout: { ...detail.workout },
     exercises: detail.exercises.map((exercise) => ({
       ...exercise,
+      feedback: exercise.feedback ? { ...exercise.feedback } : null,
       sets: exercise.sets.map((setEntry) => ({ ...setEntry })),
     })),
   };
@@ -379,6 +408,38 @@ export default function HistoryPage({
     }));
   }
 
+  function updateDraftFeedback(
+    workoutExerciseId: number,
+    payload: ExerciseFeedbackUpdate,
+  ) {
+    updateDraft((current) => ({
+      ...current,
+      exercises: current.exercises.map((exercise) => {
+        if (exercise.workout_exercise_id !== workoutExerciseId) {
+          return exercise;
+        }
+
+        return {
+          ...exercise,
+          feedback: {
+            back_pain_before: "back_pain_before" in payload
+              ? payload.back_pain_before ?? null
+              : exercise.feedback?.back_pain_before ?? null,
+            back_pain_after: "back_pain_after" in payload
+              ? payload.back_pain_after ?? null
+              : exercise.feedback?.back_pain_after ?? null,
+            response:
+              payload.response ?? exercise.feedback?.response ?? "unknown",
+            notes: "notes" in payload
+              ? payload.notes ?? null
+              : exercise.feedback?.notes ?? null,
+            updated_at: exercise.feedback?.updated_at ?? null,
+          },
+        };
+      }),
+    }));
+  }
+
   function addDraftSet(workoutExerciseId: number, weight: number, reps: number) {
     updateDraft((current) => ({
       ...current,
@@ -522,6 +583,16 @@ export default function HistoryPage({
               reps: draftSet.reps,
             });
           }
+        }
+
+        if (
+          feedbackChanged(originalExercise?.feedback, draftExercise.feedback)
+        ) {
+          latest = await updateWorkoutExerciseFeedback(
+            detail.workout.id,
+            realWorkoutExerciseId,
+            feedbackPayload(draftExercise.feedback),
+          );
         }
       }
 
@@ -1022,6 +1093,7 @@ export default function HistoryPage({
                 onDeleteExercise={deleteDraftExercise}
                 onDeleteSet={deleteDraftSet}
                 onDuplicateSet={() => undefined}
+                onUpdateFeedback={updateDraftFeedback}
                 onUpdateSet={updateDraftSet}
                 setEditorMode="select"
                 variant="legacy-edit"

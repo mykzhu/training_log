@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import type {
   CurrentWorkoutExercise,
+  ExerciseFeedbackUpdate,
   WorkoutExercise,
 } from "../api/types";
 import {
@@ -10,6 +11,7 @@ import {
   formatSetOption,
 } from "../utils/setOptions";
 import { measurementUi } from "../utils/measurementUi";
+import ExerciseFeedbackEditor from "./ExerciseFeedbackEditor";
 import SetRow from "./SetRow";
 
 type ExerciseLike = CurrentWorkoutExercise | WorkoutExercise;
@@ -26,6 +28,7 @@ type ExerciseCardProps = {
   onDeleteExercise: (exerciseId: number) => void;
   onDeleteSet: (setId: number) => void;
   onDuplicateSet: (exerciseId: number) => void;
+  onUpdateFeedback?: (exerciseId: number, payload: ExerciseFeedbackUpdate) => void;
   onUpdateSet?: (setId: number, payload: { weight?: number; reps?: number }) => void;
 };
 
@@ -38,6 +41,7 @@ export default function ExerciseCard({
   onDeleteExercise,
   onDeleteSet,
   onDuplicateSet,
+  onUpdateFeedback,
   onUpdateSet,
   setEditorMode = "input",
   variant = "default",
@@ -145,6 +149,15 @@ export default function ExerciseCard({
           />
         ))}
       </div>
+
+      {onUpdateFeedback && (
+        <ExerciseFeedbackEditor
+          disabled={disabled}
+          feedback={exercise.feedback}
+          onChange={(payload) => onUpdateFeedback(actionExerciseId, payload)}
+          profileKey={exercise.profile_key}
+        />
+      )}
 
       <div className={isLegacyEdit ? "edit-set-add-row" : "set-actions"}>
         {ui.usesWeight && (

@@ -1150,6 +1150,17 @@ After finishing workout, feedback appears in History/Edit.
 Normal strength exercises are not cluttered.
 ```
 
+Implementation status:
+
+```text
+Completed 2026-08-11:
+- Added a reusable exercise feedback editor with before/after scores, derived response, notes, and save status display.
+- Active workout exercise feedback now auto-saves through the current-workout feedback API.
+- History edit exercise feedback is stored in the page draft and saved through the existing Save workout action.
+- Back rehab, core stability, and mobility exercises show feedback expanded by default; other profiles stay collapsed unless feedback exists.
+- Added frontend API wrappers and local types for current and finished exercise feedback updates.
+```
+
 ---
 
 ## 33.4 Back rehab stats

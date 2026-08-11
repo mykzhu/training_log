@@ -10,6 +10,7 @@ import {
   finishCurrentWorkout,
   getCurrentWorkout,
   startCurrentWorkout,
+  updateCurrentWorkoutExerciseFeedback,
   updateCurrentWorkoutMetadata,
 } from "../api/currentWorkout";
 import { getExercises } from "../api/exercises";
@@ -23,6 +24,7 @@ import type {
   NextWorkoutRecommendation,
   RecoveryContext,
   Exercise,
+  ExerciseFeedbackUpdate,
   SuggestedSet,
 } from "../api/types";
 import LegacyActiveWorkoutView from "../components/LegacyActiveWorkoutView";
@@ -431,7 +433,11 @@ export default function CurrentWorkoutPage() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [metadataSaveStatus, setMetadataSaveStatus] =
     useState<SaveStatus>("idle");
+  const [feedbackSaveStatuses, setFeedbackSaveStatuses] = useState<
+    Record<number, SaveStatus>
+  >({});
   const metadataSaveSequence = useRef(0);
+  const feedbackSaveSequences = useRef<Record<number, number>>({});
 
   async function load() {
     const [workoutResponse, exerciseResponse] = await Promise.all([
@@ -556,6 +562,45 @@ export default function CurrentWorkoutPage() {
     }
   }
 
+  async function saveExerciseFeedback(
+    draftExerciseId: number,
+    payload: ExerciseFeedbackUpdate,
+  ) {
+    const sequence = (feedbackSaveSequences.current[draftExerciseId] ?? 0) + 1;
+    feedbackSaveSequences.current[draftExerciseId] = sequence;
+    setFeedbackSaveStatuses((current) => ({
+      ...current,
+      [draftExerciseId]: "saving",
+    }));
+    setError(null);
+    try {
+      const response = await updateCurrentWorkoutExerciseFeedback(
+        draftExerciseId,
+        payload,
+      );
+      if (feedbackSaveSequences.current[draftExerciseId] === sequence) {
+        setCurrentWorkout(response);
+        setElapsedSeconds(response.elapsed_seconds);
+        setFeedbackSaveStatuses((current) => ({
+          ...current,
+          [draftExerciseId]: "saved",
+        }));
+      }
+    } catch (reason: unknown) {
+      if (feedbackSaveSequences.current[draftExerciseId] === sequence) {
+        setFeedbackSaveStatuses((current) => ({
+          ...current,
+          [draftExerciseId]: "error",
+        }));
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "Could not save exercise feedback.",
+        );
+      }
+    }
+  }
+
   async function finishWorkout() {
     setPending(true);
     setError(null);
@@ -627,6 +672,7 @@ export default function CurrentWorkoutPage() {
       elapsedSeconds={elapsedSeconds}
       error={error}
       exerciseOptions={exerciseOptions}
+      feedbackSaveStatuses={feedbackSaveStatuses}
       metadataSaveStatus={metadataSaveStatus}
       selectedExerciseId={selectedExerciseId}
       onAddExercise={addSelectedExercise}
@@ -639,6 +685,7 @@ export default function CurrentWorkoutPage() {
       }
       onDeleteSet={(setId) => runAction(() => deleteCurrentWorkoutSet(setId))}
       onFinish={finishWorkout}
+      onSaveExerciseFeedback={saveExerciseFeedback}
       onSaveMetadata={saveMetadata}
       onSelectExercise={setSelectedExerciseId}
     />

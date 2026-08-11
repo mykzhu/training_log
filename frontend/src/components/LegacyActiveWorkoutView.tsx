@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
-import type { CurrentWorkout, CurrentWorkoutExercise } from "../api/types";
+import type {
+  CurrentWorkout,
+  CurrentWorkoutExercise,
+  ExerciseFeedbackUpdate,
+} from "../api/types";
 import { rpeOptionLabel } from "../utils/rpeLabels";
 import { measurementUi } from "../utils/measurementUi";
 import {
@@ -9,6 +13,7 @@ import {
   buildWeightOptions,
   formatSetOption,
 } from "../utils/setOptions";
+import ExerciseFeedbackEditor from "./ExerciseFeedbackEditor";
 import "./LegacyActiveWorkoutView.css";
 
 type ExerciseOption = {
@@ -22,6 +27,7 @@ type LegacyActiveWorkoutViewProps = {
   elapsedSeconds: number;
   error: string | null;
   exerciseOptions: ExerciseOption[];
+  feedbackSaveStatuses: Record<number, "idle" | "saving" | "saved" | "error">;
   metadataSaveStatus: "idle" | "saving" | "saved" | "error";
   selectedExerciseId: string;
   onAddExercise: () => Promise<void> | void;
@@ -30,6 +36,10 @@ type LegacyActiveWorkoutViewProps = {
   onDeleteExercise: (exerciseId: number) => Promise<void> | void;
   onDeleteSet: (setId: number) => Promise<void> | void;
   onFinish: () => Promise<void> | void;
+  onSaveExerciseFeedback: (
+    draftExerciseId: number,
+    payload: ExerciseFeedbackUpdate,
+  ) => Promise<void> | void;
   onSaveMetadata: (
     sessionRpe: number | null,
     lowerBackPain: number | null,
@@ -296,6 +306,7 @@ export default function LegacyActiveWorkoutView({
   elapsedSeconds,
   error,
   exerciseOptions,
+  feedbackSaveStatuses,
   metadataSaveStatus,
   selectedExerciseId,
   onAddExercise,
@@ -304,6 +315,7 @@ export default function LegacyActiveWorkoutView({
   onDeleteExercise,
   onDeleteSet,
   onFinish,
+  onSaveExerciseFeedback,
   onSaveMetadata,
   onSelectExercise,
 }: LegacyActiveWorkoutViewProps) {
@@ -466,9 +478,13 @@ export default function LegacyActiveWorkoutView({
               disabled={disabled}
               exercise={exercise}
               key={exercise.draft_exercise_id}
+              feedbackSaveStatus={
+                feedbackSaveStatuses[exercise.draft_exercise_id] ?? "idle"
+              }
               onAddSet={onAddSet}
               onDeleteExercise={onDeleteExercise}
               onDeleteSet={onDeleteSet}
+              onSaveExerciseFeedback={onSaveExerciseFeedback}
             />
           ))}
         </div>
@@ -636,12 +652,19 @@ function LegacyActiveExerciseCard({
   onAddSet,
   onDeleteExercise,
   onDeleteSet,
+  onSaveExerciseFeedback,
+  feedbackSaveStatus,
 }: {
   disabled: boolean;
   exercise: CurrentWorkoutExercise;
+  feedbackSaveStatus: "idle" | "saving" | "saved" | "error";
   onAddSet: (exerciseId: number, weight: number, reps: number) => Promise<void> | void;
   onDeleteExercise: (exerciseId: number) => Promise<void> | void;
   onDeleteSet: (setId: number) => Promise<void> | void;
+  onSaveExerciseFeedback: (
+    draftExerciseId: number,
+    payload: ExerciseFeedbackUpdate,
+  ) => Promise<void> | void;
 }) {
   const defaultWeight = Number(exercise.default_weight || 0);
   const defaultReps = Number(exercise.default_reps || 10);
@@ -745,6 +768,16 @@ function LegacyActiveExerciseCard({
       ) : (
         <p className="muted">No sets yet.</p>
       )}
+
+      <ExerciseFeedbackEditor
+        disabled={disabled}
+        feedback={exercise.feedback}
+        onChange={(payload) =>
+          void onSaveExerciseFeedback(exercise.draft_exercise_id, payload)
+        }
+        profileKey={exercise.profile_key}
+        saveStatus={feedbackSaveStatus}
+      />
 
       <div className="active-set-add-row">
         {ui.usesWeight && (
