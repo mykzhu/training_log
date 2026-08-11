@@ -473,7 +473,9 @@ def insert_completed_exercises_and_sets(
     conn,
     workout_id: int,
     draft: dict[str, Any],
-) -> None:
+) -> dict[int, int]:
+    completed_ids_by_draft_id: dict[int, int] = {}
+
     for draft_exercise in sorted(
         draft["workout_exercises"],
         key=lambda item: (item["position"], item["id"]),
@@ -499,6 +501,7 @@ def insert_completed_exercises_and_sets(
         )
 
         workout_exercise_id = int(workout_exercise_cursor.lastrowid)
+        completed_ids_by_draft_id[int(draft_exercise["id"])] = workout_exercise_id
 
         for set_entry in draft_exercise["sets"]:
             conn.execute(
@@ -515,6 +518,58 @@ def insert_completed_exercises_and_sets(
                     str(set_entry["created_at"]),
                 ),
             )
+
+    return completed_ids_by_draft_id
+
+
+def copy_active_draft_feedback_to_workout(
+    conn,
+    completed_ids_by_draft_id: dict[int, int],
+) -> None:
+    if not completed_ids_by_draft_id:
+        return
+
+    rows = conn.execute(
+        """
+        SELECT
+            draft_exercise_id,
+            back_pain_before,
+            back_pain_after,
+            response,
+            notes,
+            updated_at
+        FROM active_draft_exercise_feedback
+        """
+    ).fetchall()
+
+    for row in rows:
+        workout_exercise_id = completed_ids_by_draft_id.get(
+            int(row["draft_exercise_id"])
+        )
+        if workout_exercise_id is None:
+            continue
+
+        conn.execute(
+            """
+            INSERT INTO workout_exercise_feedback (
+                workout_exercise_id,
+                back_pain_before,
+                back_pain_after,
+                response,
+                notes,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                workout_exercise_id,
+                row["back_pain_before"],
+                row["back_pain_after"],
+                row["response"],
+                row["notes"],
+                row["updated_at"],
+            ),
+        )
 
 
 def finalize_active_draft() -> int:
@@ -545,7 +600,12 @@ def finalize_active_draft() -> int:
             finished_at=finished_at,
             duration_seconds=duration_seconds,
         )
-        insert_completed_exercises_and_sets(conn, workout_id, draft)
+        completed_ids_by_draft_id = insert_completed_exercises_and_sets(
+            conn,
+            workout_id,
+            draft,
+        )
+        copy_active_draft_feedback_to_workout(conn, completed_ids_by_draft_id)
         conn.execute("DELETE FROM active_workout_draft WHERE id = 1")
 
     return workout_id

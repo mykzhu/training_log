@@ -7,6 +7,7 @@ from app.db import get_db, init_db
 from app.repositories.drafts import (
     clear_active_draft,
     create_active_draft,
+    finalize_active_draft,
     get_active_draft,
     insert_draft_exercise,
     insert_draft_set,
@@ -83,6 +84,7 @@ class DraftRepositoryTests(unittest.TestCase):
         self.assertIn("active_workout_draft", table_names)
         self.assertIn("active_draft_exercises", table_names)
         self.assertIn("active_draft_sets", table_names)
+        self.assertIn("active_draft_exercise_feedback", table_names)
 
     def test_targeted_mutations_round_trip_current_shape(self) -> None:
         draft = self.draft()
@@ -114,6 +116,28 @@ class DraftRepositoryTests(unittest.TestCase):
             reps=5,
             created_at="2026-06-01T10:05:00",
         )
+        with get_db() as conn:
+            conn.execute(
+                """
+                INSERT INTO active_draft_exercise_feedback (
+                    draft_exercise_id,
+                    back_pain_before,
+                    back_pain_after,
+                    response,
+                    notes,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    draft["workout_exercises"][0]["id"],
+                    3,
+                    2,
+                    "helped",
+                    "felt more stable",
+                    "2026-06-01T10:06:00",
+                ),
+            )
 
         clear_active_draft()
 
@@ -128,9 +152,76 @@ class DraftRepositoryTests(unittest.TestCase):
                 "sets": conn.execute(
                     "SELECT COUNT(*) FROM active_draft_sets"
                 ).fetchone()[0],
+                "feedback": conn.execute(
+                    "SELECT COUNT(*) FROM active_draft_exercise_feedback"
+                ).fetchone()[0],
             }
 
-        self.assertEqual(counts, {"draft": 0, "exercises": 0, "sets": 0})
+        self.assertEqual(
+            counts,
+            {"draft": 0, "exercises": 0, "sets": 0, "feedback": 0},
+        )
+
+    def test_finalize_active_draft_copies_exercise_feedback(self) -> None:
+        draft = self.draft()
+        create_active_draft(draft["started_at"])
+        insert_draft_exercise(draft["workout_exercises"][0]["exercise_id"])
+        insert_draft_set(
+            draft["workout_exercises"][0]["id"],
+            weight=100.0,
+            reps=5,
+            created_at="2026-06-01T10:05:00",
+        )
+        with get_db() as conn:
+            conn.execute(
+                """
+                INSERT INTO active_draft_exercise_feedback (
+                    draft_exercise_id,
+                    back_pain_before,
+                    back_pain_after,
+                    response,
+                    notes,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    draft["workout_exercises"][0]["id"],
+                    4,
+                    2,
+                    "helped",
+                    "less guarded after warmup",
+                    "2026-06-01T10:06:00",
+                ),
+            )
+
+        workout_id = finalize_active_draft()
+
+        with get_db() as conn:
+            feedback = conn.execute(
+                """
+                SELECT
+                    we.workout_id,
+                    f.back_pain_before,
+                    f.back_pain_after,
+                    f.response,
+                    f.notes,
+                    f.updated_at
+                FROM workout_exercise_feedback f
+                JOIN workout_exercises we ON we.id = f.workout_exercise_id
+                """
+            ).fetchone()
+            draft_feedback_count = conn.execute(
+                "SELECT COUNT(*) FROM active_draft_exercise_feedback"
+            ).fetchone()[0]
+
+        self.assertEqual(feedback["workout_id"], workout_id)
+        self.assertEqual(feedback["back_pain_before"], 4)
+        self.assertEqual(feedback["back_pain_after"], 2)
+        self.assertEqual(feedback["response"], "helped")
+        self.assertEqual(feedback["notes"], "less guarded after warmup")
+        self.assertEqual(feedback["updated_at"], "2026-06-01T10:06:00")
+        self.assertEqual(draft_feedback_count, 0)
 
     def test_reset_database_data_clears_active_draft(self) -> None:
         draft = self.draft()

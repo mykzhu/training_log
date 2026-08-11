@@ -7,6 +7,7 @@ from app import config
 from app.db import get_db, init_db
 from app.migrations import v010_exercise_measurement_type
 from app.migrations import v011_snapshot_exercise_measurements
+from app.migrations import v012_workout_exercise_feedback
 from app.migrations.runner import run_migrations
 
 
@@ -83,10 +84,22 @@ class MigrationTests(unittest.TestCase):
                 row["name"]
                 for row in conn.execute("PRAGMA table_info(garmin_daily_metrics)")
             }
+            workout_feedback_columns = {
+                row["name"]
+                for row in conn.execute(
+                    "PRAGMA table_info(workout_exercise_feedback)"
+                )
+            }
+            draft_feedback_columns = {
+                row["name"]
+                for row in conn.execute(
+                    "PRAGMA table_info(active_draft_exercise_feedback)"
+                )
+            }
 
         self.assertEqual(
             [int(row["version"]) for row in rows],
-            [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+            [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
         )
         self.assertEqual(
             [row["name"] for row in rows],
@@ -102,6 +115,7 @@ class MigrationTests(unittest.TestCase):
                 "exercise_option_settings",
                 "exercise_measurement_type",
                 "snapshot_exercise_measurements",
+                "workout_exercise_feedback",
             ],
         )
         self.assertGreater(exercise_count, 0)
@@ -121,6 +135,18 @@ class MigrationTests(unittest.TestCase):
         self.assertIn("date", garmin_columns)
         self.assertIn("resting_heart_rate", garmin_columns)
         self.assertIn("raw_diagnostics", garmin_columns)
+        self.assertIn("workout_exercise_id", workout_feedback_columns)
+        self.assertIn("back_pain_before", workout_feedback_columns)
+        self.assertIn("back_pain_after", workout_feedback_columns)
+        self.assertIn("response", workout_feedback_columns)
+        self.assertIn("notes", workout_feedback_columns)
+        self.assertIn("updated_at", workout_feedback_columns)
+        self.assertIn("draft_exercise_id", draft_feedback_columns)
+        self.assertIn("back_pain_before", draft_feedback_columns)
+        self.assertIn("back_pain_after", draft_feedback_columns)
+        self.assertIn("response", draft_feedback_columns)
+        self.assertIn("notes", draft_feedback_columns)
+        self.assertIn("updated_at", draft_feedback_columns)
 
     def test_existing_database_startup_establishes_safe_migration_baseline(self) -> None:
         with sqlite3.connect(config.DB_PATH) as conn:
@@ -158,7 +184,7 @@ class MigrationTests(unittest.TestCase):
                 ("Deadlift",),
             ).fetchone()[0]
 
-        self.assertEqual(versions, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
+        self.assertEqual(versions, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
         self.assertEqual(exercise["name"], "Romanian Deadlift")
         self.assertEqual(exercise["profile_key"], "deadlift")
         self.assertEqual(exercise["is_active"], 1)
@@ -312,6 +338,134 @@ class MigrationTests(unittest.TestCase):
         self.assertEqual(workout_snapshot["reps_unit"], "sec")
         self.assertEqual(draft_snapshot["measurement_type"], "loaded_carry_time")
         self.assertEqual(draft_snapshot["reps_unit"], "sec")
+
+    def test_v012_creates_feedback_tables_idempotently(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        try:
+            conn.executescript(
+                """
+                CREATE TABLE workouts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT
+                );
+                CREATE TABLE exercises (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT
+                );
+                CREATE TABLE workout_exercises (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    workout_id INTEGER NOT NULL,
+                    exercise_id INTEGER NOT NULL,
+                    FOREIGN KEY (workout_id) REFERENCES workouts(id) ON DELETE CASCADE,
+                    FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE CASCADE
+                );
+                CREATE TABLE active_workout_draft (
+                    id INTEGER PRIMARY KEY CHECK (id = 1)
+                );
+                CREATE TABLE active_draft_exercises (
+                    id INTEGER PRIMARY KEY,
+                    draft_id INTEGER NOT NULL DEFAULT 1,
+                    exercise_id INTEGER NOT NULL,
+                    FOREIGN KEY (draft_id) REFERENCES active_workout_draft(id) ON DELETE CASCADE,
+                    FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE CASCADE
+                );
+                """
+            )
+
+            v012_workout_exercise_feedback.up(conn)
+            v012_workout_exercise_feedback.up(conn)
+
+            table_names = {
+                row["name"]
+                for row in conn.execute(
+                    """
+                    SELECT name
+                    FROM sqlite_master
+                    WHERE type = 'table'
+                    """
+                )
+            }
+        finally:
+            conn.close()
+
+        self.assertIn("workout_exercise_feedback", table_names)
+        self.assertIn("active_draft_exercise_feedback", table_names)
+
+    def test_v012_feedback_cascades_with_parent_exercises(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        try:
+            conn.executescript(
+                """
+                CREATE TABLE workouts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT
+                );
+                CREATE TABLE exercises (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT
+                );
+                CREATE TABLE workout_exercises (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    workout_id INTEGER NOT NULL,
+                    exercise_id INTEGER NOT NULL,
+                    FOREIGN KEY (workout_id) REFERENCES workouts(id) ON DELETE CASCADE,
+                    FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE CASCADE
+                );
+                CREATE TABLE active_workout_draft (
+                    id INTEGER PRIMARY KEY CHECK (id = 1)
+                );
+                CREATE TABLE active_draft_exercises (
+                    id INTEGER PRIMARY KEY,
+                    draft_id INTEGER NOT NULL DEFAULT 1,
+                    exercise_id INTEGER NOT NULL,
+                    FOREIGN KEY (draft_id) REFERENCES active_workout_draft(id) ON DELETE CASCADE,
+                    FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE CASCADE
+                );
+                """
+            )
+            v012_workout_exercise_feedback.up(conn)
+            conn.executescript(
+                """
+                INSERT INTO workouts (id) VALUES (1);
+                INSERT INTO exercises (id) VALUES (1);
+                INSERT INTO workout_exercises (id, workout_id, exercise_id)
+                VALUES (1, 1, 1);
+                INSERT INTO workout_exercise_feedback (
+                    workout_exercise_id,
+                    back_pain_before,
+                    back_pain_after,
+                    response,
+                    notes,
+                    updated_at
+                )
+                VALUES (1, 4, 2, 'helped', 'felt better', '2026-08-11T10:00:00');
+                INSERT INTO active_workout_draft (id) VALUES (1);
+                INSERT INTO active_draft_exercises (id, draft_id, exercise_id)
+                VALUES (1, 1, 1);
+                INSERT INTO active_draft_exercise_feedback (
+                    draft_exercise_id,
+                    back_pain_before,
+                    back_pain_after,
+                    response,
+                    notes,
+                    updated_at
+                )
+                VALUES (1, 2, 3, 'worse', 'pinchy', '2026-08-11T10:01:00');
+                DELETE FROM workout_exercises WHERE id = 1;
+                DELETE FROM active_draft_exercises WHERE id = 1;
+                """
+            )
+            workout_feedback_count = conn.execute(
+                "SELECT COUNT(*) FROM workout_exercise_feedback"
+            ).fetchone()[0]
+            draft_feedback_count = conn.execute(
+                "SELECT COUNT(*) FROM active_draft_exercise_feedback"
+            ).fetchone()[0]
+        finally:
+            conn.close()
+
+        self.assertEqual(workout_feedback_count, 0)
+        self.assertEqual(draft_feedback_count, 0)
 
     def test_migration_runner_records_only_successful_migrations(self) -> None:
         conn = sqlite3.connect(":memory:")

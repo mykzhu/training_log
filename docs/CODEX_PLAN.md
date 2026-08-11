@@ -1017,6 +1017,16 @@ Finished workout feedback cascades with workout exercise delete.
 Existing DB upgrades safely.
 ```
 
+Implementation status:
+
+```text
+Completed 2026-08-11:
+- Added v012 workout_exercise_feedback migration for finished workout and active draft feedback tables.
+- Registered migration in the runner and verified fresh/legacy DBs record schema version 12.
+- Finalizing an active draft now copies active draft exercise feedback to finished workout exercise feedback.
+- Added migration and draft repository tests for idempotency, cascade deletes, draft clearing, and finalize copy.
+```
+
 ---
 
 ## 33.2 Backend schemas and APIs

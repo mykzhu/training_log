@@ -15,6 +15,7 @@ from app.migrations import (
     v009_exercise_option_settings,
     v010_exercise_measurement_type,
     v011_snapshot_exercise_measurements,
+    v012_workout_exercise_feedback,
 )
 
 
@@ -38,6 +39,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     v009_exercise_option_settings,
     v010_exercise_measurement_type,
     v011_snapshot_exercise_measurements,
+    v012_workout_exercise_feedback,
 )
 
 
