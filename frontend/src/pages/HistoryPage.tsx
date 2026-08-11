@@ -170,20 +170,25 @@ function recalculateExercise(exercise: WorkoutExercise): WorkoutExercise {
     (sum, setEntry) => sum + setEntry.weight * setEntry.reps,
     0,
   );
+  const weightedVolumeKg =
+    exercise.measurement_type === "weighted_reps" ? totalVolumeKg : 0;
   return {
     ...exercise,
     sets,
     total_sets: sets.length,
     total_reps: totalReps,
     total_volume: totalVolumeKg,
-    total_volume_kg: totalVolumeKg,
+    total_volume_kg: weightedVolumeKg,
     bodyweight_reps:
       exercise.measurement_type === "bodyweight_reps" ||
       exercise.measurement_type === "reps_only"
         ? totalReps
         : 0,
     duration_seconds:
-      exercise.measurement_type === "loaded_carry_time" ? totalReps : 0,
+      exercise.measurement_type === "loaded_carry_time" ||
+      exercise.measurement_type === "duration_only"
+        ? totalReps
+        : 0,
     distance_m:
       exercise.measurement_type === "loaded_carry_distance" ? totalReps : 0,
   };

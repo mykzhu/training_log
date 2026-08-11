@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 
 import type { CurrentWorkout, CurrentWorkoutExercise } from "../api/types";
 import { rpeOptionLabel } from "../utils/rpeLabels";
+import { measurementUi } from "../utils/measurementUi";
 import {
   buildRepsOptions,
   buildWeightOptions,
@@ -646,6 +647,7 @@ function LegacyActiveExerciseCard({
   const defaultReps = Number(exercise.default_reps || 10);
   const [addWeight, setAddWeight] = useState(String(defaultWeight));
   const [addReps, setAddReps] = useState(String(defaultReps));
+  const ui = measurementUi(exercise.measurement_type, exercise.reps_unit);
   const strengthSummary = useMemo(
     () => buildStrengthSummary(exercise),
     [exercise],
@@ -680,11 +682,18 @@ function LegacyActiveExerciseCard({
         <div>
           <h2>{exercise.exercise_name}</h2>
           <p>
-            {exercise.total_sets} sets · {exercise.total_reps} reps ·{" "}
-            {exercise.total_volume.toFixed(1)} kg
-            {strengthSummary.bestE1rm !== null && (
-              <> · e1RM {formatNumber(strengthSummary.bestE1rm)} kg</>
-            )}
+            {ui.totalSummary({
+              totalSets: exercise.total_sets,
+              totalReps: exercise.total_reps,
+              totalVolumeKg: exercise.total_volume_kg,
+              bodyweightReps: exercise.bodyweight_reps,
+              durationSeconds: exercise.duration_seconds,
+              distanceM: exercise.distance_m,
+            })}
+            {exercise.measurement_type === "weighted_reps" &&
+              strengthSummary.bestE1rm !== null && (
+                <> · e1RM {formatNumber(strengthSummary.bestE1rm)} kg</>
+              )}
           </p>
         </div>
         <button
@@ -705,8 +714,8 @@ function LegacyActiveExerciseCard({
             <thead>
               <tr>
                 <th>Set</th>
-                <th>Kg</th>
-                <th>Reps</th>
+                {ui.usesWeight && <th>{ui.weightLabel}</th>}
+                <th>{ui.quantityLabel}</th>
                 <th aria-label="Actions" />
               </tr>
             </thead>
@@ -714,7 +723,7 @@ function LegacyActiveExerciseCard({
               {exercise.sets.map((setEntry) => (
                 <tr key={setEntry.id}>
                   <td>{setEntry.set_number}</td>
-                  <td>{formatSetOption(setEntry.weight)}</td>
+                  {ui.usesWeight && <td>{formatSetOption(setEntry.weight)}</td>}
                   <td>{setEntry.reps}</td>
                   <td>
                     <button
@@ -738,27 +747,29 @@ function LegacyActiveExerciseCard({
       )}
 
       <div className="active-set-add-row">
+        {ui.usesWeight && (
+          <select
+            aria-label={`${exercise.exercise_name} weight`}
+            disabled={disabled}
+            onChange={(event) => setAddWeight(event.target.value)}
+            value={addWeight}
+          >
+            {weightOptions.map((option) => (
+              <option key={option} value={formatSetOption(option)}>
+                {formatSetOption(option)} kg
+              </option>
+            ))}
+          </select>
+        )}
         <select
-          aria-label={`${exercise.exercise_name} weight`}
-          disabled={disabled}
-          onChange={(event) => setAddWeight(event.target.value)}
-          value={addWeight}
-        >
-          {weightOptions.map((option) => (
-            <option key={option} value={formatSetOption(option)}>
-              {formatSetOption(option)} kg
-            </option>
-          ))}
-        </select>
-        <select
-          aria-label={`${exercise.exercise_name} repetitions`}
+          aria-label={`${exercise.exercise_name} ${ui.quantityLabel.toLowerCase()}`}
           disabled={disabled}
           onChange={(event) => setAddReps(event.target.value)}
           value={addReps}
         >
           {repsOptions.map((option) => (
             <option key={option} value={formatSetOption(option)}>
-              {formatSetOption(option)} reps
+              {formatSetOption(option)} {ui.quantityUnit}
             </option>
           ))}
         </select>
@@ -768,10 +779,11 @@ function LegacyActiveExerciseCard({
           onClick={() =>
             void onAddSet(
               exercise.draft_exercise_id,
-              Number(addWeight),
+              ui.usesWeight ? Number(addWeight) : 0,
               Number(addReps),
             )
           }
+          aria-label={ui.addButtonLabel}
           type="button"
         >
           +

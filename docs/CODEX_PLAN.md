@@ -798,6 +798,16 @@ Edit Workout uses the same measurement-aware UI.
 No non-weighted exercise shows kg controls.
 ```
 
+Implementation status:
+
+```text
+Completed 2026-08-11:
+- Added shared measurementUi helper for weight visibility, quantity labels, units, and summaries.
+- Current Workout and legacy active logging hide kg controls for reps-only/bodyweight/duration-only exercises.
+- Edit Workout set rows and add-set controls use the same measurement-aware UI.
+- Edit Workout local recalculation preserves duration-only seconds and zero kg volume for non-weighted measurements.
+```
+
 ---
 
 ## 32.6 Ensure analysis does not over-score rehab exercises

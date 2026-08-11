@@ -6,6 +6,7 @@ import {
   buildWeightOptions,
   formatSetOption,
 } from "../utils/setOptions";
+import { measurementUi } from "../utils/measurementUi";
 
 type SetEditorMode = "input" | "select";
 type SetRowVariant = "default" | "legacy-edit";
@@ -24,26 +25,6 @@ type SetRowProps = {
   updateOnChange?: boolean;
 };
 
-function measurementUsesWeight(measurementType: ExerciseMeasurementType) {
-  return (
-    measurementType === "weighted_reps" ||
-    measurementType === "loaded_carry_time" ||
-    measurementType === "loaded_carry_distance"
-  );
-}
-
-function quantityLabel(measurementType: ExerciseMeasurementType) {
-  if (measurementType === "loaded_carry_time" || measurementType === "duration_only") {
-    return "Seconds";
-  }
-
-  if (measurementType === "loaded_carry_distance") {
-    return "Meters";
-  }
-
-  return "Reps";
-}
-
 export default function SetRow({
   disabled,
   editorMode = "input",
@@ -60,8 +41,7 @@ export default function SetRow({
   const [weight, setWeight] = useState(String(setEntry.weight));
   const [reps, setReps] = useState(String(setEntry.reps));
   const isLegacyEdit = variant === "legacy-edit";
-  const usesWeight = measurementUsesWeight(measurementType);
-  const currentQuantityLabel = quantityLabel(measurementType);
+  const ui = measurementUi(measurementType, repsUnit);
 
   useEffect(() => {
     setWeight(String(setEntry.weight));
@@ -71,12 +51,13 @@ export default function SetRow({
   const parsedWeight = Number(weight);
   const parsedReps = Number(reps);
   const valuesAreValid =
-    Number.isFinite(parsedWeight) &&
+    (ui.usesWeight ? Number.isFinite(parsedWeight) : true) &&
     Number.isInteger(parsedReps) &&
-    parsedWeight >= 0 &&
+    (ui.usesWeight ? parsedWeight >= 0 : true) &&
     parsedReps >= 1;
   const valuesChanged =
-    parsedWeight !== setEntry.weight || parsedReps !== setEntry.reps;
+    (ui.usesWeight ? parsedWeight !== setEntry.weight : setEntry.weight !== 0) ||
+    parsedReps !== setEntry.reps;
   const canSave =
     onUpdate !== undefined &&
     valuesAreValid &&
@@ -85,7 +66,7 @@ export default function SetRow({
   const selectRepsOptions = repsOptions ?? buildRepsOptions(setEntry.reps);
 
   function updateSet(nextWeight: string, nextReps: string) {
-    const nextParsedWeight = Number(nextWeight);
+    const nextParsedWeight = ui.usesWeight ? Number(nextWeight) : 0;
     const nextParsedReps = Number(nextReps);
     if (
       onUpdate &&
@@ -115,9 +96,9 @@ export default function SetRow({
   return (
     <div className={`set-row ${isLegacyEdit ? "edit-set-row" : ""}`.trim()}>
       <span>#{setEntry.set_number}</span>
-      {usesWeight && (
+      {ui.usesWeight && (
         <label>
-          Kg
+          {ui.weightLabel}
           {editorMode === "select" ? (
             <select
               aria-label={isLegacyEdit ? `Set ${setEntry.set_number} weight` : undefined}
@@ -152,24 +133,24 @@ export default function SetRow({
         </label>
       )}
       <label>
-        {currentQuantityLabel}
+        {ui.quantityLabel}
         {editorMode === "select" ? (
           <select
-            aria-label={isLegacyEdit ? `Set ${setEntry.set_number} ${currentQuantityLabel.toLowerCase()}` : undefined}
+            aria-label={isLegacyEdit ? `Set ${setEntry.set_number} ${ui.quantityLabel.toLowerCase()}` : undefined}
             className="scroll-select"
             disabled={disabled || !onUpdate}
             onChange={(event) => {
               const value = event.target.value;
               setReps(value);
               if (updateOnChange) {
-                updateSet(weight, value);
+                updateSet(ui.usesWeight ? weight : "0", value);
               }
             }}
             value={reps}
           >
             {selectRepsOptions.map((option) => (
               <option key={option} value={formatSetOption(option)}>
-                {formatSetOption(option)} {repsUnit}
+                {formatSetOption(option)} {ui.quantityUnit}
               </option>
             ))}
           </select>
@@ -191,7 +172,7 @@ export default function SetRow({
           disabled={disabled || !canSave}
           onClick={() =>
             onUpdate(setEntry.id, {
-              weight: parsedWeight,
+              weight: ui.usesWeight ? parsedWeight : 0,
               reps: parsedReps,
             })
           }
