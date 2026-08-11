@@ -98,6 +98,51 @@ class BackupServiceTests(unittest.TestCase):
 
         return workout_id
 
+    def workout_exercise_id(self, workout_id: int) -> int:
+        with get_db() as conn:
+            row = conn.execute(
+                """
+                SELECT id
+                FROM workout_exercises
+                WHERE workout_id = ?
+                ORDER BY id ASC
+                LIMIT 1
+                """,
+                (workout_id,),
+            ).fetchone()
+
+        if row is None:
+            raise AssertionError("Workout exercise not found.")
+
+        return int(row["id"])
+
+    def insert_workout_exercise_feedback(
+        self,
+        workout_exercise_id: int,
+    ) -> None:
+        with get_db() as conn:
+            conn.execute(
+                """
+                INSERT INTO workout_exercise_feedback (
+                    workout_exercise_id,
+                    back_pain_before,
+                    back_pain_after,
+                    response,
+                    notes,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    workout_exercise_id,
+                    4,
+                    2,
+                    "helped",
+                    "Felt better after the set.",
+                    "2026-06-01T10:30:00",
+                ),
+            )
+
     def insert_garmin_metric(self) -> None:
         with get_db() as conn:
             conn.execute(
@@ -206,6 +251,67 @@ class BackupServiceTests(unittest.TestCase):
         self.assertEqual(garmin_metric["raw_diagnostics"], "{}")
         self.assertEqual(workout_exercise["measurement_type"], "weighted_reps")
         self.assertEqual(workout_exercise["reps_unit"], "reps")
+
+    def test_backup_exports_workout_exercise_feedback(self) -> None:
+        workout_id = self.insert_workout()
+        workout_exercise_id = self.workout_exercise_id(workout_id)
+        self.insert_workout_exercise_feedback(workout_exercise_id)
+
+        payload = build_backup_payload()
+
+        self.assertEqual(payload["schema_version"], BACKUP_SCHEMA_VERSION)
+        self.assertIn("workout_exercise_feedback", payload["tables"])
+        self.assertNotIn("active_draft_exercise_feedback", payload["tables"])
+        feedback_rows = payload["tables"]["workout_exercise_feedback"]
+        self.assertEqual(len(feedback_rows), 1)
+        self.assertEqual(feedback_rows[0]["workout_exercise_id"], workout_exercise_id)
+        self.assertEqual(feedback_rows[0]["back_pain_before"], 4)
+        self.assertEqual(feedback_rows[0]["back_pain_after"], 2)
+        self.assertEqual(feedback_rows[0]["response"], "helped")
+
+    def test_restore_imports_workout_exercise_feedback(self) -> None:
+        workout_id = self.insert_workout()
+        workout_exercise_id = self.workout_exercise_id(workout_id)
+        self.insert_workout_exercise_feedback(workout_exercise_id)
+        payload = build_backup_payload()
+
+        reset_database_data()
+        restore_backup_payload(payload)
+
+        with get_db() as conn:
+            row = conn.execute(
+                """
+                SELECT *
+                FROM workout_exercise_feedback
+                WHERE workout_exercise_id = ?
+                """,
+                (workout_exercise_id,),
+            ).fetchone()
+
+        self.assertIsNotNone(row)
+        assert row is not None
+        self.assertEqual(row["back_pain_before"], 4)
+        self.assertEqual(row["back_pain_after"], 2)
+        self.assertEqual(row["response"], "helped")
+        self.assertEqual(row["notes"], "Felt better after the set.")
+
+    def test_old_backup_without_feedback_restores(self) -> None:
+        self.insert_workout()
+        payload = build_backup_payload()
+        payload["schema_version"] = 9
+        payload["tables"].pop("workout_exercise_feedback")
+
+        reset_database_data()
+        restore_backup_payload(payload)
+
+        with get_db() as conn:
+            workout_count = conn.execute("SELECT COUNT(*) FROM workouts").fetchone()[0]
+            feedback_count = conn.execute(
+                "SELECT COUNT(*) FROM workout_exercise_feedback"
+            ).fetchone()[0]
+
+        self.assertEqual(workout_count, 1)
+        self.assertEqual(feedback_count, 0)
 
     def test_backup_restore_preserves_duration_only_exercise(self) -> None:
         with get_db() as conn:

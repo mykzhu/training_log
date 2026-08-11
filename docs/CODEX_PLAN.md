@@ -1252,6 +1252,17 @@ def test_restore_imports_workout_exercise_feedback()
 def test_old_backup_without_feedback_restores()
 ```
 
+Implementation status:
+
+```text
+Completed 2026-08-11:
+- Bumped backup schema to 10 and added workout_exercise_feedback to current exports.
+- Kept active draft feedback out of backups.
+- Added schema 9 compatibility so old backups without feedback restore with an empty feedback table.
+- Added validation for feedback references, scores, responses, duplicate rows, and updated_at.
+- Added backup export, restore, and legacy compatibility tests.
+```
+
 ---
 
 ## 33.6 Phase 33 verification

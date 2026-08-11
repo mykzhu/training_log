@@ -30,7 +30,7 @@ from app.services.default_analysis_profiles import (
 
 logger = logging.getLogger("training_log")
 
-BACKUP_SCHEMA_VERSION = 9
+BACKUP_SCHEMA_VERSION = 10
 EXERCISE_BACKUP_COLUMNS_V1_V6: tuple[str, ...] = (
     "id",
     "name",
@@ -104,6 +104,14 @@ BASE_BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
         "created_at",
     ),
 }
+WORKOUT_EXERCISE_FEEDBACK_BACKUP_COLUMNS: tuple[str, ...] = (
+    "workout_exercise_id",
+    "back_pain_before",
+    "back_pain_after",
+    "response",
+    "notes",
+    "updated_at",
+)
 GARMIN_BACKUP_TABLE_COLUMNS_V4_V5: tuple[str, ...] = (
     "date",
     "resting_heart_rate",
@@ -130,6 +138,12 @@ GARMIN_DB_TABLE_COLUMNS: tuple[str, ...] = (
     "raw_diagnostics",
 )
 BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
+    "analysis_profiles": ANALYSIS_PROFILE_BACKUP_COLUMNS,
+    **BASE_BACKUP_TABLE_COLUMNS,
+    "workout_exercise_feedback": WORKOUT_EXERCISE_FEEDBACK_BACKUP_COLUMNS,
+    "garmin_daily_metrics": GARMIN_BACKUP_TABLE_COLUMNS,
+}
+SCHEMA_V9_BACKUP_TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
     "analysis_profiles": ANALYSIS_PROFILE_BACKUP_COLUMNS,
     **BASE_BACKUP_TABLE_COLUMNS,
     "garmin_daily_metrics": GARMIN_BACKUP_TABLE_COLUMNS,
@@ -223,7 +237,12 @@ def build_backup_payload() -> dict[str, Any]:
                 continue
 
             column_sql = ", ".join(columns)
-            order_sql = "date ASC" if table_name == "garmin_daily_metrics" else "id ASC"
+            if table_name == "garmin_daily_metrics":
+                order_sql = "date ASC"
+            elif table_name == "workout_exercise_feedback":
+                order_sql = "workout_exercise_id ASC"
+            else:
+                order_sql = "id ASC"
             rows = conn.execute(
                 f"SELECT {column_sql} FROM {table_name} ORDER BY {order_sql}"
             ).fetchall()
@@ -270,9 +289,9 @@ def validate_backup_payload(payload: Any) -> dict[str, list[dict[str, Any]]]:
         raise ValueError("Backup file must contain a JSON object.")
 
     schema_version = payload.get("schema_version")
-    if schema_version not in (1, 2, 3, 4, 5, 6, 7, 8, BACKUP_SCHEMA_VERSION):
+    if schema_version not in (1, 2, 3, 4, 5, 6, 7, 8, 9, BACKUP_SCHEMA_VERSION):
         raise ValueError(
-            "Unsupported backup schema version. Expected 1, 2, 3, 4, 5, 6, 7, 8 or "
+            "Unsupported backup schema version. Expected 1, 2, 3, 4, 5, 6, 7, 8, 9 or "
             f"{BACKUP_SCHEMA_VERSION}."
         )
 
@@ -284,6 +303,8 @@ def validate_backup_payload(payload: Any) -> dict[str, list[dict[str, Any]]]:
 
     if schema_version == BACKUP_SCHEMA_VERSION:
         table_columns = BACKUP_TABLE_COLUMNS
+    elif schema_version == 9:
+        table_columns = SCHEMA_V9_BACKUP_TABLE_COLUMNS
     elif schema_version == 8:
         table_columns = SCHEMA_V8_BACKUP_TABLE_COLUMNS
     elif schema_version == 7:
@@ -359,6 +380,8 @@ def validate_backup_payload(payload: Any) -> dict[str, list[dict[str, Any]]]:
 
     if schema_version < 4:
         validated["garmin_daily_metrics"] = []
+    if schema_version < BACKUP_SCHEMA_VERSION:
+        validated["workout_exercise_feedback"] = []
     normalize_garmin_metric_rows_for_restore(validated["garmin_daily_metrics"])
 
     validate_table_ids(validated)
@@ -369,7 +392,7 @@ def validate_backup_payload(payload: Any) -> dict[str, list[dict[str, Any]]]:
     validate_exercise_weight_options(
         validated["exercise_weight_options"],
         validated,
-        enforce_active_weights=schema_version in (3, 4, 5, 7, 8, BACKUP_SCHEMA_VERSION),
+        enforce_active_weights=schema_version in (3, 4, 5, 7, 8, 9, BACKUP_SCHEMA_VERSION),
     )
     validate_workout_graph(validated)
     validate_garmin_daily_metrics(validated["garmin_daily_metrics"])
@@ -406,7 +429,11 @@ def coerce_float(value: Any, context: str) -> float:
 
 def validate_table_ids(tables: dict[str, list[dict[str, Any]]]) -> None:
     for table_name, rows in tables.items():
-        if table_name in ("analysis_profiles", "garmin_daily_metrics"):
+        if table_name in (
+            "analysis_profiles",
+            "garmin_daily_metrics",
+            "workout_exercise_feedback",
+        ):
             continue
 
         seen_ids: set[int] = set()
@@ -822,6 +849,51 @@ def validate_workout_graph(tables: dict[str, list[dict[str, Any]]]) -> None:
         row["reps"] = reps
         row["weight"] = weight
 
+    seen_feedback_ids: set[int] = set()
+    valid_feedback_responses = {"helped", "same", "worse", "unknown"}
+    for index, row in enumerate(tables["workout_exercise_feedback"], start=1):
+        workout_exercise_id = coerce_int(
+            row["workout_exercise_id"],
+            f"Row {index} in workout_exercise_feedback workout_exercise_id",
+        )
+        if workout_exercise_id not in workout_exercise_ids:
+            raise ValueError(
+                "Row "
+                f"{index} in workout_exercise_feedback references an unknown "
+                "workout exercise."
+            )
+        if workout_exercise_id in seen_feedback_ids:
+            raise ValueError(
+                f"Row {index} in workout_exercise_feedback duplicates a workout exercise."
+            )
+        seen_feedback_ids.add(workout_exercise_id)
+
+        for column in ("back_pain_before", "back_pain_after"):
+            if row[column] is None:
+                continue
+            score = coerce_int(
+                row[column],
+                f"Row {index} in workout_exercise_feedback {column}",
+            )
+            if score < 0 or score > 10:
+                raise ValueError(
+                    f"Row {index} in workout_exercise_feedback has invalid {column}."
+                )
+            row[column] = score
+
+        response = str(row["response"] or "unknown")
+        if response not in valid_feedback_responses:
+            raise ValueError(
+                f"Row {index} in workout_exercise_feedback has invalid response."
+            )
+        if not str(row["updated_at"] or "").strip():
+            raise ValueError(
+                f"Row {index} in workout_exercise_feedback is missing updated_at."
+            )
+
+        row["workout_exercise_id"] = workout_exercise_id
+        row["response"] = response
+
 
 def reset_sqlite_sequences(conn: sqlite3.Connection) -> None:
     logger.debug("db.sqlite_sequence.reset.start")
@@ -892,7 +964,7 @@ def restore_backup_payload(payload: Any) -> None:
                 conn.execute(insert_sql, tuple(row[column] for column in columns))
 
         reset_sqlite_sequences(conn)
-        if schema_version in (3, 4, 5, 6, 7, 8, BACKUP_SCHEMA_VERSION):
+        if schema_version in (3, 4, 5, 6, 7, 8, 9, BACKUP_SCHEMA_VERSION):
             set_metadata(conn, EXERCISE_SETTINGS_WEIGHT_MIGRATION_KEY, "1")
         else:
             initialize_exercise_settings(conn, force_weight_migration=True)
