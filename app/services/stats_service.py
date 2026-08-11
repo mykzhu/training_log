@@ -857,6 +857,147 @@ def build_scatter_points(workouts: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def build_back_rehab_stats(window_days: int = 30) -> dict[str, Any]:
+    today = app_today()
+    window_start = today - timedelta(days=window_days - 1)
+    tracked_profile_keys = ("back_rehab", "core_stability", "mobility")
+
+    with get_db() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                w.id AS workout_id,
+                we.id AS workout_exercise_id,
+                e.id AS exercise_id,
+                e.name AS exercise_name,
+                COUNT(se.id) AS total_sets,
+                COALESCE(SUM(se.reps), 0) AS total_quantity,
+                f.back_pain_before,
+                f.back_pain_after,
+                f.response,
+                f.updated_at
+            FROM workout_exercises we
+            JOIN workouts w ON w.id = we.workout_id
+            JOIN exercises e ON e.id = we.exercise_id
+            LEFT JOIN set_entries se ON se.workout_exercise_id = we.id
+            LEFT JOIN workout_exercise_feedback f
+                ON f.workout_exercise_id = we.id
+            WHERE e.profile_key IN (?, ?, ?)
+              AND date(w.created_at) BETWEEN ? AND ?
+            GROUP BY we.id
+            ORDER BY w.created_at ASC, w.id ASC, we.position ASC, we.id ASC
+            """,
+            (
+                *tracked_profile_keys,
+                window_start.isoformat(),
+                today.isoformat(),
+            ),
+        ).fetchall()
+
+    workout_ids = {int(row["workout_id"]) for row in rows}
+    exercise_ids = {int(row["exercise_id"]) for row in rows}
+    pain_deltas: list[float] = []
+    before_values: list[float] = []
+    after_values: list[float] = []
+    response_counts = {
+        "helped": 0,
+        "same": 0,
+        "worse": 0,
+    }
+    exercise_feedback: dict[int, dict[str, Any]] = {}
+
+    for row in rows:
+        has_feedback = row["updated_at"] is not None
+        response = str(row["response"] or "unknown")
+
+        if has_feedback and response in response_counts:
+            response_counts[response] += 1
+
+        before = row["back_pain_before"]
+        after = row["back_pain_after"]
+        has_pain_pair = before is not None and after is not None
+
+        if has_pain_pair:
+            before_score = float(before)
+            after_score = float(after)
+            delta = after_score - before_score
+            before_values.append(before_score)
+            after_values.append(after_score)
+            pain_deltas.append(delta)
+
+            exercise_id = int(row["exercise_id"])
+            item = exercise_feedback.setdefault(
+                exercise_id,
+                {
+                    "exercise_id": exercise_id,
+                    "exercise_name": row["exercise_name"],
+                    "feedback_count": 0,
+                    "delta_total": 0.0,
+                    "helped_count": 0,
+                    "worse_count": 0,
+                },
+            )
+            item["feedback_count"] += 1
+            item["delta_total"] += delta
+
+            if response == "helped":
+                item["helped_count"] += 1
+            elif response == "worse":
+                item["worse_count"] += 1
+
+    top_helpful_exercises = []
+    for item in exercise_feedback.values():
+        average_delta = item["delta_total"] / item["feedback_count"]
+        top_helpful_exercises.append(
+            {
+                "exercise_id": item["exercise_id"],
+                "exercise_name": item["exercise_name"],
+                "feedback_count": item["feedback_count"],
+                "average_delta": average_delta,
+                "helped_count": item["helped_count"],
+                "worse_count": item["worse_count"],
+            }
+        )
+
+    top_helpful_exercises.sort(
+        key=lambda item: (
+            item["average_delta"],
+            -item["feedback_count"],
+            item["exercise_name"],
+        )
+    )
+
+    feedback_count = sum(1 for row in rows if row["updated_at"] is not None)
+
+    return {
+        "window_days": window_days,
+        "session_count": len(workout_ids),
+        "exercise_count": len(exercise_ids),
+        "total_sets": sum(int(row["total_sets"]) for row in rows),
+        "total_quantity": sum(int(row["total_quantity"]) for row in rows),
+        "feedback_count": feedback_count,
+        "average_before_pain": (
+            sum(before_values) / len(before_values)
+            if before_values
+            else None
+        ),
+        "average_after_pain": (
+            sum(after_values) / len(after_values)
+            if after_values
+            else None
+        ),
+        "average_pain_delta": (
+            sum(pain_deltas) / len(pain_deltas)
+            if pain_deltas
+            else None
+        ),
+        "helped_count": response_counts["helped"],
+        "same_count": response_counts["same"],
+        "worse_count": response_counts["worse"],
+        "top_helpful_exercises": top_helpful_exercises[:5],
+    }
+
+
 def data_quality_warning(
     *,
     key: str,
@@ -1629,6 +1770,7 @@ def build_stats(limit: int | None = 30) -> dict[str, Any]:
         "exercise_weekly_workload": (
             sorted_exercise_weekly_workload
         ),
+        "back_rehab": build_back_rehab_stats(),
         "summary": summary_payload,
         "data_quality_warnings": build_data_quality_warnings(
             workouts=workout_items,

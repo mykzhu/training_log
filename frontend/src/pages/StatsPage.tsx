@@ -43,6 +43,7 @@ import {
 } from "../utils/chartDateFormat";
 
 import type {
+  BackRehabStats,
   DataQualityWarning,
   ExerciseRepProgress,
   ExerciseRepTargetProgress,
@@ -501,6 +502,59 @@ function EmptyStats() {
       <Link className="button-link" to="/current">
         Open current workout
       </Link>
+    </section>
+  );
+}
+
+function BackRehabStatsCard({
+  backRehab,
+}: {
+  backRehab: BackRehabStats;
+}) {
+  const helpfulNames = backRehab.top_helpful_exercises
+    .slice(0, 2)
+    .map((exercise) => exercise.exercise_name);
+  const hasFeedback = backRehab.feedback_count > 0;
+
+  return (
+    <section className="panel back-rehab-stats-card">
+      <div className="panel-header">
+        <div>
+          <h2>Back rehab</h2>
+          <p>Last {backRehab.window_days} days</p>
+        </div>
+      </div>
+      <div className="back-rehab-stat-grid">
+        <div className="back-rehab-stat">
+          <strong>{backRehab.session_count}</strong>
+          <span>sessions</span>
+        </div>
+        <div className="back-rehab-stat">
+          <strong>{formatNumber(backRehab.average_pain_delta, 1)}</strong>
+          <span>avg pain change</span>
+        </div>
+        <div className="back-rehab-stat">
+          <strong>{backRehab.feedback_count}</strong>
+          <span>feedback logs</span>
+        </div>
+        <div className="back-rehab-stat">
+          <strong>{backRehab.total_sets}</strong>
+          <span>sets</span>
+        </div>
+      </div>
+      <div className="back-rehab-response-row">
+        <span>Helped: {backRehab.helped_count}</span>
+        <span>Same: {backRehab.same_count}</span>
+        <span>Worse: {backRehab.worse_count}</span>
+      </div>
+      <p className="back-rehab-helpful">
+        Most helpful:{" "}
+        {helpfulNames.length > 0
+          ? helpfulNames.join(", ")
+          : hasFeedback
+            ? "No improving trend yet"
+            : "No exercise feedback yet"}
+      </p>
     </section>
   );
 }
@@ -2181,6 +2235,8 @@ const strengthWorkloadData =
             uniqueExerciseCount={uniqueExerciseCount}
             workoutCount={workoutCount}
           />
+
+          <BackRehabStatsCard backRehab={stats.stats.back_rehab} />
 
           <StatsInsightsSection insights={statsInsights} />
 

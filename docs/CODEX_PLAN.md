@@ -1220,6 +1220,16 @@ Dead Bug/Cat-Cow feedback aggregates correctly.
 No crash when no feedback exists.
 ```
 
+Implementation status:
+
+```text
+Completed 2026-08-11:
+- Added a 30-day back_rehab stats aggregate with rehab/core/mobility sessions, set totals, quantity totals, feedback counts, pain deltas, response counts, and top helpful exercises.
+- Added Stats page types and a Back rehab card showing sessions, average pain change, feedback counts, helped/same/worse counts, and most helpful exercises.
+- Added backend tests for helpful/same/worse feedback aggregation and the no-feedback empty state.
+- Updated the stats query-count ceiling for the additional batched feedback aggregate query.
+```
+
 ---
 
 ## 33.5 Backup/restore feedback

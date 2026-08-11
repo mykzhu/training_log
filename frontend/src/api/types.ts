@@ -758,6 +758,31 @@ export type ExerciseWeeklyWorkload = {
   weeks: ExerciseWeeklyWorkloadPoint[];
 };
 
+export type BackRehabHelpfulExercise = {
+  exercise_id: number;
+  exercise_name: string;
+  feedback_count: number;
+  average_delta: number;
+  helped_count: number;
+  worse_count: number;
+};
+
+export type BackRehabStats = {
+  window_days: number;
+  session_count: number;
+  exercise_count: number;
+  total_sets: number;
+  total_quantity: number;
+  feedback_count: number;
+  average_before_pain: number | null;
+  average_after_pain: number | null;
+  average_pain_delta: number | null;
+  helped_count: number;
+  same_count: number;
+  worse_count: number;
+  top_helpful_exercises: BackRehabHelpfulExercise[];
+};
+
 export type StatsResponse = {
   limit: number | "all";
   stats: {
@@ -767,6 +792,7 @@ export type StatsResponse = {
     exercise_progress: ExerciseStrengthProgress[];
     exercise_rep_progress: ExerciseRepProgress[];
     exercise_weekly_workload: ExerciseWeeklyWorkload[];
+    back_rehab: BackRehabStats;
     data_quality_warnings: DataQualityWarning[];
     training_load: TrainingLoadSummary;
   };

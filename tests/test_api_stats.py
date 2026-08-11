@@ -110,6 +110,59 @@ class StatsApiTests(unittest.TestCase):
 
         return workout_id
 
+    def workout_exercise_id(
+        self,
+        workout_id: int,
+        exercise_name: str,
+    ) -> int:
+        with get_db() as conn:
+            row = conn.execute(
+                """
+                SELECT we.id
+                FROM workout_exercises we
+                JOIN exercises e ON e.id = we.exercise_id
+                WHERE we.workout_id = ?
+                  AND e.name = ?
+                """,
+                (workout_id, exercise_name),
+            ).fetchone()
+
+        if row is None:
+            raise AssertionError(f"Workout exercise not found: {exercise_name}")
+
+        return int(row["id"])
+
+    def insert_exercise_feedback(
+        self,
+        workout_exercise_id: int,
+        *,
+        before: int,
+        after: int,
+        response: str,
+    ) -> None:
+        with get_db() as conn:
+            conn.execute(
+                """
+                INSERT INTO workout_exercise_feedback (
+                    workout_exercise_id,
+                    back_pain_before,
+                    back_pain_after,
+                    response,
+                    notes,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    workout_exercise_id,
+                    before,
+                    after,
+                    response,
+                    None,
+                    "2026-06-20T12:00:00",
+                ),
+            )
+
     def seed_stats_workouts(self) -> tuple[int, int]:
         first_id = self.insert_workout(
             created_at="2026-06-01T10:00:00",
@@ -192,6 +245,110 @@ class StatsApiTests(unittest.TestCase):
             response["stats"]["training_load"],
         )
         self.assertIn("series", response["training_load"])
+
+    def test_stats_back_rehab_feedback_aggregates_helpful_exercises(self) -> None:
+        create_exercise(
+            "Dead Bug",
+            profile_key="back_rehab",
+            weights=[],
+            measurement_settings={
+                "measurement_type": "bodyweight_reps",
+                "reps_unit": "reps",
+            },
+        )
+        create_exercise(
+            "Cat-Cow",
+            profile_key="mobility",
+            weights=[],
+            measurement_settings={
+                "measurement_type": "bodyweight_reps",
+                "reps_unit": "reps",
+            },
+        )
+        create_exercise(
+            "Bird Dog",
+            profile_key="core_stability",
+            weights=[],
+            measurement_settings={
+                "measurement_type": "bodyweight_reps",
+                "reps_unit": "reps",
+            },
+        )
+
+        first_id = self.insert_workout(
+            created_at="2026-06-15T10:00:00",
+            exercises=[
+                {"name": "Dead Bug", "sets": [{"weight": 0, "reps": 10}]},
+                {"name": "Cat-Cow", "sets": [{"weight": 0, "reps": 8}]},
+            ],
+        )
+        second_id = self.insert_workout(
+            created_at="2026-06-22T10:00:00",
+            exercises=[
+                {"name": "Dead Bug", "sets": [{"weight": 0, "reps": 12}]},
+                {"name": "Bird Dog", "sets": [{"weight": 0, "reps": 6}]},
+            ],
+        )
+
+        self.insert_exercise_feedback(
+            self.workout_exercise_id(first_id, "Dead Bug"),
+            before=4,
+            after=2,
+            response="helped",
+        )
+        self.insert_exercise_feedback(
+            self.workout_exercise_id(first_id, "Cat-Cow"),
+            before=3,
+            after=3,
+            response="same",
+        )
+        self.insert_exercise_feedback(
+            self.workout_exercise_id(second_id, "Dead Bug"),
+            before=5,
+            after=3,
+            response="helped",
+        )
+        self.insert_exercise_feedback(
+            self.workout_exercise_id(second_id, "Bird Dog"),
+            before=2,
+            after=4,
+            response="worse",
+        )
+
+        with patch("app.services.stats_service.app_today", return_value=date(2026, 6, 30)):
+            response = get_stats(limit="all")
+
+        back_rehab = response["stats"]["back_rehab"]
+        self.assertEqual(back_rehab["window_days"], 30)
+        self.assertEqual(back_rehab["session_count"], 2)
+        self.assertEqual(back_rehab["exercise_count"], 3)
+        self.assertEqual(back_rehab["total_sets"], 4)
+        self.assertEqual(back_rehab["total_quantity"], 36)
+        self.assertEqual(back_rehab["feedback_count"], 4)
+        self.assertEqual(back_rehab["helped_count"], 2)
+        self.assertEqual(back_rehab["same_count"], 1)
+        self.assertEqual(back_rehab["worse_count"], 1)
+        self.assertAlmostEqual(back_rehab["average_before_pain"], 3.5)
+        self.assertAlmostEqual(back_rehab["average_after_pain"], 3.0)
+        self.assertAlmostEqual(back_rehab["average_pain_delta"], -0.5)
+        self.assertEqual(
+            back_rehab["top_helpful_exercises"][0]["exercise_name"],
+            "Dead Bug",
+        )
+        self.assertAlmostEqual(
+            back_rehab["top_helpful_exercises"][0]["average_delta"],
+            -2.0,
+        )
+
+    def test_stats_back_rehab_is_empty_without_feedback(self) -> None:
+        with patch("app.services.stats_service.app_today", return_value=date(2026, 6, 30)):
+            response = get_stats(limit="all")
+
+        back_rehab = response["stats"]["back_rehab"]
+        self.assertEqual(back_rehab["session_count"], 0)
+        self.assertEqual(back_rehab["feedback_count"], 0)
+        self.assertIsNone(back_rehab["average_pain_delta"])
+        self.assertEqual(back_rehab["top_helpful_exercises"], [])
 
     def test_bodyweight_only_workout_contributes_to_stats_load_and_scatter(self) -> None:
         workout_id = self.insert_workout(

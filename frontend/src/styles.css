@@ -1969,6 +1969,60 @@ button.load-calendar-cell:focus-visible {
   outline-offset: 2px;
 }
 
+.back-rehab-stats-card {
+  display: grid;
+  gap: 12px;
+}
+
+.back-rehab-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.back-rehab-stat {
+  display: grid;
+  align-content: center;
+  min-height: 72px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--card2);
+}
+
+.back-rehab-stat strong {
+  color: var(--text);
+  font-size: 22px;
+  line-height: 1.1;
+}
+
+.back-rehab-stat span,
+.back-rehab-helpful {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.back-rehab-response-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.back-rehab-response-row span {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: var(--card2);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.back-rehab-helpful {
+  margin: 0;
+}
+
 .load-calendar-cell-rest {
   border-color: var(--border);
   background: var(--card2);
@@ -2590,6 +2644,7 @@ button.load-calendar-cell:focus-visible {
 
   .recovery-grid,
   .history-stat-grid,
+  .back-rehab-stat-grid,
   .dashboard-grid,
   .stats-chart-grid,
   .analysis-grid {
