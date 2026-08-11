@@ -20,6 +20,15 @@ export type ExerciseUsage = {
   draft_count: number;
 };
 
+export type DeletedExercise = {
+  id: number;
+  name: string;
+  is_active: boolean;
+  sort_order: number;
+  profile_key: string;
+  usage: ExerciseUsage;
+};
+
 export type CurrentWorkoutExercise = {
   draft_exercise_id: number;
   exercise_id: number;

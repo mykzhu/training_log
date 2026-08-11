@@ -262,11 +262,20 @@ class ExerciseMutationResponse(AppBaseModel):
     created: bool | None = None
 
 
+class DeletedExerciseResponse(AppBaseModel):
+    id: int
+    name: str
+    is_active: bool
+    sort_order: int
+    profile_key: str
+    usage: ExerciseUsageResponse
+
+
 class DeleteExerciseResponse(AppBaseModel):
     deleted: bool
     exercise_id: int
-    exercise: dict[str, Any] | None = None
-    usage: dict[str, int] | None = None
+    exercise: DeletedExerciseResponse | None = None
+    usage: ExerciseUsageResponse | None = None
 
 
 class ExerciseWeightsResponse(AppBaseModel):

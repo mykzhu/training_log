@@ -612,6 +612,16 @@ class ExercisesApiTests(unittest.TestCase):
 
         self.assertTrue(response["deleted"])
         self.assertEqual(response["exercise_id"], exercise_id)
+        self.assertEqual(response["exercise"]["id"], exercise_id)
+        self.assertEqual(response["exercise"]["name"], "Temporary Exercise")
+        self.assertFalse(response["exercise"]["is_active"])
+        self.assertIsInstance(response["exercise"]["sort_order"], int)
+        self.assertEqual(response["exercise"]["profile_key"], "accessory")
+        self.assertEqual(response["exercise"]["usage"], {
+            "workout_count": 0,
+            "set_count": 0,
+            "draft_count": 0,
+        })
         self.assertEqual(response["usage"], {
             "workout_count": 0,
             "set_count": 0,

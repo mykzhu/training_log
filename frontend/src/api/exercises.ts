@@ -2,10 +2,12 @@ import { jsonBody, requestJson } from "./client";
 import type {
   Exercise,
   ExerciseCreatePayload,
+  DeletedExercise,
   ExerciseProfile,
   ExerciseProfileCreatePayload,
   ExerciseProfileUpdatePayload,
   ExerciseUpdatePayload,
+  ExerciseUsage,
 } from "./types";
 
 export type GetExercisesOptions = {
@@ -48,8 +50,8 @@ export function deleteExercise(exerciseId: number) {
   return requestJson<{
     deleted: boolean;
     exercise_id: number;
-    exercise?: Record<string, unknown> | null;
-    usage?: Record<string, number> | null;
+    exercise?: DeletedExercise | null;
+    usage?: ExerciseUsage | null;
   }>(`/api/v1/exercises/${exerciseId}`, {
     method: "DELETE",
   });

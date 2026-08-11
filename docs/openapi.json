@@ -319,19 +319,14 @@
             "type": "boolean"
           },
           "exercise": {
-            "title": "Exercise",
-            "type": "object"
+            "$ref": "#/components/schemas/DeletedExerciseResponse"
           },
           "exercise_id": {
             "title": "Exercise Id",
             "type": "integer"
           },
           "usage": {
-            "additionalProperties": {
-              "type": "integer"
-            },
-            "title": "Usage",
-            "type": "object"
+            "$ref": "#/components/schemas/ExerciseUsageResponse"
           }
         },
         "required": [
@@ -357,6 +352,43 @@
           "workout_id"
         ],
         "title": "DeleteWorkoutResponse",
+        "type": "object"
+      },
+      "DeletedExerciseResponse": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "profile_key": {
+            "title": "Profile Key",
+            "type": "string"
+          },
+          "sort_order": {
+            "title": "Sort Order",
+            "type": "integer"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/ExerciseUsageResponse"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "is_active",
+          "sort_order",
+          "profile_key",
+          "usage"
+        ],
+        "title": "DeletedExerciseResponse",
         "type": "object"
       },
       "ExerciseCreateRequest": {

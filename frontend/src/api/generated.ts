@@ -75,14 +75,23 @@ export type DeleteExerciseProfileResponse = {
 
 export type DeleteExerciseResponse = {
   deleted: boolean;
-  exercise?: Record<string, unknown> | null;
+  exercise?: DeletedExerciseResponse | null;
   exercise_id: number;
-  usage?: Record<string, number> | null;
+  usage?: ExerciseUsageResponse | null;
 };
 
 export type DeleteWorkoutResponse = {
   deleted: boolean;
   workout_id: number;
+};
+
+export type DeletedExerciseResponse = {
+  id: number;
+  is_active: boolean;
+  name: string;
+  profile_key: string;
+  sort_order: number;
+  usage: ExerciseUsageResponse;
 };
 
 export type ExerciseCreateRequest = {
@@ -627,6 +636,7 @@ export type ApiSchemas = {
   DeleteExerciseProfileResponse: DeleteExerciseProfileResponse;
   DeleteExerciseResponse: DeleteExerciseResponse;
   DeleteWorkoutResponse: DeleteWorkoutResponse;
+  DeletedExerciseResponse: DeletedExerciseResponse;
   ExerciseCreateRequest: ExerciseCreateRequest;
   ExerciseMutationResponse: ExerciseMutationResponse;
   ExerciseOrderUpdateRequest: ExerciseOrderUpdateRequest;
