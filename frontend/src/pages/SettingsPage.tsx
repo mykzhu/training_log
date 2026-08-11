@@ -1514,6 +1514,9 @@ export default function SettingsPage() {
               isNameDirty(exercise) || isProfileDirty(exercise);
             const weightChanged = isWeightDirty(exercise);
             const optionSettingsChanged = isOptionSettingsDirty(exercise);
+            const activeToggleRequiresWeight = measurementRequiresWeight(
+              optionSettings.measurement_type,
+            );
             const detailsPending = pendingAction === `details:${exercise.id}`;
             const activePending = pendingAction === `active:${exercise.id}`;
             const deletePending = pendingAction === `delete:${exercise.id}`;
@@ -1542,7 +1545,13 @@ export default function SettingsPage() {
                           ? "secondary-button compact-action"
                           : "ghost-button compact-action"
                       }
-                      disabled={activePending || isBusy || (weights.length === 0 && !exercise.is_active)}
+                      disabled={
+                        activePending ||
+                        isBusy ||
+                        (!exercise.is_active &&
+                          activeToggleRequiresWeight &&
+                          weights.length === 0)
+                      }
                       onClick={() => toggleActive(exercise)}
                       type="button"
                     >

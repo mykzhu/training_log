@@ -1313,7 +1313,7 @@ Completed 2026-08-11:
 
 # Phase 34 — Previous plan carryover audit and polish
 
-Status: Planned
+Status: Completed 2026-08-11
 
 ## Goal
 
@@ -1670,6 +1670,26 @@ Suggested commit:
 
 ```text
 Phase 34: audit and finish previous UX and stats carryover items
+```
+
+Implementation status:
+
+```text
+Completed 2026-08-11:
+- Added docs/archive/README.md so the required archive directory exists and points back to the active roadmap.
+- Verified Settings foldable sections default collapsed.
+- Verified Garmin stats keeps range buttons and manual Sync without a redundant inline Settings link.
+- Verified Current Workout preserves mobile scroll when adding an exercise, auto-saves RPE/back pain, and only adds existing exercises with a Settings helper link.
+- Verified top navigation keeps Current, History, Stats, Garmin, Log, Backup, and Settings visible with active highlighting.
+- Verified Edit Workout uses one page-level Save workout button with dirty state and unload/back navigation warnings.
+- Fixed inactive non-weighted exercise activation in Settings so empty weight presets do not block reactivation.
+- Fixed Exercise Stats chart X-axis and tooltip date formatting to avoid raw ISO labels and use compact mobile ticks.
+- Verified stats training-load formulas, metric status labels, info-zone styling, and logs page safety/caps by code audit.
+- python3 -m unittest discover -s tests passed.
+- frontend npm run typecheck passed.
+- frontend npm run build passed.
+- docker build -t training-log:dev . passed after Docker socket escalation.
+- Docker frontend npm ci reported 4 high severity npm audit findings; build completed, dependency audit remains for release follow-up.
 ```
 
 ---

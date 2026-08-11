@@ -19,6 +19,11 @@ import type {
   ExerciseStatsResponse,
   ExerciseStatsSet,
 } from "../api/types";
+import {
+  formatChartDateTick,
+  formatChartDateTooltip,
+} from "../utils/chartDateFormat";
+import { getResponsiveXAxisProps, useMediaQuery } from "../hooks/useMediaQuery";
 
 const chartColors = {
   blue: "#0a84ff",
@@ -203,6 +208,7 @@ function commonTooltipProps() {
       color: chartColors.text,
       fontWeight: 700,
     },
+    labelFormatter: (value: unknown) => formatChartDateTooltip(String(value)),
     formatter: (value: unknown, name: unknown): [ReactNode, string] => {
       const labels: Record<string, string> = {
         work: "Work",
@@ -297,6 +303,7 @@ function buildTrendData(
 export default function ExerciseStatsPage({ exerciseId }: { exerciseId: number }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const isSmallScreen = useMediaQuery("(max-width: 640px)");
   const statsLimit = parseStatsLimit(searchParams.get("limit"));
   const {
     data: stats,
@@ -488,7 +495,21 @@ export default function ExerciseStatsPage({ exerciseId }: { exerciseId: number }
                       onClick={openWorkoutFromChart}
                     >
                       <CartesianGrid stroke={chartColors.grid} strokeDasharray="3 3" />
-                      <XAxis dataKey="date" stroke={chartColors.muted} tick={{ fontSize: 12 }} />
+                      <XAxis
+                        dataKey="date"
+                        minTickGap={isSmallScreen ? 12 : 24}
+                        stroke={chartColors.muted}
+                        tick={{ fontSize: 12 }}
+                        tickFormatter={(value) =>
+                          formatChartDateTick(String(value), {
+                            compact: isSmallScreen,
+                          })
+                        }
+                        {...getResponsiveXAxisProps(
+                          trendData.length,
+                          isSmallScreen,
+                        )}
+                      />
                       <YAxis stroke={chartColors.muted} tick={{ fontSize: 12 }} />
                       <Tooltip {...commonTooltipProps()} />
                       <Legend wrapperStyle={{ color: chartColors.muted }} />
